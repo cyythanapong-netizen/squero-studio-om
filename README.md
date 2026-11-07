@@ -22,6 +22,16 @@ squero-studio-om/    this repo
 
 ## Run
 
+From the `paperboat` CLI, which fetches and builds this app from GitHub the first time:
+
+```sh
+paperboat squero [Model.mo]          # http://localhost:8790
+paperboat pkg versions squero-studio-om
+paperboat squero --version 0.2.0     # a release (default: the newest, else main)
+```
+
+From a checkout:
+
 ```sh
 (cd ../paperboat-shared && npm install)
 npm install
