@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  studio:
+    name: Studio (typecheck, tests, build)
+    runs-on: ubuntu-24.04
+    steps:
+      # Side by side, so "file:../paperboat-shared" resolves.
+      - uses: actions/checkout@v4
+        with:
+          path: squero-studio-om
+      - uses: actions/checkout@v4
+        with:
+          repository: cyythanapong-netizen/paperboat-shared
+          path: paperboat-shared
+          token: ${{ secrets.DOWNSTREAM_TOKEN || github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+        working-directory: paperboat-shared
+      - run: npm install
+        working-directory: squero-studio-om
+      - run: npm run typecheck
+        working-directory: squero-studio-om
+      - run: npm test
+        working-directory: squero-studio-om
+      - run: npm run build
+        working-directory: squero-studio-om

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Squero Studio OM: serves the built app (dist/) and the squero/0 server on one port.
+# The server, omc bridge and generator are the paperboat engine's (`paperboat squero`), so this
+# finds a paperboat binary: $PAPERBOAT, then `paperboat` on PATH, then a sibling checkout's build.
+# Options pass through: [Model.mo] [--port N] [--app DIR].
+set -e
+here="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+pb="${PAPERBOAT:-}"
+if [ -z "$pb" ]; then
+  if command -v paperboat >/dev/null 2>&1; then
+    pb=paperboat
+  else
+    for d in "$here/../paperboat" "$here/../rigflow"; do
+      for b in "$d/engine/build/dev/tools/paperboat" "$d/engine/build/tools/paperboat"; do
+        [ -x "$b" ] && pb="$b" && break 2
+      done
+    done
+  fi
+fi
+[ -n "$pb" ] || { echo "squero-om: no paperboat binary (needs the OpenModelica build). Set PAPERBOAT=/path/to/paperboat." >&2; exit 1; }
+
+args=("$@")
+case " ${args[*]} " in *" --app "*) ;; *) [ -f "$here/dist/index.html" ] && args+=(--app "$here/dist");; esac
+exec "$pb" squero "${args[@]}"
