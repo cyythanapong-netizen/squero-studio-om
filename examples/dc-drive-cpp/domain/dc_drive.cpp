@@ -122,7 +122,7 @@ class DCDrive final : public paperboat::Model {
   std::vector<paperboat::Entity> entities(const std::string&, double) const override { return {}; }
 
  private:
-  DCDrive(const Values& props, Params p) : Model(start(props, p), paperboat::get_text(props, "solver", "rk4")), p_(p) {}
+  DCDrive(const Values& props, Params p) : Model(start(props, p)), p_(p) {}  // the run's solver (Run menu)
 
   Vars eval([[maybe_unused]] double t, [[maybe_unused]] const State& x, [[maybe_unused]] const Values& in) const {
     Vars v;
@@ -185,8 +185,7 @@ void register_dc_drive(paperboat::Registry& registry) {
                  {.id = "I2_w_start", .default_value = 0.0, .unit = "rad/s"},
                  {.id = "S1_w_rel_start", .default_value = 0.0, .unit = "rad/s"},
                  {.id = "S1_phi_rel_start", .default_value = 0.0, .unit = "rad"},
-                 {.id = "L1_i_start", .default_value = 0.0, .unit = "A"},
-                 paperboat::solve::param("rk4")},
+                 {.id = "L1_i_start", .default_value = 0.0, .unit = "A"}},
        .links = {},
        .block = paperboat::BlockDef{.type = "dc-drive",
                                     .label = "DCDrive",
