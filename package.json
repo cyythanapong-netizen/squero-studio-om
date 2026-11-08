@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:server": "cmake -S server -B server/build -G Ninja && cmake --build server/build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.ts"
+    "test": "node --test test/*.test.ts",
+    "test:server": "server/build/squero_tests"
   },
   "dependencies": {
     "@paperboat/shared": "file:../paperboat-shared",
