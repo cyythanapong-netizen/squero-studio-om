@@ -37,8 +37,8 @@ namespace {
 namespace fs = std::filesystem;
 using nlohmann::json;
 
-std::string status(OmcState state, const std::string& version) {
-  return json{{"op", "status"}, {"state", name(state)}, {"version", version}}.dump();
+std::string status(OmcState state, const std::string& version, const std::string& mode) {
+  return json{{"op", "status"}, {"state", name(state)}, {"version", version}, {"mode", mode}}.dump();
 }
 
 ix::HttpResponsePtr respond(int code, const std::string& type, std::string body) {
@@ -636,7 +636,7 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
   std::set<ix::WebSocket*> clients;
 
   omc.on_status([&](OmcState state, const std::string& version) {
-    const std::string text = status(state, version);
+    const std::string text = status(state, version, omc.mode());
     std::lock_guard lock(mutex);
     for (auto* ws : std::set<ix::WebSocket*>(clients)) ws->sendText(text);
   });
@@ -649,7 +649,7 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
             std::lock_guard lock(mutex);
             clients.insert(&ws);
           }
-          ws.sendText(status(omc.state(), omc.version()));
+          ws.sendText(status(omc.state(), omc.version(), omc.mode()));
         } else if (msg->type == ix::WebSocketMessageType::Close) {
           std::lock_guard lock(mutex);
           clients.erase(&ws);

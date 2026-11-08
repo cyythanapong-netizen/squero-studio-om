@@ -28,6 +28,8 @@ void print_help(std::string_view prog) {
             << "  " << prog << " generate <Model.mo> [options]        Make a Paperboat backend from Modelica\n"
             << "  " << prog << " check <Model.mo> [--model <Name>]    omc's checkModel on Modelica model\n"
             << "  " << prog << " icon <Model.mo|Name> [--class <Name>] Import icon & connectors as JSON\n"
+            << "  " << prog << " doctor                               Which omc runs (native, podman, docker) and its health\n"
+            << "  " << prog << " update-omc                           Pull the pinned omc image (container mode)\n"
             << "  " << prog << " --help | --version\n\n"
             << "Server options:\n"
             << "  --port <N>       Listen port (default: first free of 59201..59299)\n"
@@ -37,6 +39,36 @@ void print_help(std::string_view prog) {
             << "  --model <Name>   Qualified Modelica model name inside file\n"
             << "  --out <dir>      Output backend directory (default: <model>-cpp/)\n"
             << "  --path <path>    ode | fmu | auto (default: auto)\n";
+}
+
+// Which omc, how it runs, and whether it loads the MSL (#2).
+int cmd_doctor() {
+  const mo::OmcRuntime rt = mo::resolve_omc();
+  std::cout << "omc:      " << rt.mode << " (" << rt.exe << (rt.mode == "native" ? "" : std::string(", ") + mo::kImage) << ")\n";
+  if (!rt.why.empty()) std::cout << "note:     " << rt.why << '\n';
+  try {
+    mo::Omc omc;
+    omc.call("getVersion()");
+    std::cout << "version:  " << omc.version() << '\n';
+    const bool msl = omc.call("loadModel(Modelica)", std::chrono::minutes(10)) == "true";
+    std::cout << "MSL:      " << (msl ? omc.call("getVersion(Modelica)") : "cannot load: " + omc.errors()) << '\n';
+    return msl ? 0 : 1;
+  } catch (const std::exception& e) {
+    std::cout << "error:    " << e.what() << '\n';
+    return 1;
+  }
+}
+
+// Pulls the pinned omc image (container mode only; a native omc updates with its package manager).
+int cmd_update_omc() {
+  const mo::OmcRuntime rt = mo::resolve_omc();
+  if (rt.mode == "native") {
+    std::cout << "omc is native (" << rt.exe << "): update it with your package manager\n";
+    return 0;
+  }
+  const std::string cmd = rt.exe + " pull " + mo::kImage;
+  std::cout << cmd << '\n';
+  return std::system(cmd.c_str()) == 0 ? 0 : 1;
 }
 
 int cmd_icon(const std::vector<std::string_view>& args) {
@@ -187,6 +219,8 @@ int main(int argc, char** argv) {
       std::vector<std::string_view> sub_args(args.begin() + 1, args.end());
       return cmd_icon(sub_args);
     }
+    if (args[0] == "doctor") return cmd_doctor();
+    if (args[0] == "update-omc") return cmd_update_omc();
   }
 
   return cmd_server(args, exe_dir);
