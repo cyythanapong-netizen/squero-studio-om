@@ -46,6 +46,28 @@ const auto = (i: number): Placement => ({ x: snap(160 + (i % 4) * 200), y: snap(
 
 export type Read = { model: StudioModel; looks: IconCache };
 
+// ponytail: per-class defaults cached for the session; a user class edited in place keeps its old defaults until reload
+const defaultsOf = new Map<string, Promise<Record<string, string>>>();
+
+/** A class's numeric parameters and what they are when not set (`C`: its `start`, 1), so an unset C still shows and edits. */
+export function classDefaults(omc: OmcCalls, cls: string): Promise<Record<string, string>> {
+  let got = defaultsOf.get(cls);
+  if (!got) {
+    got = (async () => {
+      const out: Record<string, string> = {};
+      const names = list(parseValue(await omc.call(`getParameterNames(${cls})`).catch(() => "{}"))).map(atom);
+      for (const id of names) {
+        let v = atom(parseValue(await omc.call(`getParameterValue(${cls}, ${quoted(id)})`).catch(() => '""')));
+        if (v === "") v = atom(parseValue(await omc.call(`getComponentModifierValue(${cls}, ${id}.start)`).catch(() => '""')));
+        if (v !== "" && Number.isFinite(Number(v))) out[id] = v;
+      }
+      return out;
+    })();
+    defaultsOf.set(cls, got);
+  }
+  return got;
+}
+
 export async function readModel(omc: OmcCalls, name: string, file: string | undefined, looks: IconCache): Promise<StudioModel> {
   const comps = list(parseValue(await omc.call(`getComponents(${name})`)));
   const notes = list(parseValue(await omc.call(`getComponentAnnotations(${name})`)));
@@ -82,7 +104,8 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
     Object.assign(connectors, look.connectors);
     const placement = placementOf(list(notes[i])[0]) ?? auto(index);
     index++;
-    components.push({ name: id, class: cls, params, placement, ...(look.icon ? { icon: look.icon } : {}), ports: look.icon?.ports ?? [] });
+    const defaults = await classDefaults(omc, cls);
+    components.push({ name: id, class: cls, params, ...(Object.keys(defaults).length ? { defaults } : {}), placement, ...(look.icon ? { icon: look.icon } : {}), ports: look.icon?.ports ?? [] });
 
     const causal = CAUSAL.exec(shortName(cls));
     if (causal && look.connector) {

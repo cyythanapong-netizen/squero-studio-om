@@ -239,3 +239,4 @@
 .studio-bind-item:hover {
   background: var(--surface-well);
 }
+.studio-param-id.unset { color: var(--text-muted); }

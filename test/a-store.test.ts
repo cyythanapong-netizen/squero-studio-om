@@ -275,3 +275,16 @@ test("Look port placement is written as each entry's iconTransformation", () => 
   assert.match(one, /^updateComponent\(v, Modelica\.Blocks\.Interfaces\.RealInput, Circuit, annotate=Placement\(visible=true, transformation=transformation\(origin=\{-50, -50\}/);
   assert.match(one, /iconTransformation=iconTransformation\(extent=\{\{-210, 40\}, \{-190, 60\}\}\)\)\)$/); // x = -200, y = 100 - 25% of 200
 });
+
+test("class defaults: a parameter's value, else its start; non-numeric ones dropped", async () => {
+  const { classDefaults } = await import("../src/store/read.ts");
+  const answers: Record<string, string> = {
+    "getParameterNames(X.Cap)": '{"C", "T", "sel"}',
+    'getParameterValue(X.Cap, "C")': '""',
+    "getComponentModifierValue(X.Cap, C.start)": '"1"',
+    'getParameterValue(X.Cap, "T")': '"300.15"',
+    'getParameterValue(X.Cap, "sel")': '"StateSelect.default"',
+  };
+  const omc = { call: async (e: string) => answers[e] ?? '""', op: async () => ({}) } as never;
+  assert.deepEqual(await classDefaults(omc, "X.Cap"), { C: "1", T: "300.15" });
+});

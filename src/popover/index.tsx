@@ -53,7 +53,8 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
   if (!comp) return null;
 
   const shortClass = comp.class.split(".").pop() ?? comp.class;
-  const paramEntries = Object.entries(comp.params);
+  // every numeric parameter of the class, set or not; a set one (a modifier) shows over the default
+  const paramEntries = Object.entries({ ...comp.defaults, ...comp.params });
   const left = Math.max(16, comp.placement.x + 76);
   const top = Math.max(56, comp.placement.y);
 
@@ -89,7 +90,7 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
       <div className="studio-popover-section">
         <span className="studio-popover-label">Parameters</span>
         {paramEntries.length === 0 ? (
-          <span className="studio-popover-class">No modifiers</span>
+          <span className="studio-popover-class">No parameters</span>
         ) : (
           paramEntries.map(([paramId, rawVal]) => {
             const parsed = parseParamBinding(paramId, rawVal);
@@ -115,7 +116,7 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
                     void api.setParam(`${comp.name}.${paramId}`, name).then(() => setTick((t) => t + 1));
                   }}
                 >
-                  <span className="studio-param-id">{paramId}</span>
+                  <span className={`studio-param-id${paramId in comp.params ? "" : " unset"}`} title={paramId in comp.params ? undefined : "Not set: the class default"}>{paramId}</span>
                   <div className="studio-param-controls">
                     {parsed.bound ? (
                       <span className="studio-bound-chip">

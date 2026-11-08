@@ -41,7 +41,7 @@ const noop = () => undefined;
 function PartView({ id, data, selected }: NodeProps<PartNode>) {
   const { part, icon, connectors, wires } = data;
   const def = useMemo<BlockDef>(() => ({ type: part.class, label: part.name, kind: "function", inputs: [], outputs: [], params: [], view: { compact: true, icon } }), [part.class, part.name, icon]);
-  return <CompactBlock id={id} def={def} params={part.params} selected={selected} onExpand={noop} popover={null} connectors={connectors} wires={wires} />;
+  return <CompactBlock id={id} def={def} params={{ ...part.defaults, ...part.params }} selected={selected} onExpand={noop} popover={null} connectors={connectors} wires={wires} />;
 }
 
 /** Save a wire's dragged bends (in the model's a-to-b order). */
