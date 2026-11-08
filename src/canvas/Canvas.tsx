@@ -26,7 +26,7 @@ import type { ComponentInst, Connection, Placement, StudioApi } from "../model/t
 import { snap } from "../store/exprs.ts";
 import { freeSpot } from "../store/plans.ts";
 import type { Actions } from "../store/index.tsx";
-import { endOf, pathOf, split, wireError } from "../store/wires.ts";
+import { endOf, isConnector, pathOf, split, wireError } from "../store/wires.ts";
 import { centreFor, placedIcon, topLeft } from "./geometry.ts";
 import { QuickAdd } from "./QuickAdd.tsx";
 
@@ -37,6 +37,14 @@ type WireData = { points?: WirePoint[]; wire: Connection; flipped: boolean; kind
 type WireEdge = Edge<WireData, "wire">;
 
 const noop = () => undefined;
+
+/** The model's own connector seen from inside: its input feeds the parts (a wire's source), its output takes one in. */
+function inside(connectors: Connectors, part: ComponentInst): Connectors {
+  const cls = part.ports[0].class;
+  const c = connectors[cls];
+  if (!c || (c.kind !== "input" && c.kind !== "output")) return connectors;
+  return { ...connectors, [cls]: { ...c, kind: c.kind === "input" ? "output" : "input" } };
+}
 
 function PartView({ id, data, selected }: NodeProps<PartNode>) {
   const { part, icon, connectors, wires } = data;
@@ -101,7 +109,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
     setNodes(
       model.components.map((part) => {
         const [x, y] = topLeft(part);
-        return { id: part.name, type: "part", position: { x, y }, selected: selection.includes(part.name), data: { part, icon: placedIcon(part), connectors: model.connectors, wires: counts[part.name] ?? {} } };
+        return { id: part.name, type: "part", position: { x, y }, selected: selection.includes(part.name), data: { part, icon: placedIcon(part), connectors: isConnector(part) ? inside(model.connectors, part) : model.connectors, wires: counts[part.name] ?? {} } };
       }),
     );
   }, [model, counts, selection]);
