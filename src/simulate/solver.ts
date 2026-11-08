@@ -48,6 +48,7 @@ export const fmuSolver = (v: SolverChoice) => (v.method === "euler" ? "euler" : 
 /** The dock's one-line summary: "DASSL · 1e-6". */
 export function summary(v: SolverChoice): string {
   const s = SOLVERS.find((x) => x.id === v.method);
-  const tol = s?.options.includes("tolerance") ? ` · ${v.tolerance ?? DEFAULTS.tolerance}` : "";
+  const t = v.tolerance ?? DEFAULTS.tolerance;
+  const tol = s?.options.includes("tolerance") ? ` · ${t < 1e-3 ? t.toExponential() : t}` : "";
   return `${s?.label.split(" ")[0] ?? v.method}${tol}`;
 }

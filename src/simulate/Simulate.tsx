@@ -173,6 +173,12 @@ export function Simulate({
   useEffect(() => setSolverState(loadSolver(model.name)), [model.name]);
   const setSolver = (v: SolverChoice) => (setSolverState(v), saveSolver(model.name, v));
   const [solverOpen, setSolverOpen] = useState(false);
+  // Run ▸ Solver settings… opens it from the menu bar
+  useEffect(() => {
+    const open = () => setSolverOpen(true);
+    window.addEventListener("squero:solver", open);
+    return () => window.removeEventListener("squero:solver", open);
+  }, []);
   const inputs = model.entries.filter((e) => e.kind === "input").map((e) => e.name);
   const warnings = outputWarnings(model);
   const [run, setRun] = useState<Run | null>(null);
@@ -383,9 +389,12 @@ export function Simulate({
             <input className="well" inputMode="decimal" aria-label="Stop time (s)" value={stop} onChange={(e) => setStop(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void go()} />
             <span className="lbl">s</span>
           </label>
-          <button className="key small dock-solver" title="Solver settings: the method omc runs and its options" onClick={() => setSolverOpen(true)}>
-            {summary(solver)}
-          </button>
+          <label className="dock-stop">
+            <span className="lbl">solver</span>
+            <button className="key small dock-solver" title="Solver settings (Run ▸ Solver settings…): the method omc runs and its options" onClick={() => setSolverOpen(true)}>
+              {summary(solver)} ▾
+            </button>
+          </label>
           </>
         }
         onRun={() => void go()}

@@ -545,6 +545,8 @@ json op_simulate(Omc& omc, const json& in) {
       const double v = std::strtod(text_of(omc.call("val(" + cref + ", 0.0, " + quote(mat) + ")")).c_str(), nullptr);
       return std::isfinite(v) ? json(v) : json(0.0);
     });
+    // the harness's m.world is the model's world
+    for (auto& sh : out["shapes"]) sh["ident"] = unprefix(sh["ident"].get<std::string>());
   }
   return out;
 }
