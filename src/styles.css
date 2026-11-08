@@ -747,12 +747,6 @@ body.dragging-card .library {
 .status-table td:first-child {
   width: 90px;
 }
-.console-window { position: fixed; z-index: 90; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(720px, calc(100vw - 32px)); height: min(460px, calc(100vh - 120px)); display: flex; flex-direction: column; background: var(--surface-panel); border: 1.5px solid var(--line-ink); border-radius: var(--radius-lg); box-shadow: 0 16px 36px rgb(0 0 0 / 0.25); overflow: hidden; }
-.console-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
-.console-head h2 { margin: 0; font-size: var(--size-sm); }
-.console-head .lbl { flex: 1; color: var(--text-muted); font-size: var(--size-2xs); }
-.console-logs { flex: 1; margin: 0; padding: var(--space-2) var(--space-3); list-style: none; overflow: auto; font: var(--size-xs) var(--font-mono); }
-.console-logs .log-error { color: var(--danger); }
 .key.err { color: var(--danger); }
 
 .lib-filter::-webkit-search-cancel-button { display: none; }

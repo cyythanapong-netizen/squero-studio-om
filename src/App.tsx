@@ -11,7 +11,7 @@ import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
 import { StudioContext } from "./model/types.ts";
 import { OmcClient, type OmcStatus } from "./omc/omc.ts";
-import { Console, type Log } from "./shell/Console.tsx";
+import { ConsoleWindow, type Log } from "@paperboat/shared/components";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { LibraryModal, PromptModal, StatusModal } from "./shell/Dialogs.tsx";
@@ -77,6 +77,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [consoleShown, setConsoleShown] = useState(false);
   const errors = logs.filter((l) => l.level === "error").length;
   const say = (text: string, level: Log["level"] = "info") => setLogs((l) => [...l, { level, text }]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setConsoleShown(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   const fail = (e: Error) => say(e.message, "error");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const classes = useClassIndex(omc);
@@ -306,7 +311,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           />
         )}
 
-        {consoleShown && <Console logs={logs} onClose={() => setConsoleShown(false)} />}
+        {consoleShown && <ConsoleWindow logs={logs} errors={errors} onClose={() => setConsoleShown(false)} />}
       </div>
     </StudioContext.Provider>
   );
