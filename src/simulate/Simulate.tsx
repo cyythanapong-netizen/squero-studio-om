@@ -28,6 +28,7 @@ import "uplot/dist/uPlot.min.css";
 import { Dock, NumberField } from "@paperboat/shared/components";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions, Stimulus } from "../store/index.tsx";
+import { explainOmcError } from "../dock/dock.ts";
 import { addScope, arrangeScopes, picksOf, removeScope, START } from "./scopes.ts";
 
 type Run = Awaited<ReturnType<Actions["simulate"]>>;
@@ -199,7 +200,7 @@ export function Simulate({ actions, model, theme }: { actions: Actions; model: S
       if (first && a.instruments.every((p) => picksOf(p).filter((n) => result.names.includes(n)).length === 0)) setPicks(first.block, defaultPicks(result.names));
     } catch (e) {
       if (mine !== ticket.current) return;
-      setError((e as Error).message);
+      setError(explainOmcError((e as Error).message));
       setPhase({ state: "failed" });
     }
   };

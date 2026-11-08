@@ -38,6 +38,9 @@ struct GenerateOptions {
   // Studio's preview (squero/0 `generate` with dry): nothing touches the disk. The files that
   // would be written come back in GenerateResult::files; the fmu path builds nothing, so no files.
   bool dry = false;
+  // Studio: generate the class as loaded in omc (unsaved edits included), never reloading `source`;
+  // a loadFile would build the stale file and wipe the edits from the session.
+  bool live = false;
   // Called as the stages go by: "check", "flatten", "generate", "build", fraction 0..1.
   std::function<void(std::string_view stage, double fraction)> progress = {};
 };

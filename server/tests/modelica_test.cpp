@@ -581,6 +581,15 @@ end Lag;
             .get<std::string>()
             .find("constant, step, ramp or sine") != std::string::npos);
 
+
+  // Generate builds what is on screen: an unsaved edit is exported and survives, the file is not reloaded.
+  REQUIRE(op(omc, {{"id", 10}, {"op", "omc"}, {"expr", "setParameterValue(Decay, k, 5)"}}, session)["ok"] == true);
+  const json live = op(omc, {{"id", 11}, {"op", "generate"}, {"source", file.string()}, {"model", "Decay"}, {"dry", true}}, session);
+  INFO(live.dump());
+  REQUIRE(live["ok"] == true);
+  CHECK(live["result"]["files"]["modelica/Decay.mo"].get<std::string>().find("k = 5") != std::string::npos);
+  CHECK(op(omc, {{"id", 12}, {"op", "omc"}, {"expr", "list(Decay)"}}, session)["result"].get<std::string>().find("k = 5") != std::string::npos);
+
   fs::remove_all(dir);
 }
 

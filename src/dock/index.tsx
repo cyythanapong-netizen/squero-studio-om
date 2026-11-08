@@ -94,7 +94,7 @@ export function StudioDock() {
           aria-label="Equation and unknown balance"
         >
           <span className="studio-dock-dot" aria-hidden="true" />
-          <span>{balance.words}</span>
+          <span title={balance.words}>{balance.words}</span>
         </output>
 
         {dangling.length > 0 && (
