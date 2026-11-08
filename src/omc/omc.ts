@@ -3,7 +3,8 @@
 // against its allow-list and answers in order. Status pushes drive the top-bar chip.
 
 export type OmcState = 'ready' | 'checking' | 'failed';
-export type OmcStatus = {state: OmcState; version: string};
+/** `mode`: how omc runs, native | podman | docker (#2); "" before it starts. */
+export type OmcStatus = {state: OmcState; version: string; mode?: string};
 
 type Reply = {id?: number; ok?: boolean; result?: unknown; error?: string; op?: string; stage?: string; fraction?: number} & Partial<OmcStatus>;
 type Waiter = {resolve: (result: unknown) => void; reject: (error: Error) => void; progress?: (stage: string, fraction: number) => void};
@@ -69,7 +70,7 @@ export class OmcClient {
       return;
     }
     if (msg.op === 'status' && msg.state) {
-      this.setStatus({state: msg.state, version: msg.version ?? ''});
+      this.setStatus({state: msg.state, version: msg.version ?? '', mode: msg.mode ?? ''});
       return;
     }
     const waiter = msg.id === undefined ? undefined : this.waiting.get(msg.id);
@@ -92,5 +93,7 @@ export class OmcClient {
 // The top bar's chip (contracts §1): `omc 1.27.0 · ready`.
 export function chip(status: OmcStatus): string {
   const version = /\d+\.\d+\.\d+/.exec(status.version)?.[0];
-  return `omc${version ? ` ${version}` : ''} · ${status.state}`;
+  // a container says so: `omc 1.27.1 · ready · podman`
+  const where = status.mode && status.mode !== 'native' ? ` · ${status.mode}` : '';
+  return `omc${version ? ` ${version}` : ''} · ${status.state}${where}`;
 }

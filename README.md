@@ -46,6 +46,15 @@ bin/squero-om [Model.mo]            # server + app on http://localhost:59201 (SQ
 
 For the UI alone: `npm run dev` (Vite on :3048; start `bin/squero-om` for the server).
 
+## omc
+
+Studio finds `omc` itself (`squero-om doctor` says which and checks the MSL loads):
+`$SQUERO_OMC_BIN`, else `omc` on PATH if its install can build FMUs, else podman (or docker)
+running `openmodelica/openmodelica:v1.27.1-minimal`, pulled on first use (`squero-om update-omc`
+pulls it again). The container runs as you (rootless podman `--userns=keep-id`, docker `--user`)
+with your `/tmp` and `$HOME` at the same paths and no SELinux relabelling, so everything it writes
+(backends, FMUs, `~/.openmodelica/libraries`) is yours. `SQUERO_OMC=native|podman|docker` forces one.
+
 ## Check
 
 ```sh
