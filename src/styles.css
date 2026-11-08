@@ -74,7 +74,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .wave i:nth-child(3) { animation-delay: 0.24s; }
 .wave i:nth-child(4) { animation-delay: 0.36s; }
 .wave i:nth-child(5) { animation-delay: 0.48s; }
-@media (prefers-reduced-motion: reduce) { .wave i { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .wave i { animation: none; } .split, .simulate { transition: none; } }
 
 /* GlideBrackets (@paperboat/shared) draws the chosen option's [ ] as two absolute spans: without
    these the spans sit inline after the last option as a stray "[ ]". */
@@ -502,10 +502,12 @@ body.dragging-card .library {
 .quick-foot.refused { color: var(--danger); font-family: var(--font-sans); }
 
 /* Split view and Simulate */
-.side { display: flex; flex-direction: column; gap: var(--gutter); min-height: 0; min-width: 0; }
+.side { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .split, .simulate { display: flex; flex-direction: column; min-height: 0; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
-.split { flex: 1 1 55%; }
-.simulate { flex: none; max-height: 48%; overflow: auto; }
+/* Focus changes slide: the panes trade flex-grow (a hidden one shrinks to nothing and fades). */
+.split, .simulate { transition: flex-grow var(--slide), opacity var(--slide), margin var(--slide); }
+.split { flex: 55 1 0; }
+.simulate { flex: 45 1 0; overflow: auto; margin-top: var(--gutter); }
 .split > header, .simulate > header { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); min-height: var(--panel-head-height); }
 /* ---- Syntax Highlighting & Code View (#6) ------------------------------------------- */
 .code-view {
@@ -597,9 +599,8 @@ body.dragging-card .library {
 .plot .u-wrap, .plot .uplot { background: transparent; }
 
 /* Focus: code, both, or scopes fill the side pane (#7). Hidden, not unmounted: a run survives. */
-.side-focus { display: flex; justify-content: flex-end; }
-.side.focus-code > .simulate, .side.focus-scopes > .split { display: none; }
-.side.focus-scopes > .simulate { flex: 1; max-height: none; }
+.side.focus-code > .simulate, .side.focus-scopes > .split { flex-grow: 0; opacity: 0; pointer-events: none; border-width: 0; margin: 0; }
+.side.focus-scopes > .simulate { margin-top: 0; }
 
 /* Scopes on the dashboard grid, and Paperboat's floating run dock (#7). */
 .simulate { position: relative; display: flex; flex-direction: column; }
