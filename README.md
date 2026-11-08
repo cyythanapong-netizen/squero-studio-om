@@ -7,7 +7,9 @@ generated C++, and a dock that checks the model's balance and exports a Paperboa
 `<tmp>/ssom_<model>` and run `paperboat pack`/`start` there: the sibling `../paperboat/bin/paperboat`,
 else `$PAPERBOAT_BIN` or `paperboat` on PATH. The first export of a model builds the engine (minutes).
 In the backend, the model's parameters (e.g. a `parameter Real C1F`) are props of its Station
-object, edited on the Station page; the Flow block carries only the inputs and outputs. Every edit goes through `omc`, so the `.mo` stays OMEdit-compatible.
+object, edited on the Station page; the Flow block carries only the inputs and outputs.
+Simulating a `Modelica.Mechanics.MultiBody` model also fills the stage's **3d** view (next to
+**diagram**) with its shapes, played back against the run's time (try `bin/squero-om examples/multibody/DoublePendulum.mo`). Every edit goes through `omc`, so the `.mo` stays OMEdit-compatible.
 
 This repo contains both the React web application (`src/`) and the native C++ server & tools (`server/`).
 The server provides `squero/0`, the `omc` bridge, the `.mo` importer (`extends` resolver, `Icon(graphics)` and

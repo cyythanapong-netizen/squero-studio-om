@@ -158,11 +158,13 @@ export function Simulate({
   model,
   theme,
   onRunningChange,
+  onRun,
 }: {
   actions: Actions;
   model: StudioModel;
   theme: string;
   onRunningChange?: (running: boolean) => void;
+  onRun?: (run: Run) => void;
 }) {
   const [stop, setStop] = useState("1");
   const [stimuli, setStimuli] = useState<Record<string, Stimulus>>({});
@@ -180,9 +182,9 @@ export function Simulate({
   const a = arrangeScopes(layout);
   const page = a.tabs.length ? (a.tabs.includes(tab) ? tab : a.tabs[0]) : "";
   const gridRef = useRef<HTMLDivElement>(null);
-  // The run dock floats at the bottom middle of the canvas, as in Paperboat: portal it there.
+  // The run dock floats at the bottom middle of the stage, as in Paperboat: portal it there.
   const [canvas, setCanvas] = useState<Element | null>(null);
-  useLayoutEffect(() => setCanvas(document.querySelector(".studio > .canvas")), []);
+  useLayoutEffect(() => setCanvas(document.querySelector(".studio .stage-view")), []);
 
   const edit = (next: DashboardLayout) => {
     setLayout(next);
@@ -213,6 +215,7 @@ export function Simulate({
       const result = await actions.simulate(t, Object.fromEntries(Object.entries(stimuli).filter(([n]) => inputs.includes(n))));
       if (mine !== ticket.current) return;
       setRun(result);
+      onRun?.(result);
       setPhase({ state: "done", ms: Date.now() - since });
       // a first run fills the first empty scope, so there is something to look at
       const first = a.instruments.find((p) => picksOf(p).length === 0);

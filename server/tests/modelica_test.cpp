@@ -607,3 +607,32 @@ TEST_CASE("the allow-list has what the canvas reads and edits, and nothing that 
   CHECK_FALSE(mo::allowed("addClassAnnotation(M, annotate=Icon())"));
   CHECK_FALSE(mo::allowed("writeFile(\"/tmp/x\", \"y\")"));
 }
+
+TEST_CASE("visual_shapes reads omc's _visual.xml", "[squero]") {
+  const std::string xml = R"(<visualization>
+  <shape>
+      <ident>body.shape</ident>
+      <type>box</type>
+      <T><exp>1.0</exp><exp>0.0</exp><exp>0.0</exp><exp>0.0</exp><exp>1.0</exp><exp>0.0</exp><exp>0.0</exp><exp>0.0</exp><cref>body.R.T[3,3]</cref></T>
+      <r><cref>body.r[1]</cref><exp>0.0</exp><exp>-1.5</exp></r>
+      <r_shape><exp>0.0</exp><exp>0.0</exp><exp>0.0</exp></r_shape>
+      <lengthDir><exp>1.0</exp><exp>0.0</exp><exp>0.0</exp></lengthDir>
+      <widthDir><exp>0.0</exp><exp>1.0</exp><exp>0.0</exp></widthDir>
+      <length><cref>body.length</cref></length>
+      <width><exp>0.1</exp></width>
+      <height><exp>0.1</exp></height>
+      <extra><exp>0.0</exp></extra>
+      <color><exp>255.0</exp><exp>0.0</exp><exp>0.0</exp></color>
+  </shape>
+</visualization>)";
+  // a variable resolves to its series name, a parameter to its value
+  const json shapes = squero::visual_shapes(xml, [](const std::string& c) { return c == "body.length" ? json(0.5) : json(c); });
+  REQUIRE(shapes.size() == 1);
+  CHECK(shapes[0]["ident"] == "body.shape");
+  CHECK(shapes[0]["type"] == "box");
+  CHECK(shapes[0]["T"].size() == 9);
+  CHECK(shapes[0]["T"][8] == "body.R.T[3,3]");
+  CHECK(shapes[0]["r"] == json({"body.r[1]", 0.0, -1.5}));
+  CHECK(shapes[0]["length"] == 0.5);
+  CHECK(shapes[0]["color"][0] == 255.0);
+}

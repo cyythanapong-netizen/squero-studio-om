@@ -201,6 +201,7 @@ test("omc's answers read as data, and a placement as the plate's centre", () => 
   assert.deepEqual(placementOf("Placement(true,40.0,-20.0,-10.0,-10.0,10.0,10.0,90.0,-,-)"), { x: 80, y: 40, rotation: 90 });
   assert.deepEqual(placementOf("Placement(true,0.0,0.0,10.0,-10.0,-10.0,10.0,-,-,-)"), { x: 0, y: 0, rotation: 0, mirror: true });
   assert.equal(placementOf("Placement(true,1,2)"), null);
+  assert.deepEqual(placementOf("Placement(true,-,-,-60.0,30.0,-40.0,50.0,-,-,-,-,-,-,-,)"), placementOf("Placement(true,-50.0,40.0,-10.0,-10.0,10.0,10.0,-,-)"));
   assert.deepEqual(bendsOf("{Line(true, {0.0, 0.0}, 0, {{0, 0}, {20, 0}, {20, 20}, {40, 20}}, {0, 0, 0}, LinePattern.Solid)}"), [[40, 0], [40, -40]]);
   assert.equal(bendsOf("false"), undefined);
 });

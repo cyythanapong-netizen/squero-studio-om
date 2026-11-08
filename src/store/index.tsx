@@ -2,6 +2,7 @@
 // model on screen is what omc says and the .mo stays OMEdit-compatible. Undo and redo are the
 // shared undo.ts over the model's parts and wires; going back replays the difference through omc.
 
+import type { Shape } from "../viewport3d/shapes.ts";
 import { useUndo, type IconDef } from "@paperboat/shared";
 import type { Edge, Node } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -43,7 +44,8 @@ export type Actions = {
   /** The generated backend without writing it: path and reason, and the files for the ODE path. */
   preview(): Promise<{ path: "ode" | "fmu"; reason: string; files: Record<string, string>; notices: string[] }>;
   /** A local check run: every variable over [0, stop]; each top-level input fed its stimulus (0 when not given). */
-  simulate(stop: number, inputs?: Record<string, Stimulus>): Promise<{ t: number[]; series: Record<string, (number | null)[]>; names: string[] }>;
+  /** `shapes`: a MultiBody model's visual shapes, for the 3D view. */
+  simulate(stop: number, inputs?: Record<string, Stimulus>): Promise<{ t: number[]; series: Record<string, (number | null)[]>; names: string[]; shapes?: Shape[] }>;
   dirty: boolean;
   save(file?: string): Promise<void>;
   saveAs(file: string): Promise<void>;
