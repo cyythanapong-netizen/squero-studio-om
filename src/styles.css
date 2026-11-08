@@ -564,7 +564,6 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .files button { border: 0; background: none; border-radius: 0; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; }
 .files button.on { color: var(--text); font-weight: 500; box-shadow: inset 0 -2px 0 var(--line-ink); }
 .simulate .well { width: 72px; height: 28px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-md); padding: 0 var(--space-2); }
-.simulate .key { margin-left: auto; }
 .simulate .error { margin: 0; padding: var(--space-2) var(--space-3); color: var(--danger); font-size: var(--size-xs); white-space: pre-wrap; }
 .simulate .warning { margin: 0; padding: var(--space-1) var(--space-3); color: var(--danger); font-size: var(--size-xs); }
 .stimuli { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1) var(--space-3); }
@@ -573,9 +572,59 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .stimulus select.well { width: 88px; }
 .plot { padding: var(--space-2) var(--space-3) 0; min-height: 190px; }
 .plot .u-wrap, .plot .uplot { background: transparent; }
-.vars { display: flex; flex-wrap: wrap; gap: 4px; padding: var(--space-2) var(--space-3) var(--space-3); max-height: 96px; overflow: auto; }
-.chip-pick { border: 1px solid var(--line-strong); background: none; border-radius: var(--radius-sm); font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); padding: 1px 6px; }
-.chip-pick.on { color: var(--text); border-color: var(--line-ink); font-weight: 500; box-shadow: inset 3px 0 0 var(--trace, var(--line-ink)); padding-left: 8px; }
+
+/* Focus: code, both, or scopes fill the side pane (#7). Hidden, not unmounted: a run survives. */
+.side-focus { display: flex; justify-content: flex-end; }
+.side.focus-code > .simulate, .side.focus-scopes > .split { display: none; }
+.side.focus-scopes > .simulate { flex: 1; max-height: none; }
+
+/* Scopes on the dashboard grid, and Paperboat's floating run dock (#7). */
+.simulate { position: relative; display: flex; flex-direction: column; }
+.scope-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: var(--space-2) var(--space-3); }
+.scope-tabs { display: flex; gap: 2px; margin-right: auto; }
+.scope-tab { display: inline-flex; align-items: center; }
+.scope-tab button[role="tab"] { border: 0; background: none; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); padding: 2px 6px; }
+.scope-tab.on button[role="tab"] { color: var(--text); font-weight: 600; box-shadow: inset 0 -2px 0 var(--line-ink); }
+.scope-grid { display: grid; padding: 0 var(--space-3) 72px; position: relative; }
+.scope { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); z-index: 1; }
+.scope > header { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border-bottom: 1px solid var(--line); cursor: grab; }
+.scope > header .lbl { margin-right: auto; font: 500 var(--size-2xs) var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scope .plot { flex: 1; min-height: 0; padding: 4px 4px 0; }
+.scope-empty { margin: auto; font-size: var(--size-2xs); color: var(--text-muted); }
+.scope-sizes { display: inline-flex; }
+.scope-size { border: 0; background: none; padding: 0 3px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
+.scope-size.on { color: var(--text); font-weight: 600; }
+.scope-x { border: 0; background: none; padding: 0 3px; color: var(--text-muted); cursor: pointer; }
+.scope-move { width: auto !important; height: 20px !important; font-size: var(--size-2xs); }
+.channels { position: relative; }
+.channels > summary { list-style: none; cursor: pointer; font-size: var(--size-2xs); padding: 0 6px; }
+.channels > summary::-webkit-details-marker { display: none; }
+.channels-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 8; display: flex; flex-direction: column; gap: 2px; min-width: 180px; max-height: 240px; overflow: auto; padding: var(--space-2); background: var(--surface-float); backdrop-filter: var(--float-blur); border: 1px solid var(--line-strong); border-radius: var(--radius-md); }
+.channels-pop .well { width: 100% !important; height: 24px !important; margin-bottom: 4px; }
+.channel { display: flex; align-items: center; gap: 6px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; box-shadow: inset 3px 0 0 var(--trace, transparent); padding-left: 6px; }
+.channel:has(input:checked) { color: var(--text); }
+.scope-deco { display: flex; align-items: flex-start; min-width: 0; }
+.scope-deco .scope-x { opacity: 0; }
+.scope-deco:hover .scope-x { opacity: 1; }
+.deco-label { align-items: center; cursor: grab; }
+.deco-hline { align-self: start; height: 0; margin-top: -4px; border-top: 1px solid var(--line-strong); justify-content: flex-end; cursor: grab; }
+.deco-hline .scope-x { margin-top: -10px; }
+.deco-section { border: 1px dashed var(--line-strong); border-radius: var(--radius-md); margin: -4px; pointer-events: none; z-index: 2; }
+.deco-section > * { pointer-events: auto; }
+.deco-text { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: 600 var(--size-xs) var(--font-sans); padding: 2px 4px; }
+.deco-section .deco-text { flex: none; width: auto; background: var(--surface); margin: -10px 0 0 8px; font-size: var(--size-2xs); color: var(--text-muted); }
+.simulate .dock {
+  position: sticky; bottom: var(--space-3); align-self: center; z-index: 6; margin-top: calc(-56px);
+  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); max-width: calc(100% - 24px); white-space: nowrap;
+  background: var(--surface-float); -webkit-backdrop-filter: var(--float-blur); backdrop-filter: var(--float-blur);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
+}
+
+.dock-stop { display: inline-flex; align-items: center; gap: 4px; }
+.dock-stop .well { width: 56px; }
+.run-status { font: 500 var(--size-2xs) var(--font-sans); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.status-running { color: var(--signal); }
+.status-failed { color: var(--danger); }
 
 .dock-slot:empty { display: none; }
 

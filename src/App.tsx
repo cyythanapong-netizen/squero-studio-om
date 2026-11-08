@@ -2,6 +2,7 @@
 // stubs declare: the popover on a component click, the sheet on Alt+V, the dock always.
 
 import { ReactFlowProvider } from "@xyflow/react";
+import { Switch } from "@paperboat/shared/components";
 import { useShortcuts, type Command } from "@paperboat/shared";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Canvas } from "./canvas/Canvas.tsx";
@@ -18,6 +19,8 @@ import { Simulate } from "./simulate/Simulate.tsx";
 import { Split, type View } from "./split/Split.tsx";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
+
+type Focus = "code" | "split" | "scopes";
 
 function serverUrl(): string {
   const given = new URLSearchParams(location.search).get("server");
@@ -65,6 +68,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [sheet, setSheet] = useState(false);
   const [side, setSide] = useState(true);
   const [view, setView] = useState<View>("mo");
+  const [focus, setFocus] = useState<Focus>("split");
   const [theme, setTheme] = useTheme();
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
@@ -203,10 +207,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
       { id: "mo", label: ".mo", menu: "view", group: "source", checked: view === "mo", run: () => (setView("mo"), setSide(true)) },
       { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },
+      ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Code and scopes" : f === "code" ? "Focus code" : "Focus scopes", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(true)) })),
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
       ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
     ],
-    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, theme, setTheme, model, api],
+    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, focus, theme, setTheme, model, api],
   );
   useShortcuts(commands);
 
@@ -232,7 +237,19 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model))} />
             <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />
             {side && (
-              <aside className="side">
+              <aside className={`side focus-${focus}`}>
+                <div className="side-focus">
+                  <Switch<Focus>
+                    label="Focus"
+                    value={focus}
+                    onChange={setFocus}
+                    options={[
+                      { value: "code", label: "code", hint: "The source fills the pane" },
+                      { value: "split", label: "split", hint: "Source above, scopes below" },
+                      { value: "scopes", label: "scopes", hint: "The scopes fill the pane" },
+                    ]}
+                  />
+                </div>
                 <Split model={model} actions={actions} view={view} onView={setView} />
                 <Simulate actions={actions} model={model} theme={theme} />
               </aside>
