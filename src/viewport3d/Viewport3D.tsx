@@ -130,7 +130,6 @@ export function Viewport3D({ run, theme }: { run: ShapeRun; theme: string }) {
         if (e.key === " ") e.preventDefault(), setPlaying((p) => !p);
       }}
     >
-      <div className="viewport3d-scene" ref={host} title="Drag to orbit, right-drag to pan, wheel to zoom, F to frame" />
       <div className="viewport3d-bar" role="toolbar" aria-label="Playback">
         <button className="key small" aria-label={playing ? "Pause" : "Play"} onClick={() => (time >= end && setTime(0), setPlaying(!playing))}>
           {playing ? "❚❚" : "▶"}
@@ -152,6 +151,7 @@ export function Viewport3D({ run, theme }: { run: ShapeRun; theme: string }) {
           frame
         </button>
       </div>
+      <div className="viewport3d-scene" ref={host} title="Drag to orbit, right-drag to pan, wheel to zoom, F to frame" />
     </section>
   );
 }

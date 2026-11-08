@@ -19,6 +19,7 @@ import { TopBar } from "./shell/TopBar.tsx";
 import { useTheme, type Theme } from "@paperboat/shared/components";
 import { Opening } from "./shell/Opening.tsx";
 import { Simulate } from "./simulate/Simulate.tsx";
+import { Viewport3D, type ShapeRun } from "./viewport3d/Viewport3D.tsx";
 import { Split, type View } from "./split/Split.tsx";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
@@ -70,6 +71,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [running, setRunning] = useState(false);
   const [view, setView] = useState<View>("mo");
   const [focus, setFocus] = useState<Focus>("split");
+  // the stage's view of the model (#62): the diagram, or the last MultiBody run in 3D
+  const [stageView, setStageView] = useState<"diagram" | "3d">("diagram");
+  const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
   const [theme, setTheme, shown] = useThemeChoice();
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
@@ -259,10 +263,31 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         {api && model ? (
           <>
             <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
-            <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />
+            <main className="stage" aria-label={model.name}>
+              <Switch<"diagram" | "3d">
+                label="View"
+                value={stageView}
+                onChange={setStageView}
+                options={[
+                  { value: "diagram", label: "diagram", hint: "The model's parts and wires" },
+                  { value: "3d", label: "3d", hint: "The last run's MultiBody shapes in 3D" },
+                ]}
+              />
+              <div className="stage-view">
+                <div className="stage-pane" hidden={stageView !== "diagram"}>
+                  <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />
+                </div>
+                {stageView === "3d" &&
+                  (shapeRun?.shapes?.length ? (
+                    <Viewport3D run={shapeRun} theme={shown} />
+                  ) : (
+                    <p className="stage-empty">Run a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</p>
+                  ))}
+              </div>
+            </main>
             <aside className={`side focus-${focus}`} inert={!side}>
                 <Split model={model} actions={actions} view={view} onView={setView} />
-                <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} />
+                <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
               </aside>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} />

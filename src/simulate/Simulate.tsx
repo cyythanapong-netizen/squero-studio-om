@@ -30,7 +30,6 @@ import { Dock, NumberField } from "@paperboat/shared/components";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions, Stimulus } from "../store/index.tsx";
 import { explainOmcError } from "../dock/dock.ts";
-import { Viewport3D } from "../viewport3d/Viewport3D.tsx";
 import { addScope, arrangeScopes, picksOf, removeScope, START } from "./scopes.ts";
 
 type Run = Awaited<ReturnType<Actions["simulate"]>>;
@@ -159,11 +158,13 @@ export function Simulate({
   model,
   theme,
   onRunningChange,
+  onRun,
 }: {
   actions: Actions;
   model: StudioModel;
   theme: string;
   onRunningChange?: (running: boolean) => void;
+  onRun?: (run: Run) => void;
 }) {
   const [stop, setStop] = useState("1");
   const [stimuli, setStimuli] = useState<Record<string, Stimulus>>({});
@@ -181,9 +182,9 @@ export function Simulate({
   const a = arrangeScopes(layout);
   const page = a.tabs.length ? (a.tabs.includes(tab) ? tab : a.tabs[0]) : "";
   const gridRef = useRef<HTMLDivElement>(null);
-  // The run dock floats at the bottom middle of the canvas, as in Paperboat: portal it there.
+  // The run dock floats at the bottom middle of the stage, as in Paperboat: portal it there.
   const [canvas, setCanvas] = useState<Element | null>(null);
-  useLayoutEffect(() => setCanvas(document.querySelector(".studio > .canvas")), []);
+  useLayoutEffect(() => setCanvas(document.querySelector(".studio .stage-view")), []);
 
   const edit = (next: DashboardLayout) => {
     setLayout(next);
@@ -214,6 +215,7 @@ export function Simulate({
       const result = await actions.simulate(t, Object.fromEntries(Object.entries(stimuli).filter(([n]) => inputs.includes(n))));
       if (mine !== ticket.current) return;
       setRun(result);
+      onRun?.(result);
       setPhase({ state: "done", ms: Date.now() - since });
       // a first run fills the first empty scope, so there is something to look at
       const first = a.instruments.find((p) => picksOf(p).length === 0);
@@ -251,7 +253,6 @@ export function Simulate({
         </p>
       ))}
       {error && <p className="error" role="alert">{error}</p>}
-      {run?.shapes?.length ? <Viewport3D run={run} theme={theme} /> : null}
       <div className="scope-tools" role="toolbar" aria-label="Scopes">
         {a.tabs.length > 0 && (
           <div className="scope-tabs" role="tablist">
