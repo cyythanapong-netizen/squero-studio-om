@@ -1,4 +1,4 @@
-/* Studio dock (contracts §8.3): balance readout, dangling flow connector fixes,
+/* Studio footer (contracts §8.3): balance readout, dangling flow connector fixes,
    and Export backend with a 2px signal progress line across the top.
    Uses semantic tokens from @paperboat/shared/tokens.css only. */
 
@@ -8,19 +8,15 @@
 }
 
 .studio-dock {
-  position: fixed;
-  left: var(--gutter);
-  bottom: var(--space-4);
-  z-index: 20;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: var(--space-2) var(--space-3);
-  max-width: calc(100vw - 2 * var(--gutter));
-  background: var(--surface-float);
-  -webkit-backdrop-filter: var(--float-blur);
-  backdrop-filter: var(--float-blur);
-  border: 1px solid var(--line-strong);
+  min-height: 36px;
+  justify-content: center;
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   color: var(--text);
   font: 400 var(--size-xs) var(--font-sans);
