@@ -79,17 +79,25 @@ int cmd_check_or_generate(std::string_view action, const std::vector<std::string
     std::cerr << "error: " << action << " requires a Modelica source file (.mo)\n";
     return 2;
   }
+  if (args[0] == "--help" || args[0] == "-h") {
+    print_help("squero-om");
+    return 0;
+  }
   mo::GenerateOptions o{.source = std::string(args[0])};
   for (std::size_t i = 1; i < args.size(); ++i) {
     const auto flag = args[i];
+    if (flag == "--help" || flag == "-h") {
+      print_help("squero-om");
+      return 0;
+    }
     if (i + 1 >= args.size()) {
       std::cerr << "error: " << flag << " needs a value\n";
       return 2;
     }
     const std::string value(args[++i]);
-    if (flag == "--model") o.model = value;
-    else if (flag == "--out") o.out = value;
-    else if (flag == "--path") o.path = value;
+    if (flag == "--model" || flag == "-m") o.model = value;
+    else if (flag == "--out" || flag == "-o") o.out = value;
+    else if (flag == "--path" || flag == "-p") o.path = value;
     else {
       std::cerr << "error: unknown option " << flag << '\n';
       return 2;
