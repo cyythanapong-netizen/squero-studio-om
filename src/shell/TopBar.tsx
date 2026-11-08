@@ -3,6 +3,7 @@
 // from @paperboat/shared, the same as Paperboat's top bar).
 // The source view and Export live in the side pane, the footer and the menus.
 
+import type { ReactNode } from "react";
 import { MenuBar, StatusPill, ThemeToggle, type Theme } from "@paperboat/shared/components";
 import type { Command } from "@paperboat/shared";
 import { chip, type OmcState, type OmcStatus } from "../omc/omc.ts";
@@ -36,6 +37,7 @@ export type TopBarProps = {
   onTheme: (t: Theme) => void;
   onStatusClick?: () => void;
   running?: boolean;
+  focus?: ReactNode;
   errors?: number;
   consoleShown?: boolean;
   onConsole?: () => void;
@@ -55,6 +57,7 @@ export function TopBar({
   onTheme,
   onStatusClick,
   running = false,
+  focus,
   errors = 0,
   consoleShown = false,
   onConsole,
@@ -82,6 +85,7 @@ export function TopBar({
           {side && <rect x="10" y="2.5" width="4.5" height="11" className="fill" />}
         </svg>
       </button>
+      {focus}
       <StatusPill
         label={chip(status)}
         labels={STATES.map((state) => chip({ ...status, state }))}

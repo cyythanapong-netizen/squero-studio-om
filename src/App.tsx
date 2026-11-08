@@ -234,6 +234,18 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           commands={commands}
           side={side}
           onToggleSide={() => setSide((s) => !s)}
+          focus={side ? (
+            <Switch<Focus>
+              label="Focus"
+              value={focus}
+              onChange={setFocus}
+              options={[
+                { value: "code", label: "code", hint: "The source fills the pane" },
+                { value: "split", label: "split", hint: "Source above, scopes below" },
+                { value: "scopes", label: "scopes", hint: "The scopes fill the pane" },
+              ]}
+            />
+          ) : undefined}
           errors={errors}
           consoleShown={consoleShown}
           onConsole={() => setConsoleShown((c) => !c)}
@@ -248,18 +260,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />
             {side && (
               <aside className={`side focus-${focus}`}>
-                <div className="side-focus">
-                  <Switch<Focus>
-                    label="Focus"
-                    value={focus}
-                    onChange={setFocus}
-                    options={[
-                      { value: "code", label: "code", hint: "The source fills the pane" },
-                      { value: "split", label: "split", hint: "Source above, scopes below" },
-                      { value: "scopes", label: "scopes", hint: "The scopes fill the pane" },
-                    ]}
-                  />
-                </div>
                 <Split model={model} actions={actions} view={view} onView={setView} />
                 <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} />
               </aside>
