@@ -17,13 +17,12 @@ import {
   type NodeChange,
   type NodeProps,
   MiniMap,
-  NodeToolbar,
 } from "@xyflow/react";
-import { netWireType, orthoPoints, roundedPolyline, squareUp, useCanvasHotkeys, type BlockDef, type Connectors, type IconDef, type WirePoint } from "@paperboat/shared";
+import { flipPlacement, netWireType, orthoPoints, rotatePlacement, roundedPolyline, squareUp, useCanvasHotkeys, type BlockDef, type Connectors, type IconDef, type WirePoint } from "@paperboat/shared";
 import { CanvasHelp, CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboat/shared/components";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { DRAG_TYPE } from "../library/Library.tsx";
-import type { ComponentInst, Connection, Placement, StudioApi } from "../model/types.ts";
+import type { ComponentInst, Connection, StudioApi } from "../model/types.ts";
 import { snap } from "../store/exprs.ts";
 import { freeSpot } from "../store/plans.ts";
 import type { Actions } from "../store/index.tsx";
@@ -177,22 +176,17 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
 
   const rotateSelected = useCallback(async (cw: boolean) => {
     if (!selection.length) return;
-    const step = cw ? 270 : 90; // CW: 270° CCW, CCW: 90° CCW (Modelica standard)
     for (const part of model.components.filter((c) => selection.includes(c.name))) {
-      const rotation = ((part.placement.rotation + step) % 360) as Placement["rotation"];
-      await actions.move(part.name, { ...part.placement, rotation });
+      const next = rotatePlacement(part.placement, cw);
+      await actions.move(part.name, { ...part.placement, ...next });
     }
   }, [selection, model.components, actions]);
 
   const flipSelected = useCallback(async (axis: "x" | "y") => {
     if (!selection.length) return;
     for (const part of model.components.filter((c) => selection.includes(c.name))) {
-      if (axis === "x") {
-        await actions.move(part.name, { ...part.placement, mirror: !part.placement.mirror });
-      } else {
-        const rotation = (((part.placement.rotation + 180) % 360) as Placement["rotation"]);
-        await actions.move(part.name, { ...part.placement, rotation, mirror: !part.placement.mirror });
-      }
+      const next = flipPlacement(part.placement, axis);
+      await actions.move(part.name, { ...part.placement, ...next });
     }
   }, [selection, model.components, actions]);
 
@@ -293,51 +287,6 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
           }}
         >
           <Background />
-          {selection.length > 0 && (
-            <NodeToolbar
-              nodeId={selection}
-              isVisible={selection.length > 0}
-              position={Position.Top}
-              offset={14}
-              className="selection-dialog nodrag nopan nowheel"
-            >
-              <button
-                className="key small"
-                title="Rotate 90° clockwise (R)"
-                onClick={() => void rotateSelected(true)}
-              >
-                Rotate
-              </button>
-              <button
-                className="key small"
-                title="Flip horizontal (F)"
-                onClick={() => void flipSelected("x")}
-              >
-                Flip
-              </button>
-              <button
-                className="key small"
-                title="Flip vertical (Alt+F)"
-                onClick={() => void flipSelected("y")}
-              >
-                Flip ⇅
-              </button>
-              <button
-                className="key small"
-                title="Duplicate (Ctrl+D)"
-                onClick={() => void duplicateSelected()}
-              >
-                Duplicate
-              </button>
-              <button
-                className="key small"
-                title="Delete (Delete)"
-                onClick={deleteSelected}
-              >
-                Delete
-              </button>
-            </NodeToolbar>
-          )}
           <MiniMap
             pannable
             zoomable
