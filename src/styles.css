@@ -627,15 +627,9 @@ body.dragging-card .library {
 .deco-section > * { pointer-events: auto; }
 .deco-text { flex: 1; min-width: 0; border: 0; background: none; color: var(--text); font: 600 var(--size-xs) var(--font-sans); padding: 2px 4px; }
 .deco-section .deco-text { flex: none; width: auto; background: var(--surface); margin: -10px 0 0 8px; font-size: var(--size-2xs); color: var(--text-muted); }
-.simulate .dock {
-  position: sticky; bottom: var(--space-3); align-self: center; z-index: 6; margin-top: calc(-56px);
-  display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); max-width: calc(100% - 24px); white-space: nowrap;
-  background: var(--surface-float); -webkit-backdrop-filter: var(--float-blur); backdrop-filter: var(--float-blur);
-  border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
-}
 
 .dock-stop { display: inline-flex; align-items: center; gap: 4px; }
-.dock-stop .well { width: 56px; }
+.dock-stop .well { width: 56px; height: 28px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-md); padding: 0 var(--space-2); }
 .run-status { font: 500 var(--size-2xs) var(--font-sans); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .status-running { color: var(--signal); }
 .status-failed { color: var(--danger); }
