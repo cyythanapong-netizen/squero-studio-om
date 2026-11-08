@@ -20,7 +20,7 @@ export function StudioDock() {
     ratio: "… / …",
     words: "checking balance…",
   });
-  const [running, setRunning] = useState<{ port: number; up: boolean } | null>(null);
+  const [running, setRunning] = useState<{ port: number; up: boolean; ready?: boolean; line?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [outcome, setOutcome] = useState<ExportOutcome | null>(null);
@@ -75,7 +75,7 @@ export function StudioDock() {
       setProgress({ ...p });
     }, again);
     setProgress(null);
-    setOutcome(res);
+    if (!(mode === "serve" && res.ok)) setOutcome(res); // a started backend reports below as it comes up
     if (mode === "serve" && res.ok && res.result.port) setRunning({ port: res.result.port, up: false });
     setBusy(false);
   };
@@ -88,13 +88,49 @@ export function StudioDock() {
     if (!pollPort) return;
     const timer = setInterval(() => {
       void runBackendExport(apiRef.current, "status", () => {}, pollPort).then((res) => {
-        if (res.ok && res.result.state === "building") return;
-        setOutcome(res);
+        if (res.ok && res.result.state === "building") {
+          const line = (res.result.log ?? "").trim().split("\n").pop();
+          return setRunning((r) => (r && r.port === pollPort ? { ...r, line } : r));
+        }
+        if (!res.ok) setOutcome(res); // it exited: the log says why
         setRunning(res.ok ? { port: pollPort, up: true } : null);
       });
     }, 1500);
     return () => clearInterval(timer);
   }, [pollPort]);
+
+  // Listening is not ready: wait for the backend's own hello over its WebSocket.
+  const probePort = running?.up && !running.ready ? running.port : null;
+  useEffect(() => {
+    if (!probePort) return;
+    let ws: WebSocket | undefined;
+    let timer: ReturnType<typeof setTimeout>;
+    let done = false;
+    const tryOnce = () => {
+      ws = new WebSocket(`ws://localhost:${probePort}`);
+      ws.onmessage = () => {
+        done = true;
+        ws?.close();
+        setRunning((r) => (r && r.port === probePort ? { ...r, ready: true } : r));
+      };
+      ws.onclose = () => {
+        if (!done) timer = setTimeout(tryOnce, 1000);
+      };
+    };
+    tryOnce();
+    return () => {
+      done = true;
+      clearTimeout(timer);
+      ws?.close();
+    };
+  }, [probePort]);
+  const backendWords = !running
+    ? null
+    : !running.up
+      ? `building for :${running.port}${running.line ? `: ${running.line.slice(0, 90)}` : "…"}`
+      : !running.ready
+        ? `started on :${running.port}, waiting for it to answer…`
+        : `ready: connect Paperboat to ws://localhost:${running.port}`;
 
   const handleStop = async () => {
     if (!running || busy) return;
@@ -171,9 +207,10 @@ export function StudioDock() {
         </div>
       </div>
 
-      {(progress || outcome || fixError) && (
+      {(progress || outcome || fixError || backendWords) && (
         <div className="studio-dock-row">
           {progress && <span className="studio-dock-stage">{progress.stage}</span>}
+          {backendWords && !progress && <span className={`studio-dock-stage backend-${running?.ready ? "ready" : "wait"}`}>{backendWords}</span>}
           {outcome && (
             <span className={`studio-dock-result${outcome.ok ? "" : " error"}`}>
               {outcome.line}

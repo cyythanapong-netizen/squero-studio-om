@@ -176,3 +176,6 @@
   color: var(--danger);
   white-space: pre-wrap; /* paperboat's log tail */
 }
+
+.studio-dock-stage.backend-ready { color: var(--ok, var(--signal)); }
+.studio-dock-stage.backend-wait { color: var(--signal); }
