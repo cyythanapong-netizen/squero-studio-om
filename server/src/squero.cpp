@@ -376,6 +376,18 @@ json op_export(Omc& omc, const json& in, const Session& session) {
   return out;
 }
 
+// A CSV header's cells: quoted ones may hold commas ("R.T[1,1]").
+std::vector<std::string> csv_cells(const std::string& line) {
+  std::vector<std::string> out(1);
+  bool quoted = false;
+  for (const char c : line) {
+    if (c == '"') quoted = !quoted;
+    else if (c == ',' && !quoted) out.emplace_back();
+    else if (c != '\r') out.back() += c;
+  }
+  return out;
+}
+
 // One CSV row of numbers; NaN and infinity become null (JSON has neither).
 std::vector<json> numbers(const std::string& line) {
   std::vector<json> out;
@@ -457,13 +469,22 @@ json op_simulate(Omc& omc, const json& in) {
     for (const char c : name) re += (std::string_view(".[]()").find(c) != std::string_view::npos ? "\\" : "") + std::string(1, c);
     filter += (filter.empty() ? "" : "|") + re;
   }
+  // .mat, as it alone keeps parameters: a shape's sizes are often parameters, read back with val().
+  // -d=visxml writes <model>_visual.xml next to it: the MultiBody shapes and what drives them.
+  omc.call("setCommandLineOptions(\"-d=visxml\")");
   std::string expr = "simulate(" + (inputs.empty() ? model : harness) + ", startTime=0, stopTime=" + std::to_string(stop) +
-                     ", numberOfIntervals=500, outputFormat=\"csv\"";
-  if (!filter.empty()) expr += ", variableFilter=" + quote(filter);
+                     ", numberOfIntervals=500";
+  // a filtered run is plain CSV: just those variables, no shapes
+  if (!filter.empty()) expr += ", outputFormat=\"csv\", variableFilter=" + quote(filter);
   const std::string answer = omc.call(expr + ")", std::chrono::minutes(5));
   const auto at = answer.find("resultFile = \"");
-  std::string file;
-  if (at != std::string::npos) file = answer.substr(at + 14, answer.find('"', at + 14) - at - 14);
+  std::string mat;
+  if (at != std::string::npos) mat = answer.substr(at + 14, answer.find('"', at + 14) - at - 14);
+  // the scopes read CSV: the run's variables (parameters can't be CSV columns)
+  const std::string file = mat.empty() || !filter.empty() ? mat : mat.substr(0, mat.size() - 4) + ".csv";
+  if (!mat.empty() && filter.empty() && omc.call("filterSimulationResults(" + quote(mat) + ", " + quote(file) + ", readSimulationResultVars(" + quote(mat) +
+                               ", readParameters=false, openmodelicaStyle=true))", std::chrono::minutes(1)) != "true")
+    throw std::runtime_error("cannot read the result: " + omc.errors());
   std::ifstream csv(file);
   std::string header;
   if (file.empty() || !std::getline(csv, header)) {
@@ -475,18 +496,15 @@ json op_simulate(Omc& omc, const json& in) {
     const std::string cause = e == std::string::npos ? "" : errors.substr(e + 7, errors.find('\n', e) - e - 7);
     throw std::runtime_error("simulation failed: " + trim(!cause.empty() ? cause : why.empty() ? errors : why));
   }
+  // the harness's m.x is the model's x, der(m.x) its der(x)
+  const auto unprefix = [&](std::string cell) {
+    for (const std::string from : {prefix, "der(" + prefix})
+      if (!prefix.empty() && cell.starts_with(from)) return (from.size() > prefix.size() ? "der(" : "") + cell.substr(from.size());
+    return cell;
+  };
   json names = json::array();
   std::vector<std::vector<json>> columns;
-  {
-    std::stringstream row(header);
-    for (std::string cell; std::getline(row, cell, ',');) {
-      if (cell.size() >= 2 && cell.front() == '"') cell = cell.substr(1, cell.size() - 2);
-      // the harness's m.x is the model's x, der(m.x) its der(x)
-      for (const std::string from : {prefix, "der(" + prefix})
-        if (!prefix.empty() && cell.starts_with(from)) cell = (from.size() > prefix.size() ? "der(" : "") + cell.substr(from.size());
-      names.push_back(cell);
-    }
-  }
+  for (const auto& cell : csv_cells(header)) names.push_back(unprefix(cell));
   columns.resize(names.size());
   for (std::string line; std::getline(csv, line);) {
     const auto row = numbers(line);
@@ -498,10 +516,63 @@ json op_simulate(Omc& omc, const json& in) {
     series[names[i].get<std::string>()] = columns[i];
     all.push_back(names[i]);
   }
-  return {{"t", columns.empty() ? std::vector<json>{} : columns[0]}, {"series", series}, {"names", all}};
+  json out{{"t", columns.empty() ? std::vector<json>{} : columns[0]}, {"series", series}, {"names", all}};
+  // A filtered run lacks what the shapes read: shapes only for a full one.
+  if (filter.empty()) {
+    std::ifstream xml(mat.substr(0, mat.size() - 8) + "_visual.xml");
+    std::stringstream text;
+    text << xml.rdbuf();
+    out["shapes"] = visual_shapes(text.str(), [&](const std::string& cref) -> json {
+      const std::string name = unprefix(cref);
+      if (series.contains(name)) return name;
+      const double v = std::strtod(text_of(omc.call("val(" + cref + ", 0.0, " + quote(mat) + ")")).c_str(), nullptr);
+      return std::isfinite(v) ? json(v) : json(0.0);
+    });
+  }
+  return out;
 }
 
 }  // namespace
+
+nlohmann::json visual_shapes(const std::string& xml, const std::function<json(const std::string&)>& resolve) {
+  // ponytail: a scan for omc's fixed layout, not an XML parser; fine for what omc writes
+  const auto inner = [](const std::string& text, const std::string& tag, std::size_t from = 0) -> std::string {
+    const auto a = text.find("<" + tag + ">", from);
+    if (a == std::string::npos) return "";
+    const auto b = text.find("</" + tag + ">", a);
+    return text.substr(a + tag.size() + 2, b - a - tag.size() - 2);
+  };
+  // a field's values in order: <exp>1.0</exp> a number, <cref>x</cref> what resolve says
+  const auto values = [&](const std::string& field) {
+    json out = json::array();
+    for (std::size_t i = 0; (i = field.find('<', i)) != std::string::npos;) {
+      const bool cref = field.compare(i, 6, "<cref>") == 0;
+      if (!cref && field.compare(i, 5, "<exp>") != 0) {
+        ++i;
+        continue;
+      }
+      const auto a = i + (cref ? 6 : 5), b = field.find('<', a);
+      const std::string v = trim(field.substr(a, b - a));
+      out.push_back(cref ? resolve(v) : json(std::strtod(v.c_str(), nullptr)));
+      i = b + 1;
+    }
+    return out;
+  };
+  json shapes = json::array();
+  for (std::size_t at = 0; (at = xml.find("<shape>", at)) != std::string::npos;) {
+    const auto end = xml.find("</shape>", at);
+    const std::string s = xml.substr(at, end - at);
+    json shape{{"ident", trim(inner(s, "ident"))}, {"type", trim(inner(s, "type"))}};
+    for (const char* v : {"T", "r", "r_shape", "lengthDir", "widthDir", "color"}) shape[v] = values(inner(s, v));
+    for (const char* v : {"length", "width", "height", "extra"}) {
+      const json one = values(inner(s, v));
+      shape[v] = one.empty() ? json(0.0) : one[0];
+    }
+    shapes.push_back(shape);
+    at = end;
+  }
+  return shapes;
+}
 
 std::string handle(Omc& omc, const std::string& message, const Session& session) {
   json in;

@@ -24,15 +24,18 @@
 //                                                  pushes {op: "progress", id, stage, fraction} first, stage
 //                                                  check|flatten|generate|build; `files` (relative path →
 //                                                  text) only when `dry`, which writes nothing
-//   simulate  {model, stop, vars?}              → {t, series, names}  a local check run with omc, 500
-//                                                  intervals; series for `vars` (all when omitted),
-//                                                  `names` every variable in the result
+//   simulate  {model, stop, vars?}              → {t, series, names, shapes?}  a local check run with omc,
+//                                                  500 intervals; series for `vars` (all when omitted),
+//                                                  `names` every variable in the result; `shapes` (no
+//                                                  `vars`) the MultiBody shapes, see visual_shapes()
 //
 // set_icon and save refuse the Modelica Standard Library: Studio edits only the user's file.
 
 #include <filesystem>
 #include <functional>
 #include <string>
+
+#include <nlohmann/json.hpp>
 
 #include "squero/omc.hpp"
 
@@ -47,6 +50,11 @@ struct Session {
 
 // One squero/0 message handled; returns the reply (empty for a message that wants none).
 std::string handle(Omc& omc, const std::string& message, const Session& session = {});
+
+// omc's <model>_visual.xml (-d=visxml) as [{ident, type, T[9], r[3], r_shape[3], lengthDir[3],
+// widthDir[3], length, width, height, extra, color[3]}]. Each value is a number, or the result
+// variable that drives it as `resolve` says (a cref → its series name, or a number when constant).
+nlohmann::json visual_shapes(const std::string& xml, const std::function<nlohmann::json(const std::string&)>& resolve);
 
 // Serves until killed. Returns 1 when the port can't be taken. port 0 = first free of 59201..59299. `file` is the .mo to open
 // (created as a stub model when it doesn't exist); empty = ./Untitled.mo.
