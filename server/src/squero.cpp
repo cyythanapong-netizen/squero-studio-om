@@ -549,6 +549,13 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
 int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::path& file) {
   ix::initNetSystem();
   Omc omc(std::move(options));
+  // port 0: the first free one of SQR01..SQR99 (59201..59299)
+  for (int p = 59201; port == 0 && p <= 59299; ++p)
+    if (!listening(p)) port = p;
+  if (port == 0) {
+    std::cerr << "no free port in 59201..59299\n";
+    return 1;
+  }
   ix::HttpServer server(port, "127.0.0.1");
   // Recursive: sending to a client that has just gone away runs its Close handler on this same
   // thread, which takes the lock again. The send loop walks a copy for the same reason.

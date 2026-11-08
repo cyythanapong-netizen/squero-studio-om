@@ -48,7 +48,7 @@ struct Session {
 // One squero/0 message handled; returns the reply (empty for a message that wants none).
 std::string handle(Omc& omc, const std::string& message, const Session& session = {});
 
-// Serves until killed. Returns 1 when the port can't be taken. `file` is the .mo to open
+// Serves until killed. Returns 1 when the port can't be taken. port 0 = first free of 59201..59299. `file` is the .mo to open
 // (created as a stub model when it doesn't exist); empty = ./Untitled.mo.
 int serve_squero(int port, const std::filesystem::path& app = {}, Omc::Options options = {},
                  const std::filesystem::path& file = {});

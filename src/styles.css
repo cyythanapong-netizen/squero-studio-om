@@ -430,7 +430,18 @@ body.dragging-card .library {
 .canvas .react-flow { --dots: var(--line); }
 .react-flow__node { cursor: default; }
 .wire-signal { stroke: var(--line-ink); }
-.notice { position: absolute; left: var(--space-3); bottom: var(--space-3); margin: 0; padding: 4px 10px; background: var(--surface-panel); border: 1.5px solid var(--danger); border-radius: var(--radius-md); color: var(--text); font: 400 var(--size-xs) var(--font-sans); max-width: 70%; white-space: pre-wrap; }
+.key.help-key { position: absolute; left: var(--space-3); bottom: var(--space-3); z-index: 6; width: 26px; height: 26px; min-width: 26px; padding: 0; display: inline-grid; place-items: center; border-radius: var(--radius-round); font: 500 var(--size-xs) var(--font-mono); line-height: 1; text-align: center; }
+.help-pop {
+  position: absolute; left: var(--space-3); bottom: calc(var(--space-3) + 34px); z-index: 70; width: min(480px, calc(100% - 24px));
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  background: var(--surface-float); -webkit-backdrop-filter: var(--float-blur); backdrop-filter: var(--float-blur);
+  box-shadow: var(--shadow-1);
+}
+.help-pop h3 { margin: 0 0 var(--space-2); font: 600 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
+.help-pop dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px var(--space-4); font-size: var(--size-xs); }
+.help-pop dt { color: var(--text-muted); }
+.help-pop dd { margin: 0; color: var(--text); }
+.notice { position: absolute; left: calc(var(--space-3) + 34px); bottom: var(--space-3); margin: 0; padding: 4px 10px; background: var(--surface-panel); border: 1.5px solid var(--danger); border-radius: var(--radius-md); color: var(--text); font: 400 var(--size-xs) var(--font-sans); max-width: 70%; white-space: pre-wrap; }
 .quick-add { position: absolute; z-index: 60; top: 18%; left: 50%; transform: translateX(-50%); width: 340px; background: var(--surface-raised); border: 1.5px solid var(--line-ink); border-radius: var(--radius-lg); box-shadow: 0 12px 30px rgb(0 0 0 / 0.2); overflow: hidden; }
 .quick-add input { display: block; width: calc(100% - 2 * var(--space-2)); margin: var(--space-2); height: 30px; background: var(--surface-well); box-shadow: var(--well-shadow); border: 0; border-radius: var(--radius-md); padding: 0 var(--space-2); font: 400 var(--size-sm) var(--font-sans); }
 .quick-add ul { list-style: none; margin: 0; padding: 0 var(--space-1) var(--space-1); max-height: 260px; overflow: auto; }
