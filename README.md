@@ -5,29 +5,27 @@ look: a library tree, a canvas of components and connectors, a split view of `.m
 generated C++, and a dock that checks the model's balance and exports a Paperboat backend
 (`<model>-cpp/`). Every edit goes through `omc`, so the `.mo` stays OMEdit-compatible.
 
-This repo is the app (React + `@xyflow/react` on `@paperboat/shared`). The server it talks to,
-`squero/0`, the `omc` bridge, the `.mo` importer (`extends` resolver, `Icon(graphics)` and
-`iconTransformation` quantisers) and the backend generator are C++ in the
-[`paperboat`](https://github.com/cyythanapong-netizen/paperboat) engine (`engine/modelica`).
+This repo contains both the React web application (`src/`) and the native C++ server & tools (`server/`).
+The server provides `squero/0`, the `omc` bridge, the `.mo` importer (`extends` resolver, `Icon(graphics)` and
+`iconTransformation` quantisers), the backend generator, and the `squero-om` binary.
 
 ## Layout
 
 Clone side by side:
 
 ```
-paperboat/           engine, `paperboat squero`, apps/web
+paperboat/           engine, paperboat CLI, apps/web
 paperboat-shared/    @paperboat/shared, the UI kit
-squero-studio-om/    this repo
+squero-studio-om/    this repo (server/ and src/)
 ```
 
 ## Run
 
-From the `paperboat` CLI, which fetches and builds this app from GitHub the first time:
+From the `paperboat` CLI:
 
 ```sh
-paperboat squero [Model.mo]          # http://localhost:8790
-paperboat pkg versions squero-studio-om
-paperboat squero --version 0.2.0     # a release (default: the newest, else main)
+paperboat start squero-studio-om [Model.mo]  # http://localhost:8790
+paperboat stop squero-studio-om
 ```
 
 From a checkout:
@@ -35,13 +33,10 @@ From a checkout:
 ```sh
 (cd ../paperboat-shared && npm install)
 npm install
-npm run build                       # dist/
+npm run build                       # builds dist/
+npm run build:server                # builds server/build/squero-om
 bin/squero-om [Model.mo]            # server + app on http://localhost:8790
 ```
-
-`squero-om` runs `paperboat squero --app dist`. It finds the binary from `$PAPERBOAT`, then
-`paperboat` on `PATH`, then `../paperboat/engine/build/**/paperboat`. Build that engine with
-`-DPAPERBOAT_BUILD_MODELICA=ON` and have `omc` installed.
 
 For the UI alone: `npm run dev` (Vite on :3048; start `bin/squero-om` for the server).
 
@@ -50,6 +45,7 @@ For the UI alone: `npm run dev` (Vite on :3048; start `bin/squero-om` for the se
 ```sh
 npm run typecheck
 npm test            # node tests against a fake StudioApi; no omc, no browser
+npm run test:server # C++ Catch2 tests ([modelica],[squero]; needs omc)
 npm run build
 ```
 

@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   studio:
-    name: Studio (typecheck, tests, build)
+    name: Studio UI (typecheck, tests, build)
     runs-on: ubuntu-24.04
     steps:
       # Side by side, so "file:../paperboat-shared" resolves.
@@ -36,3 +36,62 @@ jobs:
         working-directory: squero-studio-om
       - run: npm run build
         working-directory: squero-studio-om
+
+  server:
+    name: Squero OM Server (OpenModelica, tests, dc-drive diff)
+    runs-on: ubuntu-24.04
+    env:
+      CXX: g++-14
+      CC: gcc-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: squero-studio-om
+
+      - uses: actions/checkout@v4
+        with:
+          repository: cyythanapong-netizen/paperboat
+          path: paperboat
+          token: ${{ secrets.DOWNSTREAM_TOKEN || github.token }}
+
+      - name: Cache OpenModelica MSL
+        id: cache-msl
+        uses: actions/cache@v4
+        with:
+          path: ~/.openmodelica
+          key: openmodelica-msl-${{ runner.os }}
+
+      - name: Install OpenModelica from official apt repo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ca-certificates curl gnupg ninja-build
+          curl -fsSL https://build.openmodelica.org/apt/openmodelica.asc | \
+            sudo gpg --dearmor -o /usr/share/keyrings/openmodelica-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/openmodelica-keyring.gpg] https://build.openmodelica.org/apt $(lsb_release -cs) stable" | \
+            sudo tee /etc/apt/sources.list.d/openmodelica.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openmodelica omc
+          omc --version
+
+      - name: Preload Modelica Standard Library
+        if: steps.cache-msl.outputs.cache-hit != 'true'
+        run: |
+          printf 'installPackage(Modelica, "4.1.0+maint.om", exactMatch=true);\nloadModel(Modelica);\ngetErrorString();\n' > preload.mos
+          omc preload.mos
+
+      - name: Configure Server
+        run: cmake -S squero-studio-om/server -B squero-studio-om/server/build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSQUERO_BUILD_TESTS=ON
+
+      - name: Build Server & CLI
+        run: cmake --build squero-studio-om/server/build
+
+      - name: Test Server (omc bridge, squero/0, and importer)
+        run: squero-studio-om/server/build/squero_tests '[modelica],[squero]'
+
+      - name: Verify dc-drive generation matches paperboat golden
+        run: |
+          mkdir -p /tmp/dc-drive-gen
+          squero-studio-om/server/build/squero-om generate paperboat/examples/dc-drive-cpp/modelica/DCDrive.mo --out /tmp/dc-drive-gen
+          diff -u paperboat/examples/dc-drive-cpp/domain/dc_drive.cpp /tmp/dc-drive-gen/domain/dc_drive.cpp
+          diff -u paperboat/examples/dc-drive-cpp/domain/dc_drive.hpp /tmp/dc-drive-gen/domain/dc_drive.hpp
+          diff -u paperboat/examples/dc-drive-cpp/CMakeLists.txt /tmp/dc-drive-gen/CMakeLists.txt
