@@ -14,6 +14,16 @@
 #include <sstream>
 #include <thread>
 
+#include <cerrno>
+#include <csignal>
+#include <cstring>
+
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <ixwebsocket/IXHttpServer.h>
 #include <ixwebsocket/IXNetSystem.h>
 #include <nlohmann/json.hpp>
@@ -184,6 +194,183 @@ json op_generate(Omc& omc, const json& in, const Session& session) {
   return out;
 }
 
+// A free TCP port: bind to 0 and read back what the kernel chose.
+int free_port() {
+  const int fd = socket(AF_INET, SOCK_STREAM, 0);
+  sockaddr_in a{};
+  a.sin_family = AF_INET;
+  a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  socklen_t n = sizeof a;
+  const bool ok = fd >= 0 && bind(fd, reinterpret_cast<sockaddr*>(&a), n) == 0 && getsockname(fd, reinterpret_cast<sockaddr*>(&a), &n) == 0;
+  if (fd >= 0) close(fd);
+  if (!ok) throw std::runtime_error("no free port");
+  return ntohs(a.sin_port);
+}
+
+std::string base64(const std::string& in) {
+  static const char* t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  std::string out;
+  for (std::size_t i = 0; i < in.size(); i += 3) {
+    const unsigned v = (static_cast<unsigned char>(in[i]) << 16) | (i + 1 < in.size() ? static_cast<unsigned char>(in[i + 1]) << 8 : 0) |
+                       (i + 2 < in.size() ? static_cast<unsigned char>(in[i + 2]) : 0);
+    out += t[v >> 18 & 63];
+    out += t[v >> 12 & 63];
+    out += i + 1 < in.size() ? t[v >> 6 & 63] : '=';
+    out += i + 2 < in.size() ? t[v & 63] : '=';
+  }
+  return out;
+}
+
+// The paperboat console: $PAPERBOAT_BIN or the one on PATH.
+std::string paperboat_bin() {
+  const char* e = std::getenv("PAPERBOAT_BIN");
+  if (e && *e) return e;
+  // the sibling checkout: <repo>/squero-studio-om/server/build/squero-om -> <repo>/paperboat/bin/paperboat
+  std::error_code ec;
+  const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
+  for (fs::path d = exe.parent_path(); !ec && d.has_parent_path() && d != d.root_path(); d = d.parent_path()) {
+    const fs::path c = d.parent_path() / "paperboat" / "bin" / "paperboat";
+    std::error_code missing;  // not `ec`: a missing candidate sets it, which would end the walk
+    if (fs::is_regular_file(c, missing)) return c.string();
+  }
+  return "paperboat";
+}
+
+// Spawns paperboat in its own session, stdout and stderr to `log`; returns its pid.
+pid_t spawn_paperboat(const std::vector<std::string>& args, const fs::path& log) {
+  const std::string bin = paperboat_bin();
+  std::vector<char*> argv{const_cast<char*>(bin.c_str())};
+  for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+  argv.push_back(nullptr);
+  const int fd = open(log.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+  if (fd < 0) throw std::runtime_error("cannot write " + log.string());
+  const pid_t pid = fork();
+  if (pid == 0) {
+    setsid();
+    const int null = open("/dev/null", O_RDONLY);
+    dup2(null, 0);
+    dup2(fd, 1);
+    dup2(fd, 2);
+    execvp(bin.c_str(), argv.data());
+    dprintf(2, "cannot run %s: %s\n", bin.c_str(), std::strerror(errno));
+    _exit(127);
+  }
+  close(fd);
+  if (pid < 0) throw std::runtime_error("fork failed");
+  return pid;
+}
+
+// Runs paperboat to the end; its exit code (127: it could not be started).
+int run_paperboat(const std::vector<std::string>& args, const fs::path& log) {
+  const pid_t pid = spawn_paperboat(args, log);
+  int st = 0;
+  waitpid(pid, &st, 0);
+  return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+}
+
+// The last lines of a log, for an error the user can act on.
+std::string log_tail(const fs::path& log, std::size_t lines = 12) {
+  std::ifstream f(log);
+  std::vector<std::string> all;
+  for (std::string l; std::getline(f, l);) all.push_back(l);
+  std::string out;
+  for (std::size_t i = all.size() > lines ? all.size() - lines : 0; i < all.size(); ++i) out += all[i] + "\n";
+  return out;
+}
+
+std::runtime_error paperboat_failed(const std::string& what, int code, const fs::path& log) {
+  std::string msg = "paperboat " + what + " failed (exit " + std::to_string(code) + ")";
+  if (code == 127) msg += "; is paperboat on PATH or PAPERBOAT_BIN set?";
+  const std::string tail = log_tail(log);
+  return std::runtime_error(msg + (tail.empty() ? "" : ":\n" + tail) + "full log: " + log.string());
+}
+
+bool listening(int port) {
+  const int fd = socket(AF_INET, SOCK_STREAM, 0);
+  sockaddr_in a{};
+  a.sin_family = AF_INET;
+  a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  a.sin_port = htons(static_cast<uint16_t>(port));
+  const bool ok = fd >= 0 && connect(fd, reinterpret_cast<sockaddr*>(&a), sizeof a) == 0;
+  if (fd >= 0) close(fd);
+  return ok;
+}
+
+// Backends started by "serve": port -> (`paperboat start` pid, its log).
+std::mutex served_mutex;
+std::map<int, std::pair<pid_t, fs::path>> served;
+
+// "status": building (not listening yet), running, or exited (with the log's tail).
+json serve_status(int port) {
+  std::lock_guard lock(served_mutex);
+  const auto it = served.find(port);
+  if (it == served.end()) throw std::runtime_error("no backend started on port " + std::to_string(port));
+  const auto [pid, log] = it->second;
+  int st = 0;
+  std::string state = listening(port) ? "running" : "building";
+  if (waitpid(pid, &st, WNOHANG) == pid) {
+    state = "exited";
+    served.erase(it);
+  }
+  return json{{"port", port}, {"name", log.stem().string()}, {"state", state}, {"log", log_tail(log)}};
+}
+
+// "stop": `paperboat stop <port>` once it listens, then the rest of its session (a build in flight).
+json serve_stop(int port) {
+  const fs::path log = fs::temp_directory_path() / "ssom_stop.log";
+  if (listening(port))
+    if (const int code = run_paperboat({"stop", std::to_string(port)}, log); code != 0)
+      throw paperboat_failed("stop " + std::to_string(port), code, log);
+  std::lock_guard lock(served_mutex);
+  if (const auto it = served.find(port); it != served.end()) {
+    kill(-it->second.first, SIGTERM);
+    waitpid(it->second.first, nullptr, 0);
+    served.erase(it);
+  }
+  return json{{"port", port}, {"state", "stopped"}};
+}
+
+// Export without a folder of the user's, into <tmp>/ssom_<model>: mode "ppk" packs it and returns
+// the archive (base64); "serve" starts it on a free port and returns at once (poll "status": the
+// first start builds the engine, minutes); "stop" ends one.
+json op_export(Omc& omc, const json& in, const Session& session) {
+  const std::string mode = in.value("mode", "ppk");
+  if (mode == "status") return serve_status(in.value("port", 0));
+  if (mode == "stop") return serve_stop(in.value("port", 0));
+  if (mode != "ppk" && mode != "serve") throw std::runtime_error("export mode is ppk, serve, status or stop");
+  std::string stem = in.value("model", "model");
+  stem = stem.substr(stem.rfind('.') == std::string::npos ? 0 : stem.rfind('.') + 1);
+  for (auto& c : stem) if (!std::isalnum(static_cast<unsigned char>(c))) c = '_';
+  const fs::path dir = fs::temp_directory_path() / ("ssom_" + stem);
+  json g = in;
+  g["out"] = dir.string();
+  g["dry"] = false;
+  json out = op_generate(omc, g, session);
+  if (session.push) session.push(json{{"op", "progress"}, {"id", in.value("id", json())}, {"stage", "build"}, {"fraction", 0.8}}.dump());
+  const fs::path log = dir.string() + ".log";
+  if (mode == "ppk") {
+    const fs::path ppk = dir.string() + ".ppk";
+    // pack verifies first, and the catalog check builds a C++ backend: minutes on a cold build/
+    if (const int code = run_paperboat({"pack", dir.string(), "--out", ppk.string()}, log); code != 0)
+      throw paperboat_failed("pack", code, log);
+    std::ifstream f(ppk, std::ios::binary);
+    out["file"] = "ssom_" + stem + ".ppk";
+    out["ppk"] = base64(std::string(std::istreambuf_iterator<char>(f), {}));
+  } else {
+    const int port = free_port();
+    const pid_t pid = spawn_paperboat({"start", dir.string(), "--port", std::to_string(port)}, log);
+    {
+      std::lock_guard lock(served_mutex);
+      served[port] = {pid, log};
+    }
+    out["name"] = "ssom_" + stem;
+    out["state"] = "building";
+    out["port"] = port;
+    out["log"] = log.string();
+  }
+  return out;
+}
+
 // One CSV row of numbers; NaN and infinity become null (JSON has neither).
 std::vector<json> numbers(const std::string& line) {
   std::vector<json> out;
@@ -339,11 +526,13 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_set_icon(omc, in);
     } else if (op == "generate") {
       out["result"] = op_generate(omc, in, session);
+    } else if (op == "export") {
+      out["result"] = op_export(omc, in, session);
     } else if (op == "simulate") {
       out["result"] = op_simulate(omc, in);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, save, icon, set_icon, generate, simulate";
+      out["error"] = "unknown op; squero/0 has omc, open, save, icon, set_icon, generate, export, simulate";
       return out.dump();
     }
     out["ok"] = true;

@@ -1,6 +1,7 @@
 import type { ConnectorDef, IconPort } from "@paperboat/shared";
 import type {
   ComponentInst,
+  ExportMode,
   ExportProgress,
   ExportResult,
   Placement,
@@ -271,24 +272,40 @@ export type ExportOutcome =
   | { ok: true; result: ExportResult; line: string }
   | { ok: false; line: string };
 
+function saveBase64(file: string, b64: string) {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+  a.download = file;
+  document.body.append(a);
+  a.click();
+  setTimeout(() => {
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }, 1000);
+}
+
+export function serveLine(mode: ExportMode, r: ExportResult, port?: number): string {
+  if (mode === "stop") return `stopped backend on port ${port}`;
+  if (mode === "ppk") return `${r.file} downloaded · ${r.reason}`;
+  if (r.state === "running") return `${r.name ?? "backend"} running on port ${r.port}`;
+  if (r.state === "exited") return `backend on port ${r.port} exited:\n${r.log ?? ""}`;
+  return `building ${r.name ?? "backend"} for port ${r.port}… (the first build compiles the engine: minutes)`;
+}
+
 export async function runBackendExport(
   api: StudioApi,
-  outDir: string,
+  mode: ExportMode,
   onProgress: (p: ExportProgress) => void,
+  port?: number,
 ): Promise<ExportOutcome> {
-  const target = outDir.trim() || defaultExportFolder(api.model.name);
   try {
-    const result = await api.exportBackend(target, onProgress);
-    return {
-      ok: true,
-      result,
-      line: `${result.path} · ${result.reason}`,
-    };
+    const result = await api.exportBackend(mode, onProgress, port);
+    if (result.ppk && result.file) saveBase64(result.file, result.ppk);
+    const line = serveLine(mode, result, port);
+    return result.state === "exited" ? { ok: false, line } : { ok: true, result, line };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return {
-      ok: false,
-      line: explainOmcError(msg) || "export failed",
-    };
+    return { ok: false, line: explainOmcError(msg) || "export failed" };
   }
 }

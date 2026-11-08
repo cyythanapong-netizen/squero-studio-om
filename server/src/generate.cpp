@@ -1154,7 +1154,7 @@ std::string descriptor(const Spec& s) {
 std::string backend_toml(const Spec& s, int port) {
   return "[backend]\nformat = 0\nname = " + toml_string(s.name) + "\nversion = \"0.1.0\"\nengine = \">=0.1\"\n"
          "language = \"cpp\"\nrun = \"build/paperboat-" + s.name + "\"\nport = " + std::to_string(port) +
-         "\ndescriptor = \"descriptor.toml\"\n\n[test]\ngolden = \"expected.json\"\n";
+         "\ndescriptor = \"descriptor.toml\"\n";
 }
 
 std::string readme(const Spec& s, const GenerateResult& r) {

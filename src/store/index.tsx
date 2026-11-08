@@ -5,7 +5,7 @@
 import { useUndo, type IconDef } from "@paperboat/shared";
 import type { Edge, Node } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Connection, ExportProgress, ExportResult, Placement, StudioApi, StudioModel } from "../model/types.ts";
+import type { Connection, ExportMode, ExportProgress, ExportResult, Placement, StudioApi, StudioModel } from "../model/types.ts";
 import type { OmcClient, OmcStatus } from "../omc/omc.ts";
 import { parseValue } from "../omc/parse.ts";
 import { restoreExprs, same, type Graph, type PartSnap } from "./diff.ts";
@@ -222,13 +222,12 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
           await refresh();
         });
       },
-      async exportBackend(out: string, onProgress: (p: ExportProgress) => void): Promise<ExportResult> {
+      async exportBackend(mode: ExportMode, onProgress: (p: ExportProgress) => void, port?: number): Promise<ExportResult> {
         return enqueue(async () => {
           if (!model.file) throw new Error("save the model to a file first");
-          const done = await omc.op<{ out: string; path: "ode" | "fmu"; reason: string }>("generate", { source: model.file, model: name, out }, (stage, fraction) =>
+          return omc.op<ExportResult>("export", { source: model.file, model: name, mode, port }, (stage, fraction) =>
             onProgress({ stage: stage as ExportProgress["stage"], fraction }),
           );
-          return { out: done.out, path: done.path, reason: done.reason };
         });
       },
     };

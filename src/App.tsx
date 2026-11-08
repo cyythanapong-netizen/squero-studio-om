@@ -6,7 +6,7 @@ import { Switch } from "@paperboat/shared/components";
 import { useShortcuts, type Command } from "@paperboat/shared";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Canvas } from "./canvas/Canvas.tsx";
-import { defaultExportFolder, runBackendExport } from "./dock/dock.ts";
+import { runBackendExport } from "./dock/dock.ts";
 import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
 import { StudioContext } from "./model/types.ts";
@@ -86,10 +86,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
   const handleExportBackend = async () => {
     if (!api) return;
-    const target = defaultExportFolder(api.model.name);
-    const outcome = await runBackendExport(api, target, () => {});
+    const outcome = await runBackendExport(api, "ppk", () => {});
     if (outcome.ok) {
-      setToastMessage(`Exported backend to ${outcome.result.out} (${outcome.result.path})`);
+      setToastMessage(`Exported ${outcome.line}`);
     } else {
       setToastMessage(`Export failed: ${outcome.line}`);
     }
@@ -189,7 +188,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       },
       {
         id: "file.export",
-        label: "Export Paperboat Backend",
+        label: "Export Paperboat Backend (.ppk)",
         menu: "file",
         group: "export",
         shortcut: "Ctrl+E",

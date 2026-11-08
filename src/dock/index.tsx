@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
-import { useStudio, type ExportProgress } from "../model/types.ts";
+import { useEffect, useRef, useState } from "react";
+import { useStudio, type ExportMode, type ExportProgress } from "../model/types.ts";
 import {
   checkModelBalance,
-  defaultExportFolder,
   findDanglingFlowPorts,
   fixDanglingPort,
   runBackendExport,
@@ -21,7 +20,8 @@ export function StudioDock() {
     ratio: "… / …",
     words: "checking balance…",
   });
-  const [outDir, setOutDir] = useState<string>(() => defaultExportFolder(api.model.name));
+  const [running, setRunning] = useState<{ port: number; up: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<ExportProgress | null>(null);
   const [outcome, setOutcome] = useState<ExportOutcome | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
@@ -35,10 +35,6 @@ export function StudioDock() {
     entries: api.model.entries,
     revision,
   });
-
-  useEffect(() => {
-    setOutDir((prev) => (prev ? prev : defaultExportFolder(api.model.name)));
-  }, [api.model.name]);
 
   // Keyed on the model and omc only: api itself is rebuilt on every status push, and
   // checkModel causes one, so depending on api re-checks forever.
@@ -67,14 +63,45 @@ export function StudioDock() {
     setRevision((r) => r + 1);
   };
 
-  const handleExport = async () => {
-    if (!isBalanced) return;
+  const handleExport = async (mode: ExportMode) => {
+    if (!isBalanced || busy) return;
+    setBusy(true);
     setOutcome(null);
+    if (mode === "serve" && running) await runBackendExport(api, "stop", () => {}, running.port);
+    setRunning(null);
     setProgress({ stage: "check", fraction: 0 });
-    const res = await runBackendExport(api, outDir, (p) => {
+    const res = await runBackendExport(api, mode, (p) => {
       setProgress({ ...p });
     });
+    setProgress(null);
     setOutcome(res);
+    if (mode === "serve" && res.ok && res.result.port) setRunning({ port: res.result.port, up: false });
+    setBusy(false);
+  };
+
+  // A started backend builds first (minutes, cold): poll until it listens or exits.
+  const pollPort = running && !running.up ? running.port : null;
+  const apiRef = useRef(api);
+  apiRef.current = api; // api is rebuilt on every status push: keep the timer off it
+  useEffect(() => {
+    if (!pollPort) return;
+    const timer = setInterval(() => {
+      void runBackendExport(apiRef.current, "status", () => {}, pollPort).then((res) => {
+        if (res.ok && res.result.state === "building") return;
+        setOutcome(res);
+        setRunning(res.ok ? { port: pollPort, up: true } : null);
+      });
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [pollPort]);
+
+  const handleStop = async () => {
+    if (!running || busy) return;
+    setBusy(true);
+    const res = await runBackendExport(api, "stop", () => {}, running.port);
+    setOutcome(res);
+    if (res.ok) setRunning(null);
+    setBusy(false);
   };
 
   return (
@@ -117,25 +144,29 @@ export function StudioDock() {
         )}
 
         <div className="studio-dock-export">
-          <label className="studio-dock-out-well">
-            <input
-              className="studio-dock-out-input"
-              aria-label="Export backend folder"
-              spellCheck={false}
-              value={outDir}
-              placeholder={defaultExportFolder(api.model.name)}
-              onChange={(e) => setOutDir(e.target.value)}
-            />
-          </label>
           <button
             type="button"
             className="studio-dock-export-key"
-            disabled={!isBalanced}
-            title={isBalanced ? `Export C++ backend to ${outDir}` : balance.words}
-            onClick={() => void handleExport()}
+            disabled={!isBalanced || busy}
+            title={isBalanced ? "Download the backend as a .ppk package" : balance.words}
+            onClick={() => void handleExport("ppk")}
           >
-            Export backend
+            Download .ppk
           </button>
+          <button
+            type="button"
+            className="studio-dock-export-key"
+            disabled={!isBalanced || busy}
+            title={isBalanced ? "Start the backend as ssom_<model> on a free port" : balance.words}
+            onClick={() => void handleExport("serve")}
+          >
+            {running ? "Restart" : "Start"} backend
+          </button>
+          {running && (
+            <button type="button" className="studio-dock-export-key" disabled={busy} onClick={() => void handleStop()}>
+              Stop :{running.port}
+            </button>
+          )}
         </div>
       </div>
 

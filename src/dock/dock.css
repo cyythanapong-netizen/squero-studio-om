@@ -174,4 +174,5 @@
 
 .studio-dock-result.error {
   color: var(--danger);
+  white-space: pre-wrap; /* paperboat's log tail */
 }

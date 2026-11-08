@@ -147,7 +147,7 @@ test("dock: exportBackend streams progress sequence and formats result or error"
   assert.equal(defaultExportFolder(api.model.name), "rl-circuit-cpp");
 
   const seen: ExportProgress[] = [];
-  const outcome = await runBackendExport(api, "rl_circuit-cpp", (p) => seen.push(p));
+  const outcome = await runBackendExport(api, "ppk", (p) => seen.push(p));
 
   assert.equal(outcome.ok, true);
   assert.deepEqual(
@@ -159,13 +159,23 @@ test("dock: exportBackend streams progress sequence and formats result or error"
       ["build", 1.0],
     ],
   );
-  assert.match(outcome.line, /^ode · no events/);
+  assert.match(outcome.line, /downloaded · no events/);
 
   // Error path
   api.setExportScript([{ stage: "check", fraction: 0.2 }], new Error("DAE has structural singularity"));
-  const failed = await runBackendExport(api, "rl_circuit-cpp", () => {});
+  const failed = await runBackendExport(api, "serve", () => {});
   assert.equal(failed.ok, false);
   assert.equal(failed.line, "DAE has structural singularity");
+
+  // Start: building until the port opens; a backend that exits is an error carrying its log
+  api.setExportScript([], { name: "ssom_RLCircuit", port: 4100, state: "building" });
+  assert.match((await runBackendExport(api, "serve", () => {})).line, /^building ssom_RLCircuit for port 4100/);
+  api.setExportScript([], { port: 4100, state: "running" });
+  assert.match((await runBackendExport(api, "status", () => {}, 4100)).line, /running on port 4100/);
+  api.setExportScript([], { port: 4100, state: "exited", log: "cmake build failed\n" });
+  const exited = await runBackendExport(api, "status", () => {}, 4100);
+  assert.equal(exited.ok, false);
+  assert.match(exited.line, /exited:\ncmake build failed/);
 });
 
 test("export folder follows the generator's backend_name", () => {
