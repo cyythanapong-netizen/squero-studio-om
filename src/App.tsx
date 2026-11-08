@@ -11,9 +11,10 @@ import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
 import { StudioContext } from "./model/types.ts";
 import { OmcClient, type OmcStatus } from "./omc/omc.ts";
+import { Console, type Log } from "./shell/Console.tsx";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
-import { LibraryModal, PromptModal, StatusModal, Toast } from "./shell/Dialogs.tsx";
+import { LibraryModal, PromptModal, StatusModal } from "./shell/Dialogs.tsx";
 import { TopBar } from "./shell/TopBar.tsx";
 import { useTheme, type Theme } from "@paperboat/shared/components";
 import { Simulate } from "./simulate/Simulate.tsx";
@@ -72,7 +73,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [consoleShown, setConsoleShown] = useState(false);
+  const errors = logs.filter((l) => l.level === "error").length;
+  const say = (text: string, level: Log["level"] = "info") => setLogs((l) => [...l, { level, text }]);
+  const fail = (e: Error) => say(e.message, "error");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const classes = useClassIndex(omc);
 
@@ -82,16 +87,16 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   }, [popover, model]);
 
   useEffect(() => {
-    if (actions.notice) setToastMessage(actions.notice);
+    if (actions.notice) say(actions.notice);
   }, [actions.notice]);
 
   const handleExportBackend = async () => {
     if (!api) return;
     const outcome = await runBackendExport(api, "ppk", () => {});
     if (outcome.ok) {
-      setToastMessage(`Exported ${outcome.line}`);
+      say(`Exported ${outcome.line}`);
     } else {
-      setToastMessage(`Export failed: ${outcome.line}`);
+      say(`Export failed: ${outcome.line}`, "error");
     }
   };
 
@@ -104,7 +109,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       try {
         await actions.openFile(file.name, content);
       } catch (err) {
-        setToastMessage((err as Error).message);
+        fail(err as Error);
       }
     };
     reader.readAsText(file);
@@ -127,7 +132,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             label: "Model Name",
             value: "NewModel.mo",
             confirmLabel: "Create",
-            onConfirm: (name) => actions.newModel(name).catch((err: Error) => setToastMessage(err.message)),
+            onConfirm: (name) => actions.newModel(name).catch(fail),
           }),
       },
       {
@@ -150,7 +155,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             label: "File Path",
             placeholder: "e.g. models/MyModel.mo",
             confirmLabel: "Open",
-            onConfirm: (path) => actions.openFile(path).catch((err: Error) => setToastMessage(err.message)),
+            onConfirm: (path) => actions.openFile(path).catch(fail),
           }),
       },
       {
@@ -161,7 +166,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         shortcut: "Ctrl+S",
         chord: { key: "s", ctrl: true },
         enabled: Boolean(model),
-        run: () => void actions.save().catch((err: Error) => setToastMessage(err.message)),
+        run: () => void actions.save().catch(fail),
       },
       {
         id: "file.save-as",
@@ -177,7 +182,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             label: "File Path",
             value: model?.file ?? `${model?.name}.mo`,
             confirmLabel: "Save",
-            onConfirm: (path) => actions.saveAs(path).catch((err: Error) => setToastMessage(err.message)),
+            onConfirm: (path) => actions.saveAs(path).catch(fail),
           }),
       },
       {
@@ -206,10 +211,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "mo", label: ".mo", menu: "view", group: "source", checked: view === "mo", run: () => (setView("mo"), setSide(true)) },
       { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },
       ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Code and scopes" : f === "code" ? "Focus code" : "Focus scopes", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(true)) })),
+      { id: "console", label: "Console", menu: "view", group: "sheet", checked: consoleShown, run: () => setConsoleShown((c) => !c) },
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
       ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
     ],
-    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, focus, theme, setTheme, model, api],
+    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, focus, theme, setTheme, model, api, consoleShown],
   );
   useShortcuts(commands);
 
@@ -223,6 +229,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           commands={commands}
           side={side}
           onToggleSide={() => setSide((s) => !s)}
+          errors={errors}
+          consoleShown={consoleShown}
+          onConsole={() => setConsoleShown((c) => !c)}
           theme={theme}
           onTheme={setTheme}
           onStatusClick={() => setStatusModalOpen(true)}
@@ -284,7 +293,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
         {libraryModalOpen && (
           <LibraryModal
-            onLoad={(lib) => actions.loadLibrary(lib).catch((err: Error) => setToastMessage(err.message))}
+            onLoad={(lib) => actions.loadLibrary(lib).catch(fail)}
             onClose={() => setLibraryModalOpen(false)}
           />
         )}
@@ -297,9 +306,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           />
         )}
 
-        {toastMessage && (
-          <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
-        )}
+        {consoleShown && <Console logs={logs} onClose={() => setConsoleShown(false)} />}
       </div>
     </StudioContext.Provider>
   );

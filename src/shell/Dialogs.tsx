@@ -202,25 +202,3 @@ export function StatusModal({
     </div>
   );
 }
-
-export function Toast({
-  message,
-  onClose,
-}: {
-  message: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 5000);
-    return () => clearTimeout(timer);
-  }, [message, onClose]);
-
-  return (
-    <div className="toast-notice" role="status">
-      <span>{message}</span>
-      <button type="button" className="toast-dismiss" onClick={onClose} aria-label="Dismiss">
-        ×
-      </button>
-    </div>
-  );
-}
