@@ -172,6 +172,7 @@ struct Omc::Impl {
         dup2(devnull, STDIN_FILENO);
         dup2(devnull, STDOUT_FILENO);
       }
+      close_range(3, ~0U, 0);  // not the server's sockets
       execlp(options.omc.c_str(), options.omc.c_str(), "--interactive=zmq", zarg.c_str(), nullptr);
       _exit(127);
     }

@@ -711,7 +711,6 @@ Spec build(const Dae& d, const std::string& model, const std::vector<std::string
     s.ode_blocker = e.what();
   }
   if (s.ode_blocker) s.param_lines.clear(), s.eq_lines.clear();
-  s.props.push_back({"solver", "", 0});  // the enum, written as solve::param()
   return s;
 }
 
@@ -740,9 +739,8 @@ std::string props_cpp(const Spec& s) {
   std::string out;
   for (const auto& p : s.props) {
     out += out.empty() ? "                 " : ",\n                 ";
-    out += p.id == "solver" ? std::string("paperboat::solve::param(\"rk4\")")
-                            : "{.id = " + cpp_string(p.id) + ", .default_value = " + num(p.value) +
-                                  (p.unit.empty() ? "" : ", .unit = " + cpp_string(p.unit)) + "}";
+    out += "{.id = " + cpp_string(p.id) + ", .default_value = " + num(p.value) +
+           (p.unit.empty() ? "" : ", .unit = " + cpp_string(p.unit)) + "}";
   }
   return out + "},\n";
 }
@@ -754,9 +752,7 @@ std::string ports_cpp(const std::vector<Port>& ports) {
   return out;
 }
 
-std::string register_cpp(const Spec& s, bool with_solver) {
-  Spec t = s;
-  if (!with_solver) std::erase_if(t.props, [](const Prop& p) { return p.id == "solver"; });
+std::string register_cpp(const Spec& s) {
   std::string conns;
   for (const auto& [cname, cdef] : s.connectors) {
     conns += "  registry.add_connector(" + cpp_string(s.name) + ", " + cpp_string(cname) +
@@ -773,7 +769,7 @@ std::string register_cpp(const Spec& s, bool with_solver) {
          "      {.type = " + cpp_string(s.name) + ",\n"
          "       .label = " + cpp_string(s.label) + ",\n"
          "       .role = \"body\",\n"
-         "       .props = {\n" + props_cpp(t) + "       .links = {},\n"
+         "       .props = {\n" + props_cpp(s) + "       .links = {},\n"
          "       .block = paperboat::BlockDef{.type = " + cpp_string(s.name) + ",\n"
          "                                    .label = " + cpp_string(s.label) + ",\n"
          "                                    .kind = paperboat::Kind::Source,\n"
@@ -822,10 +818,10 @@ std::string ode_cpp(const Spec& s) {
          "    [[maybe_unused]] const Vars v = eval(t_, x, in_);\n" + read + "  }\n\n"
          "  std::vector<paperboat::Entity> entities(const std::string&, double) const override { return {}; }\n\n"
          " private:\n"
-         "  " + s.cls + "(const Values& props, Params p) : Model(start(props, p), paperboat::get_text(props, \"solver\", \"rk4\")), p_(p) {}\n\n"
+         "  " + s.cls + "(const Values& props, Params p) : Model(start(props, p)), p_(p) {}  // the run's solver (Run menu)\n\n"
          "  Vars eval([[maybe_unused]] double t, [[maybe_unused]] const State& x, [[maybe_unused]] const Values& in) const {\n"
          "    Vars v;\n" + inputs + eqs + "    return v;\n  }\n\n"
-         "  Params p_;\n  Values in_;\n  double t_ = 0.0;\n};\n\n}  // namespace\n\n" + register_cpp(s, true) +
+         "  Params p_;\n  Values in_;\n  double t_ = 0.0;\n};\n\n}  // namespace\n\n" + register_cpp(s) +
          "\n}  // namespace " + s.id + "\n";
 }
 
@@ -871,7 +867,6 @@ std::string fmu_cpp(const Spec& s, const Fmu& f, std::vector<std::string>& notic
   };
   std::vector<std::string> prop_names, prop_ids, in_names, out_names;
   for (const auto& p : s.props) {
-    if (p.id == "solver") continue;
     prop_ids.push_back(p.id);
     // a state's start prop "load_w_start" sets the FMU's "load.w"
     std::string n = p.id;
@@ -1006,7 +1001,7 @@ class )" + s.cls + R"( final : public paperboat::StationObject {
 
 }  // namespace
 
-)" + register_cpp(s, false) + "\n}  // namespace " + s.id + "\n";
+)" + register_cpp(s) + "\n}  // namespace " + s.id + "\n";
 }
 
 std::string cmake(const Spec& s, bool fmu) {

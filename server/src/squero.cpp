@@ -251,6 +251,9 @@ pid_t spawn_paperboat(const std::vector<std::string>& args, const fs::path& log)
     dup2(null, 0);
     dup2(fd, 1);
     dup2(fd, 2);
+    // nothing else of the server's: a backend that kept its listening socket would hold the
+    // server's port after the server is gone
+    close_range(3, ~0U, 0);
     execvp(bin.c_str(), argv.data());
     dprintf(2, "cannot run %s: %s\n", bin.c_str(), std::strerror(errno));
     _exit(127);
