@@ -28,7 +28,7 @@ std::string_view name(OmcState state);  // "ready", "checking", "failed"
 class Omc {
  public:
   struct Options {
-    std::string omc = "omc";                          // the executable, on PATH or a path
+    std::string omc = "";                             // the executable; empty: resolve_omc() picks one
     std::chrono::milliseconds timeout{30'000};        // per request
     int max_restarts = 3;                             // in a row, then failed
   };
@@ -56,11 +56,31 @@ class Omc {
 
   // The folder omc runs in (its build output and dumps land here).
   std::string workdir() const;
+  // How omc runs: "native", "podman" or "docker" (resolve_omc()).
+  std::string mode() const;
 
  private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };
+
+// Where omc comes from (#2), first that holds:
+//   1. $SQUERO_OMC_BIN or $PAPERBOAT_OMC_BIN;
+//   2. `omc` on PATH whose install can build FMUs (its runtime files are readable);
+//   3. podman, else docker: kImage with the host's /tmp and $HOME at the same paths, as the
+//      user (keep-id / --user), no SELinux relabel (label=disable), host network for omc's
+//      ZeroMQ port; pulled on first use;
+//   4. `omc` on PATH anyway, with `why` saying what's wrong with it.
+// $SQUERO_OMC=native|podman|docker forces one.
+inline constexpr const char* kImage = "docker.io/openmodelica/openmodelica:v1.27.1-minimal";
+struct OmcRuntime {
+  std::string mode;              // native | podman | docker
+  std::string exe;               // omc, or the container engine
+  std::string why;               // why not the better choice, or ""
+};
+OmcRuntime resolve_omc();
+// The argv that starts omc under `rt`, in `workdir`, with omc's own `args`.
+std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args);
 
 // Whether `expr` may come from a Studio client over squero/0: one call to a function on the
 // allow-list (contracts §5), whose nested calls are allow-listed too or are annotation
