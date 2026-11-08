@@ -25,11 +25,12 @@ export const toUnits = (x: number, y: number): [number, number] => [x / PX_PER_U
 export const toPx = (x: number, y: number): [number, number] => [x * PX_PER_UNIT + 0, -y * PX_PER_UNIT + 0];
 
 /** `onIcon`: where the part sits on the model's own icon (Modelica units), for a top-level port. */
+/** omc drops an integer `rotation=90` without a word: it has to be a Real, `90.0`. */
 export function placementAnnotation(at: Placement, onIcon?: [number, number]): string {
   const [x, y] = toUnits(at.x, at.y);
   const extent = at.mirror ? "{{10, -10}, {-10, 10}}" : "{{-10, -10}, {10, 10}}";
   const icon = onIcon ? `, iconTransformation=iconTransformation(extent={{${num(onIcon[0] - 10)}, ${num(onIcon[1] - 10)}}, {${num(onIcon[0] + 10)}, ${num(onIcon[1] + 10)}}})` : "";
-  return `Placement(visible=true, transformation=transformation(origin={${num(x)}, ${num(y)}}, extent=${extent}${at.rotation ? `, rotation=${at.rotation}` : ""})${icon})`;
+  return `Placement(visible=true, transformation=transformation(origin={${num(x)}, ${num(y)}}, extent=${extent}${at.rotation ? `, rotation=${at.rotation.toFixed(1)}` : ""})${icon})`;
 }
 
 export function linePoints(points: [number, number][]): string {

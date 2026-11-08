@@ -47,7 +47,7 @@ test("each action is one omc expression on the allow-list's calls", () => {
   const at = { x: 160, y: -80, rotation: 90 as const };
   assert.equal(
     x.addComponent("Circuit", "Modelica.Electrical.Analog.Basic.Resistor", "R2", at),
-    "addComponent(R2, Modelica.Electrical.Analog.Basic.Resistor, Circuit, annotate=Placement(visible=true, transformation=transformation(origin={80, 40}, extent={{-10, -10}, {10, 10}}, rotation=90)))",
+    "addComponent(R2, Modelica.Electrical.Analog.Basic.Resistor, Circuit, annotate=Placement(visible=true, transformation=transformation(origin={80, 40}, extent={{-10, -10}, {10, 10}}, rotation=90.0)))",
   );
   assert.equal(x.deleteComponent("Circuit", "R2"), "deleteComponent(R2, Circuit)");
   assert.equal(x.addConnection("Circuit", "R1.n", "L1.p"), "addConnection(R1.n, L1.p, Circuit)");
