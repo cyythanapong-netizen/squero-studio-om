@@ -18,8 +18,10 @@ export function placementOf(text: Val | undefined): Placement | null {
   const call = parseCall(text);
   if (!call || call.name !== "Placement") return null;
   const n = (i: number) => Number(call.args[i]);
-  if (call.args.length < 8 || !Number.isFinite(n(1)) || !Number.isFinite(n(2))) return null;
-  const [x, y] = toPx(n(1), n(2));
+  // an MSL-style `extent` with no `origin` (`-`) sits at the extent's centre
+  const at = (i: number) => (Number.isFinite(n(i)) ? n(i) : 0) + (n(i + 2) + n(i + 4)) / 2;
+  if (call.args.length < 8 || !Number.isFinite(at(1)) || !Number.isFinite(at(2))) return null;
+  const [x, y] = toPx(at(1), at(2));
   const rot = Number.isFinite(n(7)) ? ((Math.round(n(7) / 90) * 90) % 360 + 360) % 360 : 0;
   return { x: snap(x), y: snap(y), rotation: rot as Placement["rotation"], ...(n(3) > n(5) ? { mirror: true } : {}) };
 }
