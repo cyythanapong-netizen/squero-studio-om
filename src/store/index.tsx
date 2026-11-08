@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Connection, ExportProgress, ExportResult, Placement, StudioApi, StudioModel } from "../model/types.ts";
 import type { OmcClient, OmcStatus } from "../omc/omc.ts";
 import { parseValue } from "../omc/parse.ts";
-import { restoreExprs, type Graph, type PartSnap } from "./diff.ts";
+import { restoreExprs, same, type Graph, type PartSnap } from "./diff.ts";
 import * as x from "./exprs.ts";
 import { classLook, type IconCache } from "./looks.ts";
 import { readModel } from "./read.ts";
@@ -241,7 +241,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       async move(partName, to) {
         const m = current.current;
         const part = m?.components.find((c) => c.name === partName);
-        if (!m || !part || (part.placement.x === to.x && part.placement.y === to.y)) return;
+        if (!m || !part || same(part.placement, to)) return;
         await edit([x.updateComponent(m.name, part.class, partName, to)]).catch(() => undefined);
       },
       async bend(wire, points) {

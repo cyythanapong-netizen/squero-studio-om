@@ -21,7 +21,7 @@ import { netWireType, orthoPoints, roundedPolyline, squareUp, type BlockDef, typ
 import { CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboat/shared/components";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { DRAG_TYPE } from "../library/Library.tsx";
-import type { ComponentInst, Connection, StudioApi } from "../model/types.ts";
+import type { ComponentInst, Connection, Placement, StudioApi } from "../model/types.ts";
 import { snap } from "../store/exprs.ts";
 import { freeSpot } from "../store/plans.ts";
 import type { Actions } from "../store/index.tsx";
@@ -175,6 +175,16 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
       e.preventDefault();
       void actions.remove(selection.filter((s) => model.components.some((c) => c.name === s)), wire ? [wire] : []);
       setWire(null);
+    } else if (e.key.toLowerCase() === "r" && selection.length) {
+      // R turns anticlockwise (Modelica's positive rotation), Shift+R clockwise
+      e.preventDefault();
+      const step = e.shiftKey ? 270 : 90;
+      void (async () => {
+        for (const part of model.components.filter((c) => selection.includes(c.name))) {
+          const rotation = ((part.placement.rotation + step) % 360) as Placement["rotation"];
+          await actions.move(part.name, { ...part.placement, rotation });
+        }
+      })();
     }
   };
   useEffect(() => {

@@ -10,7 +10,7 @@ export type WireSnap = { a: string; b: string; points?: [number, number][] };
 export type Graph = { parts: Record<string, PartSnap>; wires: WireSnap[] };
 
 const key = (w: WireSnap) => [w.a, w.b].sort().join("|");
-const same = (p: Placement, q: Placement) => p.x === q.x && p.y === q.y && p.rotation === q.rotation && !!p.mirror === !!q.mirror;
+export const same = (p: Placement, q: Placement) => p.x === q.x && p.y === q.y && p.rotation === q.rotation && !!p.mirror === !!q.mirror;
 const bends = (w: WireSnap) => JSON.stringify(w.points ?? []);
 
 export function restoreExprs(model: string, now: Graph, then: Graph): string[] {
