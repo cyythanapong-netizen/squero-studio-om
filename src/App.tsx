@@ -223,13 +223,10 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           model={model?.name}
           dirty={actions.dirty}
           commands={commands}
-          view={view}
-          onView={setView}
           side={side}
           onToggleSide={() => setSide((s) => !s)}
           theme={theme}
           onTheme={setTheme}
-          onExport={handleExportBackend}
           onStatusClick={() => setStatusModalOpen(true)}
         />
         {api && model ? (

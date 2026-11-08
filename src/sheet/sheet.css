@@ -103,24 +103,6 @@
   visibility: visible;
 }
 
-.studio-sheet .glide {
-  position: relative;
-}
-
-.studio-sheet .glide .opt::before,
-.studio-sheet .glide .opt::after {
-  visibility: hidden !important;
-}
-
-.studio-sheet .glide-bracket {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-  opacity: 0;
-  white-space: pre;
-}
-
 /* Sections */
 .studio-sheet-section {
   display: flex;

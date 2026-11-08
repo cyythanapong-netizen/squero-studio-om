@@ -65,6 +65,12 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .studio > .dock-slot { grid-area: dock; }
 .opening { grid-area: library / library / canvas / side; margin: auto; color: var(--text-muted); }
 
+/* GlideBrackets (@paperboat/shared) draws the chosen option's [ ] as two absolute spans: without
+   these the spans sit inline after the last option as a stray "[ ]". */
+.glide { position: relative; }
+.glide .opt::before, .glide .opt::after { visibility: hidden !important; }
+.glide-bracket { position: absolute; display: flex; align-items: center; pointer-events: none; opacity: 0; white-space: pre; }
+
 .wordmark { display: inline-flex; align-items: center; gap: 6px; font: 600 var(--size-md) var(--font-sans); letter-spacing: -0.01em; }
 .wordmark .studio-word { font-weight: 400; color: var(--text-muted); }
 .om-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: var(--radius-md); background: var(--text); color: var(--surface-panel); font: 600 var(--size-xs) var(--font-sans); letter-spacing: 0.02em; }
@@ -199,14 +205,6 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
   scrollbar-width: thin;
 }
 
-.lib-tabs .glide-bracket {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-  opacity: 0;
-  white-space: pre;
-}
 
 body.dragging-card .library {
   opacity: 0.45;
@@ -774,3 +772,8 @@ body.dragging-card .library {
 .toast-dismiss:hover {
   color: var(--text);
 }
+
+/* Square icon keys in the top bar (pane toggle, theme). */
+.bar .icon-key { width: 28px; padding: 0; display: inline-grid; place-items: center; font-size: var(--size-sm); }
+.bar .icon-key svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+.bar .icon-key svg .fill { fill: currentColor; stroke: none; opacity: 0.45; }
