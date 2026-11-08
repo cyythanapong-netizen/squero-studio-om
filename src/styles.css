@@ -784,6 +784,7 @@ body.dragging-card .library {
 /* The 3D view of a MultiBody run (#44) */
 .viewport3d { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; outline: none; }
 .viewport3d:focus-visible { border-color: var(--focus); }
-.viewport3d-scene { flex: 1; min-height: 0; }
+.viewport3d-scene { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.viewport3d-sep { width: 1px; align-self: stretch; background: var(--line); }
 .viewport3d-bar { display: flex; align-items: center; gap: 6px; padding: 4px var(--space-2); border-bottom: 1px solid var(--line); }
 .viewport3d-scrub { flex: 1; min-width: 60px; }
