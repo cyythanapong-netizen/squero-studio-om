@@ -38,6 +38,7 @@ export type TopBarProps = {
   onStatusClick?: () => void;
   running?: boolean;
   focus?: ReactNode;
+  showFocus?: boolean;
   errors?: number;
   consoleShown?: boolean;
   onConsole?: () => void;
@@ -58,6 +59,7 @@ export function TopBar({
   onStatusClick,
   running = false,
   focus,
+  showFocus = true,
   errors = 0,
   consoleShown = false,
   onConsole,
@@ -85,7 +87,9 @@ export function TopBar({
           {side && <rect x="10" y="2.5" width="4.5" height="11" className="fill" />}
         </svg>
       </button>
-      {focus}
+      <span className={`bar-focus${showFocus ? "" : " off"}`} inert={!showFocus}>
+        {focus}
+      </span>
       <StatusPill
         label={chip(status)}
         labels={STATES.map((state) => chip({ ...status, state }))}
