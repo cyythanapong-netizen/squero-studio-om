@@ -30,6 +30,7 @@ import { Dock, NumberField } from "@paperboat/shared/components";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions, Stimulus } from "../store/index.tsx";
 import { explainOmcError } from "../dock/dock.ts";
+import { Viewport3D } from "../viewport3d/Viewport3D.tsx";
 import { addScope, arrangeScopes, picksOf, removeScope, START } from "./scopes.ts";
 
 type Run = Awaited<ReturnType<Actions["simulate"]>>;
@@ -250,6 +251,7 @@ export function Simulate({
         </p>
       ))}
       {error && <p className="error" role="alert">{error}</p>}
+      {run?.shapes?.length ? <Viewport3D run={run} theme={theme} /> : null}
       <div className="scope-tools" role="toolbar" aria-label="Scopes">
         {a.tabs.length > 0 && (
           <div className="scope-tabs" role="tablist">
