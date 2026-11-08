@@ -2,7 +2,7 @@
 export const PW = process.env.PW_CORE ?? "/tmp/claude-1000/pw/node_modules/playwright-core/index.mjs";
 export const CHROME = process.env.CHROME ?? `${process.env.HOME}/.cache/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell`;
 export const { chromium } = await import(PW);
-export async function open(url = "http://localhost:8790/") {
+export async function open(url = "http://localhost:59201/") {
   const browser = await chromium.launch({ executablePath: CHROME });
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   page.on("console", (m) => m.type() === "error" && console.log("console:", m.text()));

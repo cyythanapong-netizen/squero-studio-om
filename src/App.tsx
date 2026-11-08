@@ -26,7 +26,7 @@ type Focus = "code" | "split" | "scopes";
 function serverUrl(): string {
   const given = new URLSearchParams(location.search).get("server");
   if (given) return given;
-  return location.port === "3048" || !location.host ? "ws://localhost:8790" : `ws://${location.host}`;
+  return location.port === "3048" || !location.host ? "ws://localhost:59201" : `ws://${location.host}`;
 }
 
 /** The theme pick, remembered; the shared hook applies it and resolves "auto". */

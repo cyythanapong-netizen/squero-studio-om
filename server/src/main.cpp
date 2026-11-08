@@ -30,7 +30,7 @@ void print_help(std::string_view prog) {
             << "  " << prog << " icon <Model.mo|Name> [--class <Name>] Import icon & connectors as JSON\n"
             << "  " << prog << " --help | --version\n\n"
             << "Server options:\n"
-            << "  --port <N>       Listen port (default: 8790)\n"
+            << "  --port <N>       Listen port (default: first free of 59201..59299)\n"
             << "  --app <dir>      Directory of built web app (default: ./dist)\n"
             << "  --version <V>    Target version tag\n\n"
             << "Generate options:\n"
@@ -137,7 +137,7 @@ fs::path find_app_dir(const fs::path& explicit_app, const fs::path& exe_dir) {
 }
 
 int cmd_server(const std::vector<std::string_view>& args, const fs::path& exe_dir) {
-  int port = 8790;
+  int port = 0;  // 0: first free of 59201..59299
   fs::path app;
   fs::path file;
   for (std::size_t i = 0; i < args.size(); ++i) {

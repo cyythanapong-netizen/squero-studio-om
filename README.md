@@ -28,7 +28,7 @@ squero-studio-om/    this repo (server/ and src/)
 From the `paperboat` CLI:
 
 ```sh
-paperboat start squero-studio-om [Model.mo]  # http://localhost:8790
+paperboat start squero-studio-om [Model.mo]  # http://localhost:59201 (SQR01; the next free one up to 59299 if taken)
 paperboat stop squero-studio-om
 ```
 
@@ -39,7 +39,7 @@ From a checkout:
 npm install
 npm run build                       # builds dist/
 npm run build:server                # builds server/build/squero-om
-bin/squero-om [Model.mo]            # server + app on http://localhost:8790
+bin/squero-om [Model.mo]            # server + app on http://localhost:59201 (SQR01; the next free one up to 59299 if taken)
 ```
 
 For the UI alone: `npm run dev` (Vite on :3048; start `bin/squero-om` for the server).
