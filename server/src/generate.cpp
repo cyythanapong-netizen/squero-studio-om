@@ -1021,7 +1021,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # sits in), else an installed SDK (find_package(Paperboat), e.g. -DPaperboat_DIR=…).
 if(NOT PAPERBOAT_ENGINE_DIR AND NOT Paperboat_DIR)
   foreach(dir "${CMAKE_CURRENT_LIST_DIR}/../../engine" "${CMAKE_CURRENT_LIST_DIR}/../../../engine"
-              "${CMAKE_CURRENT_LIST_DIR}/../../paperboat/engine")
+              "${CMAKE_CURRENT_LIST_DIR}/../../paperboat/engine" "${CMAKE_CURRENT_LIST_DIR}/../../../paperboat/engine")
     if(EXISTS "${dir}/CMakeLists.txt")
       set(PAPERBOAT_ENGINE_DIR "${dir}")
       break()

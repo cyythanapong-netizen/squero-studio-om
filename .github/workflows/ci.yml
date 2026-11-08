@@ -91,7 +91,7 @@ jobs:
       - name: Verify dc-drive generation matches paperboat golden
         run: |
           mkdir -p /tmp/dc-drive-gen
-          squero-studio-om/server/build/squero-om generate paperboat/examples/dc-drive-cpp/modelica/DCDrive.mo --out /tmp/dc-drive-gen
-          diff -u paperboat/examples/dc-drive-cpp/domain/dc_drive.cpp /tmp/dc-drive-gen/domain/dc_drive.cpp
-          diff -u paperboat/examples/dc-drive-cpp/domain/dc_drive.hpp /tmp/dc-drive-gen/domain/dc_drive.hpp
-          diff -u paperboat/examples/dc-drive-cpp/CMakeLists.txt /tmp/dc-drive-gen/CMakeLists.txt
+          squero-studio-om/server/build/squero-om generate squero-studio-om/examples/dc-drive-cpp/modelica/DCDrive.mo --out /tmp/dc-drive-gen
+          diff -u squero-studio-om/examples/dc-drive-cpp/domain/dc_drive.cpp /tmp/dc-drive-gen/domain/dc_drive.cpp
+          diff -u squero-studio-om/examples/dc-drive-cpp/domain/dc_drive.hpp /tmp/dc-drive-gen/domain/dc_drive.hpp
+          diff -u squero-studio-om/examples/dc-drive-cpp/CMakeLists.txt /tmp/dc-drive-gen/CMakeLists.txt
