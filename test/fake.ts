@@ -3,6 +3,7 @@ import type {
   ComponentInst,
   Connection,
   EntryPoint,
+  ExportMode,
   ExportProgress,
   ExportResult,
   Placement,
@@ -293,7 +294,7 @@ export function createFakeStudio(options: FakeStudioOptions = {}): FakeStudio {
     options.checkModelReply ?? DEFAULT_CHECK_REPLY;
   let exportSteps: ExportProgress[] = options.exportSteps ?? DEFAULT_EXPORT_STEPS;
   let exportResult: ExportResult | Error = options.exportResult ?? {
-    out: "rl_circuit-cpp",
+    file: "ssom_rl_circuit.ppk",
     path: "ode",
     reason: "no events, no nonlinear torn systems, no external tables",
   };
@@ -450,15 +451,15 @@ export function createFakeStudio(options: FakeStudioOptions = {}): FakeStudio {
       notify();
     },
 
-    async exportBackend(out: string, onProgress: (p: ExportProgress) => void): Promise<ExportResult> {
-      calls.push({ method: "exportBackend", args: [out] });
+    async exportBackend(mode: ExportMode, onProgress: (p: ExportProgress) => void, port?: number): Promise<ExportResult> {
+      calls.push({ method: "exportBackend", args: [mode, port] });
       for (const step of exportSteps) {
         onProgress(step);
       }
       if (exportResult instanceof Error) {
         throw exportResult;
       }
-      return { ...exportResult, out };
+      return exportResult;
     },
   };
 
