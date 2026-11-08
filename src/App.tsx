@@ -14,7 +14,8 @@ import { OmcClient, type OmcStatus } from "./omc/omc.ts";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { LibraryModal, PromptModal, StatusModal, Toast } from "./shell/Dialogs.tsx";
-import { TopBar, type Theme } from "./shell/TopBar.tsx";
+import { TopBar } from "./shell/TopBar.tsx";
+import { useTheme, type Theme } from "@paperboat/shared/components";
 import { Simulate } from "./simulate/Simulate.tsx";
 import { Split, type View } from "./split/Split.tsx";
 import { freeSpot } from "./store/plans.ts";
@@ -28,14 +29,11 @@ function serverUrl(): string {
   return location.port === "3048" || !location.host ? "ws://localhost:8790" : `ws://${location.host}`;
 }
 
-function useTheme(): [Theme, (t: Theme) => void] {
+/** The theme pick, remembered; the shared hook applies it and resolves "auto". */
+function useThemeChoice(): [Theme, (t: Theme) => void, "light" | "dark"] {
   const [theme, set] = useState<Theme>(() => (localStorage.getItem("studio-theme") as Theme | null) ?? "auto");
-  useEffect(() => {
-    if (theme === "auto") delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = theme;
-    localStorage.setItem("studio-theme", theme);
-  }, [theme]);
-  return [theme, set];
+  useEffect(() => localStorage.setItem("studio-theme", theme), [theme]);
+  return [theme, set, useTheme(theme)];
 }
 
 export function App() {
@@ -69,7 +67,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [side, setSide] = useState(true);
   const [view, setView] = useState<View>("mo");
   const [focus, setFocus] = useState<Focus>("split");
-  const [theme, setTheme] = useTheme();
+  const [theme, setTheme, shown] = useThemeChoice();
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -248,7 +246,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                   />
                 </div>
                 <Split model={model} actions={actions} view={view} onView={setView} />
-                <Simulate actions={actions} model={model} theme={theme} />
+                <Simulate actions={actions} model={model} theme={shown} />
               </aside>
             )}
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
