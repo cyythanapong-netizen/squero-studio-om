@@ -26,7 +26,7 @@ export function parseBalance(reply: string | Error): BalanceResult {
       words: reply.message || "omc checkModel failed",
     };
   }
-  const text = String(reply ?? "").trim();
+  const text = String(reply ?? "").trim().replace(/^"(.*)"$/s, "$1").trim();
   const match = CHECK_RE.exec(text);
   if (!match) {
     return {
@@ -74,7 +74,11 @@ export function parseBalance(reply: string | Error): BalanceResult {
 export async function checkModelBalance(api: { omc: Pick<StudioApi["omc"], "call">; model: { name: string } }): Promise<BalanceResult> {
   try {
     const reply = await api.omc.call(`checkModel(${api.model.name})`);
-    return parseBalance(reply);
+    const res = parseBalance(reply);
+    if (res.kind !== "error") return res;
+    // an empty reply means omc refused the model: its first error says why
+    const why = /Error: ([^\n"]*)/.exec(await api.omc.call("getErrorString()").catch(() => ""))?.[1];
+    return why ? { ...res, words: why } : res;
   } catch (err) {
     return parseBalance(err instanceof Error ? err : new Error(String(err)));
   }
