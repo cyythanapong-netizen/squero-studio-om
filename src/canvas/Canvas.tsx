@@ -20,20 +20,21 @@ import {
 } from "@xyflow/react";
 import { flipPlacement, netWireType, orthoPoints, rotatePlacement, roundedPolyline, squareUp, useCanvasHotkeys, type BlockDef, type Connectors, type IconDef, type WirePoint } from "@paperboat/shared";
 import { CanvasHelp, CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboat/shared/components";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { DRAG_TYPE } from "../library/Library.tsx";
 import type { ComponentInst, Connection, StudioApi } from "../model/types.ts";
 import { snap } from "../store/exprs.ts";
 import { freeSpot } from "../store/plans.ts";
 import type { Actions } from "../store/index.tsx";
 import { endOf, isConnector, pathOf, split, wireError } from "../store/wires.ts";
+import { domainColor, domainOf } from "./domain.ts";
 import { centreFor, placedIcon, topLeft } from "./geometry.ts";
 import { QuickAdd } from "./QuickAdd.tsx";
 
 type PartData = { part: ComponentInst; icon: IconDef; connectors: Connectors; wires: Record<string, number> };
 type PartNode = Node<PartData, "part">;
 /** `points`: the bends in drawn order (source end first); `wire`: the connection as the model has it. */
-type WireData = { points?: WirePoint[]; wire: Connection; flipped: boolean; kind: string; causal: boolean; missing: boolean };
+type WireData = { points?: WirePoint[]; wire: Connection; flipped: boolean; kind: string; causal: boolean; missing: boolean; color?: string };
 type WireEdge = Edge<WireData, "wire">;
 
 const noop = () => undefined;
@@ -67,7 +68,7 @@ function WireView({ id, data, selected, markerEnd, sourceX, sourceY, targetX, ta
   return (
     <>
       <path d={path} className="wire-casing" />
-      <BaseEdge id={id} path={path} markerEnd={markerEnd} interactionWidth={16} className={`wire-${data?.kind ?? "signal"}${data?.missing ? " wire-missing" : ""}${selected ? " lit" : ""}`} />
+      <BaseEdge id={id} path={path} markerEnd={markerEnd} interactionWidth={16} style={data?.color ? { stroke: data.color } : undefined} className={`wire-${data?.kind ?? "signal"}${data?.missing ? " wire-missing" : ""}${selected ? " lit" : ""}`} />
       {handles}
     </>
   );
@@ -109,7 +110,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
     setNodes(
       model.components.map((part) => {
         const [x, y] = topLeft(part);
-        return { id: part.name, type: "part", position: { x, y }, selected: selection.includes(part.name), data: { part, icon: placedIcon(part), connectors: isConnector(part) ? inside(model.connectors, part) : model.connectors, wires: counts[part.name] ?? {} } };
+        return { id: part.name, type: "part", position: { x, y }, style: { "--ink": domainColor(domainOf(part.class)) } as CSSProperties, selected: selection.includes(part.name), data: { part, icon: placedIcon(part), connectors: isConnector(part) ? inside(model.connectors, part) : model.connectors, wires: counts[part.name] ?? {} } };
       }),
     );
   }, [model, counts, selection]);
@@ -125,6 +126,8 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
       const pa = split(a);
       const pb = split(b);
       const kind = ea?.kind === "acausal" ? netWireType(model.connectors[ea.cls]) : "signal";
+      const owner = (path: string) => model.components.find((p) => p.name === split(path).part)?.class ?? "";
+      const color = kind === "signal" ? domainColor("signal") : domainColor(domainOf(owner(a)) ?? domainOf(owner(b)));
       out.push({
         id: `${c.a}|${c.b}`,
         type: "wire",
@@ -134,7 +137,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
         targetHandle: pb.port,
         selected: wire?.a === c.a && wire.b === c.b,
         markerEnd: kind === "signal" ? { type: MarkerType.ArrowClosed, width: 14, height: 14 } : undefined,
-        data: { ...(c.points ? { points: flipped ? [...c.points].reverse() : c.points } : {}), wire: c, flipped, kind, causal: kind === "signal", missing: !ea || !eb },
+        data: { ...(c.points ? { points: flipped ? [...c.points].reverse() : c.points } : {}), wire: c, flipped, kind, causal: kind === "signal", missing: !ea || !eb, ...(color ? { color } : {}) },
       });
     }
     return out;

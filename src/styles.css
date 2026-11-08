@@ -484,6 +484,18 @@ body.dragging-card .library {
 .canvas .react-flow { --dots: var(--line); }
 .react-flow__node { cursor: default; }
 .wire-signal { stroke: var(--line-ink); }
+
+/* Domain colours, lightly after OpenModelica (domain.ts): a part's icon ink, its ports and its wires. */
+:root { --dom-signal: #1e3a8a; --dom-electrical: #2563eb; --dom-rotational: #6b7280; --dom-translational: #15803d; --dom-multibody: #4b5563; --dom-thermal: #b91c1c; --dom-fluid: #0284c7; --dom-magnetic: #c2410c; }
+:root[data-theme="dark"] { --dom-signal: #8da2f0; --dom-electrical: #5b9bff; --dom-rotational: #9ca3af; --dom-translational: #4ade80; --dom-multibody: #a1a1aa; --dom-thermal: #f87171; --dom-fluid: #38bdf8; --dom-magnetic: #fb923c; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --dom-signal: #8da2f0; --dom-electrical: #5b9bff; --dom-rotational: #9ca3af; --dom-translational: #4ade80; --dom-multibody: #a1a1aa; --dom-thermal: #f87171; --dom-fluid: #38bdf8; --dom-magnetic: #fb923c; }
+}
+.canvas .react-flow__handle.ip.k-input, .canvas .react-flow__handle.ip.k-output { --ink: var(--dom-signal); }
+.canvas .react-flow__handle.ip { border-color: var(--ink, var(--line-ink)); }
+.canvas .react-flow__handle.ip-filled, .canvas .react-flow__handle.ip-triangle { background: var(--ink, var(--line-ink)); }
+.canvas .react-flow__handle.ip-ring2 { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 3.5px var(--ink, var(--line-ink)); }
+.canvas .compact-block .plate { border-color: color-mix(in srgb, var(--ink, var(--line-strong)) 45%, var(--line-strong)); }
 .key.help-key { position: absolute; left: var(--space-3); bottom: var(--space-3); z-index: 6; width: 26px; height: 26px; min-width: 26px; padding: 0; display: inline-grid; place-items: center; border-radius: var(--radius-round); font: 500 var(--size-xs) var(--font-mono); line-height: 1; text-align: center; }
 .help-pop {
   position: absolute; left: var(--space-3); bottom: calc(var(--space-3) + 34px); z-index: 70; width: min(480px, calc(100% - 24px));
