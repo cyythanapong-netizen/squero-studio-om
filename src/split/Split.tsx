@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
+import { CodeView } from "./CodeView.tsx";
 
 export type View = "mo" | "cpp";
 const OPTIONS: { value: View; label: string }[] = [
@@ -56,7 +57,7 @@ export function Split({ model, actions, view, onView }: { model: StudioModel; ac
         </div>
       </header>
       {view === "mo" ? (
-        <pre className="code" aria-label="Modelica source">{mo.value ?? (mo.error || "…")}</pre>
+        <CodeView code={mo.value ?? (mo.error || "…")} lang="mo" ariaLabel="Modelica source" />
       ) : (
         <>
           <p className="code-about" role="status">
@@ -71,7 +72,11 @@ export function Split({ model, actions, view, onView }: { model: StudioModel; ac
               ))}
             </div>
           )}
-          <pre className="code" aria-label="Generated C++">{shown ? cpp.value?.files[shown] : cpp.value && !names.length ? (cpp.value.notices[0] ?? "") : ""}</pre>
+          <CodeView
+            code={shown ? (cpp.value?.files[shown] ?? "") : cpp.value && !names.length ? (cpp.value.notices[0] ?? "") : ""}
+            lang="cpp"
+            ariaLabel="Generated C++"
+          />
         </>
       )}
     </section>
