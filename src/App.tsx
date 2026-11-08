@@ -17,6 +17,7 @@ import { InterfaceSheet } from "./sheet/index.tsx";
 import { LibraryModal, PromptModal, StatusModal } from "./shell/Dialogs.tsx";
 import { TopBar } from "./shell/TopBar.tsx";
 import { useTheme, type Theme } from "@paperboat/shared/components";
+import { Opening } from "./shell/Opening.tsx";
 import { Simulate } from "./simulate/Simulate.tsx";
 import { Split, type View } from "./split/Split.tsx";
 import { freeSpot } from "./store/plans.ts";
@@ -62,7 +63,7 @@ type PromptSpec = {
 };
 
 function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
-  const { api, actions, error } = useStudioStore(omc, status);
+  const { api, actions, error, stage } = useStudioStore(omc, status);
   const [popover, setPopover] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   const [side, setSide] = useState(true);
@@ -234,7 +235,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           commands={commands}
           side={side}
           onToggleSide={() => setSide((s) => !s)}
-          focus={side ? (
+          focus={
             <Switch<Focus>
               label="Focus"
               value={focus}
@@ -245,7 +246,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 { value: "scopes", label: "scopes", hint: "The scopes fill the pane" },
               ]}
             />
-          ) : undefined}
+          }
+          showFocus={side}
           errors={errors}
           consoleShown={consoleShown}
           onConsole={() => setConsoleShown((c) => !c)}
@@ -258,12 +260,10 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           <>
             <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
             <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />
-            {side && (
-              <aside className={`side focus-${focus}`}>
+            <aside className={`side focus-${focus}`} inert={!side}>
                 <Split model={model} actions={actions} view={view} onView={setView} />
                 <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} />
               </aside>
-            )}
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} />
             <div className="dock-slot">
@@ -271,14 +271,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             </div>
           </>
         ) : (
-          <div className="opening" role="status">
-            <p>{error || (status.state === "failed" ? "No Studio server: start one with squero-om" : "opening the model…")}</p>
-            {!error && status.state !== "failed" && (
-              <span className="wave" aria-hidden="true">
-                <i /><i /><i /><i /><i />
-              </span>
-            )}
-          </div>
+          <Opening status={status} stage={stage} error={error} />
         )}
 
         <input
