@@ -152,7 +152,17 @@ const GAP = 8;
 
 type Phase = { state: "idle" } | { state: "running"; since: number } | { state: "done"; ms: number } | { state: "failed" } | { state: "cancelled" };
 
-export function Simulate({ actions, model, theme }: { actions: Actions; model: StudioModel; theme: string }) {
+export function Simulate({
+  actions,
+  model,
+  theme,
+  onRunningChange,
+}: {
+  actions: Actions;
+  model: StudioModel;
+  theme: string;
+  onRunningChange?: (running: boolean) => void;
+}) {
   const [stop, setStop] = useState("1");
   const [stimuli, setStimuli] = useState<Record<string, Stimulus>>({});
   const inputs = model.entries.filter((e) => e.kind === "input").map((e) => e.name);
@@ -175,6 +185,11 @@ export function Simulate({ actions, model, theme }: { actions: Actions; model: S
     saveLayout(key, next);
   };
   const setPicks = (block: string, picks: string[]) => edit(setSettings(a, block, { picks }));
+
+  useEffect(() => {
+    onRunningChange?.(phase.state === "running");
+    return () => onRunningChange?.(false);
+  }, [phase.state, onRunningChange]);
 
   useEffect(() => {
     if (phase.state !== "running") return;

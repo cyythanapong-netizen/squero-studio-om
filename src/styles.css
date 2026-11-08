@@ -71,9 +71,45 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .glide .opt::before, .glide .opt::after { visibility: hidden !important; }
 .glide-bracket { position: absolute; display: flex; align-items: center; pointer-events: none; opacity: 0; white-space: pre; }
 
-.wordmark { display: inline-flex; align-items: center; gap: 6px; font: 600 var(--size-md) var(--font-sans); letter-spacing: -0.01em; }
-.wordmark .studio-word { font-weight: 400; color: var(--text-muted); }
-.om-badge { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: var(--radius-md); background: var(--text); color: var(--surface-panel); font: 600 var(--size-xs) var(--font-sans); letter-spacing: 0.02em; }
+.wordmark { display: inline-flex; align-items: center; }
+
+/* Squero Studio logo (W3 Water + B3 Mono product badge; squero#42) */
+.squero-logo { display: block; overflow: visible; }
+.squero-logo-ink { fill: var(--text); }
+.squero-logo-muted { fill: var(--text-muted); }
+.squero-logo-water { fill: var(--signal); }
+.squero-logo-tile { fill: var(--text); }
+.squero-logo-code { fill: var(--surface-panel); }
+
+.squero-logo .w { transform-box: fill-box; transform-origin: center; }
+.squero-logo.logo-idle .squero-logo-water .w { animation: squero-ripple-idle 5s var(--ease) infinite; }
+.squero-logo.logo-idle .squero-logo-water .w1 { animation-delay: 0s; }
+.squero-logo.logo-idle .squero-logo-water .w2 { animation-delay: 0.2s; }
+.squero-logo.logo-idle .squero-logo-water .w3 { animation-delay: 0.4s; }
+.squero-logo.logo-idle .squero-logo-water .w4 { animation-delay: 0.6s; }
+.squero-logo.logo-idle .squero-logo-water .w5 { animation-delay: 0.8s; }
+
+.squero-logo.logo-live .squero-logo-water .w { animation: squero-ripple-live 1.4s var(--ease) infinite; }
+.squero-logo.logo-live .squero-logo-water .w1 { animation-delay: 0s; }
+.squero-logo.logo-live .squero-logo-water .w2 { animation-delay: 0.12s; }
+.squero-logo.logo-live .squero-logo-water .w3 { animation-delay: 0.24s; }
+.squero-logo.logo-live .squero-logo-water .w4 { animation-delay: 0.36s; }
+.squero-logo.logo-live .squero-logo-water .w5 { animation-delay: 0.48s; }
+
+@keyframes squero-ripple-idle {
+  0%, 25%, 100% { transform: translateY(0); }
+  12.5% { transform: translateY(calc(var(--lr, 19.5px) * -0.67)); }
+}
+@keyframes squero-ripple-live {
+  0% { transform: translateY(0); }
+  30% { transform: translateY(calc(var(--lr, 19.5px) * -1)); }
+  60% { transform: translateY(calc(var(--lr, 19.5px) * 0.33)); }
+  100% { transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squero-logo .w { animation: none !important; }
+}
 
 .bar {
   grid-column: 1 / -1;
