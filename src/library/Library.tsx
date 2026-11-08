@@ -2,7 +2,7 @@
 // Displays Modelica components with vector thumbnails, category badges, docstrings,
 // connector summaries, domain tabs, instant search scoring, and drag-and-drop.
 
-import { Icon } from "@paperboat/shared/components";
+import { GlideBrackets, Icon } from "@paperboat/shared/components";
 import type { IconDef, IconPort } from "@paperboat/shared";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { OmcClient } from "../omc/omc.ts";
@@ -179,6 +179,10 @@ export function ComponentCard({
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_TYPE, item.full);
         e.dataTransfer.effectAllowed = "copy";
+        setTimeout(() => document.body.classList.add("dragging-card"));
+      }}
+      onDragEnd={() => {
+        document.body.classList.remove("dragging-card");
       }}
       onDoubleClick={() => onPlace(item.full)}
       onKeyDown={handleKeyDown}
@@ -323,19 +327,20 @@ export function Library({ omc, model, onPlace }: Props) {
       </div>
 
       {/* Domain Category Tabs */}
-      <div className="lib-tabs" role="tablist" aria-label="Component domain categories">
+      <div className="lib-tabs glide" role="tablist" aria-label="Component domain categories">
         {categories.map((cat) => (
           <button
             key={cat}
             role="tab"
             aria-selected={category === cat}
-            className={`lib-tab${category === cat ? " on" : ""}`}
+            className={`lib-tab opt${category === cat ? " on" : ""}`}
             onClick={() => setCategory(cat)}
           >
             <span>{cat}</span>
             {counts[cat] !== undefined && <span className="lib-tab-num">{counts[cat]}</span>}
           </button>
         ))}
+        <GlideBrackets />
       </div>
 
       {/* Cards List */}
