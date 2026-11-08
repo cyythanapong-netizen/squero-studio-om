@@ -257,6 +257,7 @@ test("the top bar's chip says the omc version and state", () => {
   assert.equal(chip({ state: "ready", version: "OpenModelica 1.27.0~dev-5-g5f1d2c5" }), "omc 1.27.0 · ready");
   assert.equal(chip({ state: "checking", version: "" }), "omc · checking");
   assert.equal(chip({ state: "failed", version: "OpenModelica 1.27.0" }), "omc 1.27.0 · failed");
+  assert.equal(chip({ state: "ready", version: "OpenModelica 1.27.1", mode: "podman" }), "omc 1.27.1 · ready · podman");
 });
 
 test("a part dropped on another goes to the next free spot, on the grid", () => {
