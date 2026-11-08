@@ -271,9 +271,14 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             </div>
           </>
         ) : (
-          <p className="opening" role="status">
-            {error || (status.state === "failed" ? "No Studio server: start one with squero-om" : "opening the model…")}
-          </p>
+          <div className="opening" role="status">
+            <p>{error || (status.state === "failed" ? "No Studio server: start one with squero-om" : "opening the model…")}</p>
+            {!error && status.state !== "failed" && (
+              <span className="wave" aria-hidden="true">
+                <i /><i /><i /><i /><i />
+              </span>
+            )}
+          </div>
         )}
 
         <input
