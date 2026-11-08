@@ -195,20 +195,77 @@ std::vector<json> numbers(const std::string& line) {
   return out;
 }
 
+// A test stimulus for a top-level input, as Modelica: {kind: constant|step|ramp|sine, k, t0, f}.
+std::string stimulus(const json& s, bool boolean) {
+  const auto num = [&](const char* key, double fallback) {
+    const double v = s.contains(key) && s[key].is_number() ? s[key].get<double>() : fallback;
+    if (!std::isfinite(v)) throw std::runtime_error(std::string("stimulus ") + key + " must be a number");
+    std::ostringstream out;
+    out.precision(17);
+    out << v;
+    return "(" + out.str() + ")";
+  };
+  const std::string kind = s.value("kind", "constant");
+  const std::string k = num("k", 0), t0 = num("t0", 0);
+  if (boolean) return kind == "constant" ? (s.value("k", 0.0) != 0 ? "true" : "false") : "time >= " + t0;
+  if (kind == "constant") return k;
+  if (kind == "step") return "if time >= " + t0 + " then " + k + " else 0";
+  if (kind == "ramp") return "if time >= " + t0 + " then " + k + " * (time - " + t0 + ") else 0";
+  if (kind == "sine") return k + " * sin(2 * 3.141592653589793 * " + num("f", 1) + " * time)";
+  throw std::runtime_error("stimulus is constant, step, ramp or sine, not " + kind);
+}
+
+// The model's top-level inputs (a RealInput connector, or `input Real u`) and whether each is Boolean.
+std::map<std::string, bool> top_inputs(Omc& omc, const std::string& model) {
+  std::map<std::string, bool> out;
+  for (const auto& c : parse_value(omc.call("getComponents(" + model + ")")).items) {
+    if (c.size() < 11) continue;
+    const std::string cls = c[0].atom, name = c[1].atom;
+    const std::string shortcls = cls.substr(cls.rfind('.') + 1);
+    const bool causal = shortcls == "RealInput" || shortcls == "IntegerInput" || shortcls == "BooleanInput";
+    if (c[3].atom != "protected" && (causal || c[10].atom == "input"))
+      out[name] = shortcls == "BooleanInput" || cls == "Boolean";
+  }
+  return out;
+}
+
 json op_simulate(Omc& omc, const json& in) {
   const std::string model = user_model(in);
   const double stop = in.value("stop", 1.0);
   if (!(stop > 0.0) || !std::isfinite(stop)) throw std::runtime_error("stop time must be above 0");
+
+  // Top-level inputs have nothing driving them on their own: simulate a harness that holds the
+  // model as `m` and feeds each input its stimulus (0 unless given), then name things as the model does.
+  const auto inputs = top_inputs(omc, model);
+  const json given = in.value("inputs", json::object());
+  const std::string harness = "SqueroSimHarness";
+  const std::string prefix = inputs.empty() ? "" : "m.";
+  if (!inputs.empty()) {
+    std::string text = "model " + harness + "\n  " + model + " m;\nequation\n";
+    for (const auto& [name, boolean] : inputs)
+      text += "  m." + name + " = " + stimulus(given.contains(name) ? given[name] : json::object(), boolean) + ";\n";
+    omc.call("deleteClass(" + harness + ")");
+    if (omc.call("loadString(" + quote(text + "end " + harness + ";\n") + ")") != "true")
+      throw std::runtime_error("cannot build the input harness: " + omc.errors());
+  }
+  struct Drop {
+    Omc& omc;
+    std::string cls;
+    ~Drop() {
+      if (!cls.empty()) omc.call("deleteClass(" + cls + ")");
+    }
+  } drop{omc, inputs.empty() ? "" : harness};
+
   std::string filter;
   for (const auto& v : in.value("vars", json::array())) {
-    const std::string name = v.get<std::string>();
+    const std::string name = prefix + v.get<std::string>();
     if (name.empty() || name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.[](),") != std::string::npos)
       throw std::runtime_error("not a variable name: " + name);
     std::string re;
     for (const char c : name) re += (std::string_view(".[]()").find(c) != std::string_view::npos ? "\\" : "") + std::string(1, c);
     filter += (filter.empty() ? "" : "|") + re;
   }
-  std::string expr = "simulate(" + model + ", startTime=0, stopTime=" + std::to_string(stop) +
+  std::string expr = "simulate(" + (inputs.empty() ? model : harness) + ", startTime=0, stopTime=" + std::to_string(stop) +
                      ", numberOfIntervals=500, outputFormat=\"csv\"";
   if (!filter.empty()) expr += ", variableFilter=" + quote(filter);
   const std::string answer = omc.call(expr + ")", std::chrono::minutes(5));
@@ -228,6 +285,9 @@ json op_simulate(Omc& omc, const json& in) {
     std::stringstream row(header);
     for (std::string cell; std::getline(row, cell, ',');) {
       if (cell.size() >= 2 && cell.front() == '"') cell = cell.substr(1, cell.size() - 2);
+      // the harness's m.x is the model's x, der(m.x) its der(x)
+      for (const std::string from : {prefix, "der(" + prefix})
+        if (!prefix.empty() && cell.starts_with(from)) cell = (from.size() > prefix.size() ? "der(" : "") + cell.substr(from.size());
       names.push_back(cell);
     }
   }

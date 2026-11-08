@@ -208,3 +208,34 @@
   border-radius: var(--radius-round);
   background: var(--surface-sunken);
 }
+
+.studio-param-row.drop-on {
+  outline: 2px dashed var(--focus);
+  outline-offset: 1px;
+  border-radius: var(--radius-md);
+}
+
+.studio-bind-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.studio-bind-item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: 400 var(--size-xs) var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-bind-item:hover {
+  background: var(--surface-well);
+}

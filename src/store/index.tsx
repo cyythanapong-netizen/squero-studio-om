@@ -13,8 +13,11 @@ import * as x from "./exprs.ts";
 import { classLook, type IconCache } from "./looks.ts";
 import { readModel } from "./read.ts";
 import { freshName, splicePlan, throughPorts } from "./splice.ts";
-import { entryExprs, connectExprs, iconPortExprs, removeEntryExprs, removeExprs, setParamExprs } from "./plans.ts";
+import { addVariableExprs, entryExprs, connectExprs, iconPortExprs, removeEntryExprs, removeExprs, removeVariableExprs, renameVariableExprs, setParamExprs } from "./plans.ts";
 import { endOf, split } from "./wires.ts";
+
+/** What drives a top-level input in a local simulation: k is the value, step height, ramp slope or sine amplitude. */
+export type Stimulus = { kind: "constant" | "step" | "ramp" | "sine"; k: number; t0?: number; f?: number };
 
 type PartNode = Node<{ part: PartSnap }>;
 type WireEdge = Edge<{ a: string; b: string; points?: [number, number][] }>;
@@ -39,8 +42,8 @@ export type Actions = {
   source(): Promise<string>;
   /** The generated backend without writing it: path and reason, and the files for the ODE path. */
   preview(): Promise<{ path: "ode" | "fmu"; reason: string; files: Record<string, string>; notices: string[] }>;
-  /** A local check run: every variable over [0, stop]. */
-  simulate(stop: number): Promise<{ t: number[]; series: Record<string, (number | null)[]>; names: string[] }>;
+  /** A local check run: every variable over [0, stop]; each top-level input fed its stimulus (0 when not given). */
+  simulate(stop: number, inputs?: Record<string, Stimulus>): Promise<{ t: number[]; series: Record<string, (number | null)[]>; names: string[] }>;
   dirty: boolean;
   save(file?: string): Promise<void>;
   saveAs(file: string): Promise<void>;
@@ -183,6 +186,18 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       async addComponent(cls, partName, at) {
         await edit([x.addComponent(name, cls, partName, at)]);
       },
+      async addVariable(id, value, isPrivate) {
+        await edit(addVariableExprs(model, id, value, isPrivate));
+      },
+      async setPrivate(id, isPrivate) {
+        await edit([x.setVariable(name, id, isPrivate)]);
+      },
+      async renameVariable(from, to) {
+        await edit(renameVariableExprs(model, from, to));
+      },
+      async removeVariable(id) {
+        await edit(removeVariableExprs(model, id));
+      },
       async connect(a, b) {
         const plan = connectExprs(model, a, b);
         if ("error" in plan) return plan.error;
@@ -273,10 +288,10 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         // queued behind edits: generating reloads the file, so a half-saved edit must not be in flight
         return enqueue(() => omc.op<{ path: "ode" | "fmu"; reason: string; files?: Record<string, string>; notices?: string[] }>("generate", { source: m.file, model: m.name, dry: true })).then((r) => ({ path: r.path, reason: r.reason, files: r.files ?? {}, notices: r.notices ?? [] }));
       },
-      simulate(stop) {
+      simulate(stop, inputs = {}) {
         const m = current.current;
         if (!m) return Promise.reject(new Error("no model"));
-        return omc.op("simulate", { model: m.name, stop });
+        return omc.op("simulate", { model: m.name, stop, inputs });
       },
       async source() {
         const m = current.current;

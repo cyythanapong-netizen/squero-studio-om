@@ -182,6 +182,58 @@
   color: var(--text-muted);
 }
 
+/* Variables (Paperboat's Variables sheet: name, value, type, public/private) */
+.studio-var-add {
+  margin-left: auto;
+  order: 2;
+}
+
+.studio-var-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.studio-var-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 84px 44px 56px 20px;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 26px;
+}
+
+.studio-var-name {
+  text-align: left;
+}
+
+.studio-var-grip {
+  font: 600 var(--size-xs) var(--font-mono);
+  color: var(--text-muted);
+  cursor: grab;
+  text-align: center;
+}
+
+.studio-var-vis {
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface-well);
+  color: var(--text-muted);
+  font: 400 var(--size-2xs) var(--font-mono);
+  cursor: pointer;
+}
+
+.studio-var-vis.on {
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.studio-var-error {
+  margin: 0;
+  font: 400 var(--size-2xs) var(--font-sans);
+  color: var(--danger, #c33);
+}
+
 /* Entry pills (inputs left, outputs right) */
 .studio-entries-grid {
   display: grid;

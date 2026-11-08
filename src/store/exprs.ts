@@ -66,3 +66,7 @@ export const setParameter = (model: string, name: string, value: string) =>
 
 export const clearModifier = (model: string, path: string) =>
   `setComponentModifierValue(${check(CLASS, "a model name", model)}, ${check(PATH, "a modifier", path)}, $Code())`;
+
+/** Makes a top-level component a `parameter`, public or `protected` (private). */
+export const setVariable = (model: string, name: string, isPrivate: boolean) =>
+  `setComponentProperties(${check(CLASS, "a model name", model)}, ${check(NAME, "a parameter name", name)}, {false, false, false, ${isPrivate}, false}, {"parameter"}, {false, false}, {""})`;

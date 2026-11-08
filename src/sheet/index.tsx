@@ -17,7 +17,9 @@ import {
   type Weight,
 } from "@paperboat/shared";
 import { CompactBlock, NumberField, Switch } from "@paperboat/shared/components";
-import { useStudio } from "../model/types.ts";
+import { useStudio, type Param } from "../model/types.ts";
+import { VAR_DRAG } from "../popover/popover.ts";
+import { usesOf } from "../store/plans.ts";
 import { defaultExportFolder } from "../dock/dock.ts";
 import {
   addPrimToIcon,
@@ -86,6 +88,103 @@ function primBounds(p: Prim): { x: number; y: number; w: number; h: number } {
     case "text":
       return { x: p.x - 14, y: p.y - 8, w: 28, h: 16 };
   }
+}
+
+/** Paperboat's Variables sheet, for the model's top-level parameters: public ones are Station props, private ones stay inside. */
+function VariablesSection() {
+  const api = useStudio();
+  const [error, setError] = useState("");
+  const tryIt = (job: Promise<void>) => void job.then(() => setError(""), (e: Error) => setError(e.message));
+  const add = () => {
+    const taken = new Set([...api.model.params.map((p) => p.id), ...api.model.components.map((c) => c.name)]);
+    let n = 1;
+    while (taken.has(`var${n}`)) n++;
+    tryIt(api.addVariable(`var${n}`, "0", false));
+  };
+  return (
+    <section className="studio-sheet-section" aria-label="Variables">
+      <div className="studio-sheet-subhead">
+        Variables
+        <button type="button" className="studio-look-key studio-var-add" onClick={add} title="A new public Real parameter">
+          + Add Variable
+        </button>
+      </div>
+      {api.model.params.length === 0 ? (
+        <p className="studio-handoff-note">No variables yet. Add one, then drag it onto a parameter in a component popover (or bind there with =).</p>
+      ) : (
+        <div role="list" className="studio-var-list">
+          {api.model.params.map((p) => (
+            <VariableRow key={p.id} p={p} onError={setError} />
+          ))}
+        </div>
+      )}
+      {error && <p className="studio-var-error" role="alert">{error}</p>}
+      <p className="studio-handoff-note">Public: a Station property of the exported backend. Private: a protected parameter, only inside the model.</p>
+    </section>
+  );
+}
+
+function VariableRow({ p, onError }: { p: Param; onError: (words: string) => void }) {
+  const api = useStudio();
+  const tryIt = (job: Promise<void>) => void job.then(() => onError(""), (e: Error) => onError(e.message));
+  const uses = usesOf(api.model, p.id);
+  const set = (v: string) => tryIt(api.setParam(p.id, v));
+  return (
+    <div className="studio-var-row" role="listitem">
+      <span
+        className="studio-var-grip"
+        draggable
+        title={`Drag ${p.id} onto a component parameter to bind it`}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(VAR_DRAG, p.id);
+          e.dataTransfer.setData("text/plain", p.id);
+          e.dataTransfer.effectAllowed = "link";
+        }}
+      >
+        =
+      </span>
+      <input
+        className="studio-prop-input studio-var-name"
+        aria-label={`Name of ${p.id}`}
+        defaultValue={p.id}
+        spellCheck={false}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        onBlur={(e) => {
+          const to = e.currentTarget.value.trim();
+          if (to && to !== p.id) tryIt(api.renameVariable(p.id, to));
+          else e.currentTarget.value = p.id;
+        }}
+      />
+      {p.type === "number" ? (
+        <NumberField className="studio-prop-input" aria-label={`Value of ${p.id}`} value={p.default} onChange={(v) => set(String(v))} />
+      ) : p.type === "boolean" ? (
+        <input type="checkbox" aria-label={`Value of ${p.id}`} checked={p.default} onChange={(e) => set(String(e.target.checked))} />
+      ) : (
+        <input
+          className="studio-prop-input"
+          aria-label={`Value of ${p.id}`}
+          defaultValue={String(p.default)}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          onBlur={(e) => e.currentTarget.value !== String(p.default) && set(e.currentTarget.value)}
+        />
+      )}
+      <span className="studio-prop-unit" title={uses.length ? `read by ${uses.join(", ")}` : "not used yet"}>
+        {p.modelica ?? p.type}
+      </span>
+      <button
+        type="button"
+        className={`studio-var-vis${p.private ? "" : " on"}`}
+        aria-pressed={!p.private}
+        title={p.private ? "Private: stays inside the model. Click to make it a Station property." : "Public: a Station property of the exported backend. Click to make it private."}
+        onClick={() => tryIt(api.setPrivate(p.id, !p.private))}
+      >
+        {p.private ? "private" : "public"}
+      </button>
+      <button type="button" className="studio-remove" title={uses.length ? `Remove ${p.id} (unbind ${uses.join(", ")} first)` : `Remove ${p.id}`} onClick={() => tryIt(api.removeVariable(p.id))}>
+        <RemoveGlyph />
+      </button>
+    </div>
+  );
 }
 
 export function InterfaceSheet({ open, onClose }: InterfaceSheetProps) {
@@ -223,7 +322,7 @@ export function InterfaceSheet({ open, onClose }: InterfaceSheetProps) {
           value={tab}
           onChange={setTab}
           options={[
-            { value: "interface", label: "interface", hint: "Station properties and causal entry points" },
+            { value: "interface", label: "interface", hint: "Variables (Station properties) and causal entry points" },
             { value: "look", label: "look", hint: "Custom block icon and port placement" },
           ]}
         />
@@ -235,38 +334,7 @@ export function InterfaceSheet({ open, onClose }: InterfaceSheetProps) {
       <div className="studio-sheet-body">
         {tab === "interface" ? (
           <>
-            <section className="studio-sheet-section" aria-label="Station properties">
-              <div className="studio-sheet-subhead">Station properties</div>
-              {api.model.params.length === 0 ? (
-                <p className="studio-handoff-note">No top-level parameters yet. Use = in a component popover.</p>
-              ) : (
-                api.model.params.map((p) => (
-                  <div key={p.id} className="studio-prop-row">
-                    <span className="studio-prop-name">{p.id}</span>
-                    {p.type === "number" ? (
-                      <NumberField
-                        className="studio-prop-input"
-                        aria-label={`Station property ${p.id}`}
-                        value={p.default}
-                        onChange={(v) => {
-                          void api.setParam(p.id, String(v)).then(() => setTick((t) => t + 1));
-                        }}
-                      />
-                    ) : (
-                      <input
-                        className="studio-prop-input"
-                        aria-label={`Station property ${p.id}`}
-                        value={String(p.default)}
-                        onChange={(e) => {
-                          void api.setParam(p.id, e.target.value).then(() => setTick((t) => t + 1));
-                        }}
-                      />
-                    )}
-                    <span className="studio-prop-unit">{p.type === "number" ? (p.unit ?? "") : p.type}</span>
-                  </div>
-                ))
-              )}
-            </section>
+            <VariablesSection />
 
             <section className="studio-sheet-section" aria-label="Entry points">
               <div className="studio-sheet-subhead">Entry points</div>

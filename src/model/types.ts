@@ -19,6 +19,10 @@ export type ComponentInst = {
 /** An undirected physical connection or a directed causal one: "R1.n" to "L1.p". */
 export type Connection = { a: string; b: string; points?: [number, number][] };
 
+/** A top-level parameter (a variable). Public ones are the generated object's Station props; private
+ * ones are `protected` in the .mo: shared values inside the model, not exported. */
+export type Param = ParamDef & { private?: boolean; modelica?: string };
+
 /** A top-level causal entry point (+ Input on a port, + Probe on a variable). */
 export type EntryPoint = { name: string; kind: "input" | "output"; target: string; unit?: string };
 
@@ -27,7 +31,7 @@ export type StudioModel = {
   file?: string; // the .mo on disk
   components: ComponentInst[];
   connections: Connection[];
-  params: ParamDef[]; // top-level parameters: the generated object's Station props
+  params: Param[]; // top-level parameters: the public ones are the generated object's Station props
   entries: EntryPoint[];
   icon?: IconDef; // the model's own look (Look tab), the generated linked block's view.icon
   connectors: Connectors;
@@ -45,6 +49,13 @@ export interface StudioApi {
   /** "R1.R" sets a component modifier; "J" (no dot) sets a top-level parameter's default. */
   setParam(path: string, value: string): Promise<void>;
   addComponent(cls: string, name: string, at: Placement): Promise<void>;
+  /** A new top-level parameter `name = value`, public (a Station prop) or private (protected). */
+  addVariable(name: string, value: string, isPrivate: boolean): Promise<void>;
+  setPrivate(name: string, isPrivate: boolean): Promise<void>;
+  /** Renames a top-level parameter and every modifier and binding that reads it. */
+  renameVariable(from: string, to: string): Promise<void>;
+  /** Refused while a modifier or binding reads it. */
+  removeVariable(name: string): Promise<void>;
   /** null when connected, else the words why not (contracts §4 rules). */
   connect(a: string, b: string): Promise<string | null>;
   /** + Input on a causal input port, + Probe on a variable or output port. */

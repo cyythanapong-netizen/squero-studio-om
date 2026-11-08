@@ -10,7 +10,7 @@ import { chip } from "../src/omc/omc.ts";
 import { parseValue } from "../src/omc/parse.ts";
 import { restoreExprs, type Graph } from "../src/store/diff.ts";
 import * as x from "../src/store/exprs.ts";
-import { connectExprs, entryExprs, freeSpot, iconPortExprs, removeEntryExprs, removeExprs, setParamExprs } from "../src/store/plans.ts";
+import { addVariableExprs, removeVariableExprs, renameVariableExprs, usesOf, connectExprs, entryExprs, freeSpot, iconPortExprs, removeEntryExprs, removeExprs, setParamExprs } from "../src/store/plans.ts";
 import { bendsOf, placementOf, readModel } from "../src/store/read.ts";
 import { freshName, splicePlan, throughPorts } from "../src/store/splice.ts";
 import { wireError } from "../src/store/wires.ts";
@@ -68,7 +68,25 @@ test("setParam: a dotted path is a modifier, a bare one a top-level parameter, m
   const m = model();
   assert.deepEqual(setParamExprs(m, "R1.R", "10"), ["setComponentModifierValue(Circuit, R1.R, $Code(=10))"]);
   assert.deepEqual(setParamExprs(m, "k", "3"), ["setParameterValue(Circuit, k, 3)"]);
-  assert.deepEqual(setParamExprs(m, "J", "0.5"), ["addComponent(J, Real, Circuit)", "setParameterValue(Circuit, J, 0.5)"]);
+  assert.deepEqual(setParamExprs(m, "J", "0.5"), [
+    "addComponent(J, Real, Circuit)",
+    'setComponentProperties(Circuit, J, {false, false, false, false, false}, {"parameter"}, {false, false}, {""})',
+    "setParameterValue(Circuit, J, 0.5)",
+  ]);
+});
+
+test("variables: private is protected; rename rewrites readers; remove is refused while read", () => {
+  const m = model(); // k = 2, public
+  assert.match(addVariableExprs(m, "h", "3", true)[1], /\{false, false, false, true, false\}/);
+  assert.throws(() => addVariableExprs(m, "k", "1", false), /taken/);
+  assert.throws(() => addVariableExprs(m, "2x", "1", false), /isn't a Modelica name/);
+  m.components[0].params = { R: "k*2", T: "k_other" };
+  assert.deepEqual(usesOf(m, "k"), ["R1.R"]);
+  const renamed = renameVariableExprs(m, "k", "gain");
+  assert.deepEqual(renamed.slice(3), ["setComponentModifierValue(Circuit, R1.R, $Code(=gain*2))", "deleteComponent(k, Circuit)"]);
+  assert.throws(() => removeVariableExprs(m, "k"), /R1\.R reads k/);
+  m.components[0].params = {};
+  assert.deepEqual(removeVariableExprs(m, "k"), ["deleteComponent(k, Circuit)"]);
 });
 
 test("connect: the §4 rules answer in words, a good wire is one addConnection", () => {
@@ -187,7 +205,7 @@ test("omc's answers read as data, and a placement as the plate's centre", () => 
 /** The answers omc would give for a two-part model: R1 placed, a resistor wired to a ground. */
 function fake(): OmcCalls {
   const answers: [RegExp, string][] = [
-    [/^getComponents\(/, '{{Modelica.Electrical.Analog.Basic.Resistor, R1, "", "public", false}, {Modelica.Electrical.Analog.Basic.Ground, G, "", "public", false}, {Real, k, "", "public", false}}'],
+    [/^getComponents\(/, '{{Modelica.Electrical.Analog.Basic.Resistor, R1, "", "public", false}, {Modelica.Electrical.Analog.Basic.Ground, G, "", "public", false}, {Real, k, "", "public", false}, {Real, h, "", "protected", false}}'],
     [/^getComponentAnnotations\(/, "{{Placement(true,40.0,-20.0,-10.0,-10.0,10.0,10.0,-,-)}, {}, {}}"],
     [/^getConnectionCount\(/, "1"],
     [/^getNthConnection\(M, 1\)/, '{"R1.p", "G.p", ""}'],
@@ -196,7 +214,8 @@ function fake(): OmcCalls {
     [/^getComponentModifierNames\(/, "{}"],
     [/^getComponentModifierValue\(M, R1\.R\)/, '"10"'],
     [/^getClassRestriction\(/, '"model"'],
-    [/^getParameterNames\(/, '{"k"}'],
+    [/^getParameterNames\(/, '{"k", "h"}'],
+    [/^getParameterValue\(M, "h"\)/, '"3"'],
     [/^getParameterValue\(M, "k"\)/, '"2.5"'],
   ];
   return {
@@ -223,7 +242,10 @@ test("reading a model: parts with place, modifiers and ports, wires, top-level p
   assert.deepEqual(m.components[0].ports.map((p) => p.id), ["p", "n"]);
   assert.equal(m.components[1].placement.x % 20, 0); // placed on the grid when the file has no Placement
   assert.deepEqual(m.connections, [{ a: "R1.p", b: "G.p" }]);
-  assert.deepEqual(m.params, [{ id: "k", type: "number", default: 2.5 }]);
+  assert.deepEqual(m.params, [
+    { id: "k", type: "number", default: 2.5, modelica: "Real" },
+    { id: "h", type: "number", default: 3, modelica: "Real", private: true },
+  ]);
   assert.ok(m.connectors.PositivePin);
 });
 
