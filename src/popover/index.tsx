@@ -214,7 +214,7 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
                   <span className="studio-entry-badge" title={`Exposed as ${action.existingEntry}`}>
                     [ {action.existingEntry} ]
                   </span>
-                ) : (
+                ) : action.causal && (
                   <button
                     type="button"
                     className="studio-key"

@@ -60,7 +60,10 @@ export function connectExprs(model: StudioModel, a: string, b: string): { error:
 
 /** `+ Input` / `+ Probe`: a RealInput or RealOutput on the model, wired to the port `target`. */
 export function entryExprs(model: StudioModel, kind: "input" | "output", target: string): string[] {
-  if (!target.includes(".") || !endOf(model, target)) throw new Error("a probe or input needs a port to attach to; variables need an annotation in the .mo for now");
+  const end = target.includes(".") ? endOf(model, target) : null;
+  if (!end) throw new Error("a probe or input needs a port to attach to; variables need an annotation in the .mo for now");
+  // a RealOutput on a pin (connect(R1.n, y)) is a type error omc refuses: simulate and export both fail
+  if (end.kind !== kind) throw new Error(`${target} is not a signal ${kind}; put a sensor on it and ${kind === "input" ? "drive" : "probe"} the sensor`);
   const taken = model.components.map((c) => c.name);
   // named for the port it joins (V1.v -> v, S2.w -> w), else u/y; a taken name gets a number
   const port = split(target).port;

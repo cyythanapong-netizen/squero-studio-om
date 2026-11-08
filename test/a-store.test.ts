@@ -118,6 +118,9 @@ test("+ Input and + Probe: a RealInput or RealOutput wired to the port; refused 
   assert.match(probe[0], /^addComponent\(y, Modelica\.Blocks\.Interfaces\.RealOutput, Circuit/);
   assert.equal(probe[1], "addConnection(S1.y, y, Circuit)");
   assert.throws(() => entryExprs(m, "output", "R1"), /needs a port/);
+  // a pin is not a signal: a RealOutput on R1.p is a type error omc refuses (simulate and export fail)
+  assert.throws(() => entryExprs(m, "output", "R1.p"), /not a signal output/);
+  assert.throws(() => entryExprs(m, "input", "S1.y"), /not a signal input/);
   // a probe is named for its port; a second one on the same port name gets a number, never a duplicate
   m.components.push(part("y", "Modelica.Blocks.Interfaces.RealOutput", ROUT, 300));
   assert.match(entryExprs(m, "output", "S1.y")[0], /^addComponent\(y1, /);
