@@ -1,6 +1,7 @@
 #include "squero/generate.hpp"
 
 #include "squero/import.hpp"
+#include "squero/squero.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -854,7 +855,106 @@ Fmu read_model_description(const std::string& xml) {
   return f;
 }
 
-std::string fmu_cpp(const Spec& s, const Fmu& f, std::vector<std::string>& notices) {
+// The MultiBody shapes (visual_shapes(), crefs already FMU variable names) as the adapter's
+// table: each value a constant or a value reference, read through the FMU every frame.
+std::string shapes_cpp(const nlohmann::json& shapes, const Fmu& f, std::vector<std::string>& notices) {
+  std::string rows;
+  std::size_t n = 0;
+  for (const auto& sh : shapes) {
+    const std::string ident = sh["ident"];
+    if (ident.starts_with("world.")) continue;  // the World's arrows and letters
+    std::string slots;
+    const auto slot = [&](const nlohmann::json& v) {
+      std::string text;
+      if (v.is_number()) text = "{false, 0u, " + std::to_string(v.get<double>()) + "}";
+      else if (const auto it = f.vars.find(v.get<std::string>()); it != f.vars.end()) text = "{true, " + std::to_string(it->second.vr) + "u, 0.0}";
+      else {
+        notices.push_back("the FMU has no " + v.get<std::string>() + "; its shape uses 0");
+        text = "{false, 0u, 0.0}";
+      }
+      slots += (slots.empty() ? "" : ", ") + text;
+    };
+    for (const char* k : {"T", "r", "r_shape", "lengthDir", "widthDir"})
+      for (std::size_t i = 0; i < (std::string_view(k) == "T" ? 9u : 3u); ++i) slot(i < sh[k].size() ? sh[k][i] : nlohmann::json(0.0));
+    for (const char* k : {"length", "width", "height"}) slot(sh[k]);
+    char color[8] = "#888888";
+    if (sh["color"].size() == 3 && sh["color"][0].is_number() && sh["color"][1].is_number() && sh["color"][2].is_number())
+      std::snprintf(color, sizeof color, "#%02x%02x%02x", std::clamp(sh["color"][0].get<int>(), 0, 255), std::clamp(sh["color"][1].get<int>(), 0, 255),
+                    std::clamp(sh["color"][2].get<int>(), 0, 255));
+    rows += "    Look{" + cpp_string(ident) + ", " + (sh["type"] == "sphere" ? "true" : "false") + ", " + cpp_string(color) + ", {{" + slots + "}}},\n";
+    ++n;
+  }
+  if (!n) return "";
+  return R"(
+// Its MultiBody shapes (omc's _visual.xml): T (world → frame, row-major), r, r_shape, lengthDir,
+// widthDir, length, width, height; each a constant or an FMU variable.
+struct Slot {
+  bool var;
+  Ref vr;
+  double k;
+};
+struct Look {
+  const char* id;
+  bool sphere;  // ponytail: cylinders, cones, pipes and CAD parts draw as their box; the Station has box, sphere, line
+  const char* color;
+  std::array<Slot, 24> s;
+};
+const std::array<Look, )" + std::to_string(n) + R"(> kShapes = {{
+)" + rows + "}};\n";
+}
+
+// The C++ that turns kShapes into Station entities, in the adapter's entities().
+constexpr const char* kShapeEntities = R"(
+  std::vector<paperboat::Entity> entities(const std::string& id, double) const override {
+    std::vector<paperboat::Entity> out;
+    for (const auto& look : kShapes) {
+      std::array<double, 24> v{};
+      for (std::size_t i = 0; i < v.size(); ++i) {
+        v[i] = look.s[i].k;
+        if (look.s[i].var) get_real_(c_, &look.s[i].vr, 1, &v[i]);  // ponytail: one call a value; batch if it shows
+      }
+      using V = std::array<double, 3>;
+      const auto dot = [](const V& a, const V& b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
+      const auto unit = [](V a) {
+        const double n = std::hypot(a[0], a[1], a[2]);
+        return n > 1e-12 ? V{a[0] / n, a[1] / n, a[2] / n} : V{0, 0, 0};
+      };
+      const auto cross = [](const V& a, const V& b) { return V{a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]}; };
+      const double* T = v.data();
+      const auto world = [&](const V& u) {  // Tᵀu: a frame vector in world
+        return V{T[0] * u[0] + T[3] * u[1] + T[6] * u[2], T[1] * u[0] + T[4] * u[1] + T[7] * u[2], T[2] * u[0] + T[5] * u[1] + T[8] * u[2]};
+      };
+      const V r{v[9], v[10], v[11]}, rs{v[12], v[13], v[14]}, ld{v[15], v[16], v[17]}, wd{v[18], v[19], v[20]};
+      const double L = v[21], W = v[22], H = v[23];
+      const V ex = unit(ld);
+      const double k = dot(wd, ex);
+      V ey = unit(V{wd[0] - k * ex[0], wd[1] - k * ex[1], wd[2] - k * ex[2]});
+      if (std::hypot(ey[0], ey[1], ey[2]) == 0) ey = unit(cross(ex, std::abs(ex[0]) < 0.9 ? V{1, 0, 0} : V{0, 1, 0}));
+      const V X = world(ex), Y = world(ey), Z = world(cross(ex, ey)), p = world(rs);
+      // the shape runs from its origin along the length: its centre is half a length on
+      paperboat::Entity e;
+      e.id = id + "/" + look.id;
+      e.color = look.color;
+      e.pos = {r[0] + p[0] + X[0] * L / 2, r[1] + p[1] + X[1] * L / 2, r[2] + p[2] + X[2] * L / 2};
+      if (look.sphere) {
+        e.shape = "sphere";
+        e.size = {L / 2, L / 2, L / 2};
+      } else {
+        e.size = {L, W, H};
+        // [X Y Z] as Euler angles, x then y then z (three.js's XYZ order)
+        const double s13 = std::clamp(Z[0], -1.0, 1.0);
+        e.rot[1] = std::asin(s13);
+        if (std::abs(s13) < 0.9999999) e.rot = {std::atan2(-Z[1], Z[2]), e.rot[1], std::atan2(-Y[0], X[0])};
+        else e.rot = {std::atan2(Y[2], Y[1]), e.rot[1], 0.0};
+      }
+      out.push_back(e);
+    }
+    return out;
+  }
+)";
+
+std::string fmu_cpp(const Spec& s, const Fmu& f, std::vector<std::string>& notices, const nlohmann::json& shapes = nlohmann::json::array()) {
+  const std::string table = shapes_cpp(shapes, f, notices);
   auto refs = [&](const std::vector<std::string>& names, const char* what) {
     std::string out;
     for (const auto& n : names) {
@@ -893,7 +993,9 @@ std::string fmu_cpp(const Spec& s, const Fmu& f, std::vector<std::string>& notic
 
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -926,7 +1028,7 @@ constexpr std::array<const char*, )" + std::to_string(in_ids.size()) + R"(> kInp
 constexpr std::array<Ref, )" + std::to_string(in_ids.size()) + R"(> kInputRefs = )" + refs(in_names, "input") + R"(;
 constexpr std::array<const char*, )" + std::to_string(out_ids.size()) + R"(> kOutputIds = )" + ids(out_ids) + R"(;
 constexpr std::array<Ref, )" + std::to_string(out_ids.size()) + R"(> kOutputRefs = )" + refs(out_names, "output") + R"(;
-
+)" + table + R"(
 class )" + s.cls + R"( final : public paperboat::StationObject {
  public:
   explicit )" + s.cls + R"((const Values& props) {
@@ -973,8 +1075,7 @@ class )" + s.cls + R"( final : public paperboat::StationObject {
     ok(do_step_(c_, ctx.t, ctx.dt, 1), "step");
   }
 
-  std::vector<paperboat::Entity> entities(const std::string&, double) const override { return {}; }
-
+)" + (table.empty() ? std::string("  std::vector<paperboat::Entity> entities(const std::string&, double) const override { return {}; }\n") : std::string(kShapeEntities)) + R"(
  private:
   template <class F>
   void load(F& fn, const char* name) {
@@ -1117,7 +1218,7 @@ std::string connectors_toml(const Spec& s) {
   return out;
 }
 
-std::string descriptor(const Spec& s) {
+std::string descriptor(const Spec& s, bool scene = false) {
   std::string nodes = "  { id = " + toml_string(s.name + "-1") + ", type = " + toml_string(s.name) + ", pos = [260, 0] },\n";
   std::string edges;
   int y = 0;
@@ -1140,8 +1241,9 @@ std::string descriptor(const Spec& s) {
          "# parameters and fixed starts); each one spawns a linked block on the Flow page.\n"
          "domain = " + toml_string(s.name) + "\nimport = [\"signal\", \"math\", \"control\", \"dashboard\"]\n\n" +
          connectors_toml(s) +
-         "# A model has no geometry of its own: the Station shows its objects as a graph.\n"
-         "[station]\nview = \"graph\"\nobjects = [\n  { id = " + toml_string(s.name + "-1") + ", type = " + toml_string(s.name) + " },\n]\n\n"
+         (scene ? "# Its MultiBody shapes draw in the Station's 3D scene.\n[station]\nview = \"scene\"\nobjects = ["
+                : "# A model has no geometry of its own: the Station shows its objects as a graph.\n"
+                  "[station]\nview = \"graph\"\nobjects = [") + "\n  { id = " + toml_string(s.name + "-1") + ", type = " + toml_string(s.name) + " },\n]\n\n"
          "# Starter: a step on each input, a graph on each output.\n[graph]\nnodes = [\n" + nodes + "]\nedges = [\n" +
          edges + "]\n";
 }
@@ -1165,6 +1267,16 @@ std::string readme(const Spec& s, const GenerateResult& r) {
 }
 
 // --- omc ---
+
+// A MultiBody model's shapes (visual_shapes(), crefs left as names): translateModel with -d=visxml
+// writes <prefix>_visual.xml in omc's folder. Empty for a model without MultiBody.
+nlohmann::json multibody_shapes(Omc& omc, const std::string& model, const std::string& label) {
+  if (parse_value(omc.call("list(" + model + ")")).atom.find("MultiBody") == std::string::npos) return nlohmann::json::array();
+  const std::string prefix = label + "_visual";
+  omc.call("setCommandLineOptions(\"-d=visxml\")");
+  if (omc.call("translateModel(" + model + ", fileNamePrefix=\"" + prefix + "\")", std::chrono::minutes(5)) != "true") return nlohmann::json::array();
+  return visual_shapes(read_file(fs::path(omc.workdir()) / (prefix + "_visual.xml")), [](const std::string& c) { return nlohmann::json(c); });
+}
 
 std::string ok_call(Omc& omc, const std::string& expr) {
   std::string out = omc.call(expr);
@@ -1373,6 +1485,7 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   progress("generate", 0.5);
   if (!o.dry) fs::create_directories(r.out);
   std::string domain;
+  bool scene = false;
   if (fmu && o.dry) {
     r.notices.push_back("dry run: the FMU path builds with omc, so no files are previewed");
     progress("generate", 1);
@@ -1380,10 +1493,14 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   }
   if (fmu) {
     progress("build", 0.6);
+    // a MultiBody model's shapes read protected variables: the FMU exposes them too, for this build only
+    const nlohmann::json shapes = multibody_shapes(omc, r.model, spec.label);
+    omc.call(std::string("setCommandLineOptions(\"--fmiFilter=") + (shapes.empty() ? "protected" : "internal") + "\")");
     const OmValue built = parse_value(ok_call(
         omc, "buildModelFMU(" + r.model + ", version=\"2.0\", fmuType=\"cs\", fileNamePrefix=\"" + spec.label +
                  "\", platforms={\"static\"})"));
     const fs::path fmu_file = built.atom;
+    omc.call("setCommandLineOptions(\"--fmiFilter=protected\")");
     if (!fs::is_regular_file(fmu_file)) throw GenerateError("buildModelFMU failed: " + omc.errors());
     fs::create_directories(r.out / "fmu");
     fs::copy_file(fmu_file, r.out / "fmu" / (spec.label + ".fmu"), fs::copy_options::overwrite_existing);
@@ -1392,7 +1509,8 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
     fs::create_directories(tmp);
     run_tool("cd " + shell_quote(tmp.string()) + " && cmake -E tar xf " + shell_quote(fs::absolute(fmu_file).string()) +
              " modelDescription.xml");
-    domain = fmu_cpp(spec, read_model_description(read_file(tmp / "modelDescription.xml")), r.notices);
+    domain = fmu_cpp(spec, read_model_description(read_file(tmp / "modelDescription.xml")), r.notices, shapes);
+    scene = domain.find("kShapes") != std::string::npos;
   } else {
     domain = ode_cpp(spec);
     std::error_code ec;
@@ -1407,7 +1525,7 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   if (live) write(r, mo, parse_value(omc.call("list(" + r.model + ")")).atom + "\n");
   else if (o.dry || !fs::exists(r.out / mo) || !fs::equivalent(r.out / mo, o.source)) write(r, mo, read_file(o.source));
   write(r, "backend.toml", backend_toml(spec, port), true);
-  write(r, "descriptor.toml", descriptor(spec), true);
+  write(r, "descriptor.toml", descriptor(spec, scene), true);
   write(r, "README.md", readme(spec, r), true);
   progress("generate", 1);
   return r;
