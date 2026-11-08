@@ -17,9 +17,10 @@ import {
   type NodeChange,
   type NodeProps,
   MiniMap,
+  NodeToolbar,
 } from "@xyflow/react";
-import { netWireType, orthoPoints, roundedPolyline, squareUp, type BlockDef, type Connectors, type IconDef, type WirePoint } from "@paperboat/shared";
-import { CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboat/shared/components";
+import { netWireType, orthoPoints, roundedPolyline, squareUp, useCanvasHotkeys, type BlockDef, type Connectors, type IconDef, type WirePoint } from "@paperboat/shared";
+import { CanvasHelp, CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboat/shared/components";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { DRAG_TYPE } from "../library/Library.tsx";
 import type { ComponentInst, Connection, Placement, StudioApi } from "../model/types.ts";
@@ -174,33 +175,69 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
     [anchor, model],
   );
 
-  // `/` and Delete work wherever the focus is, except in a field: the canvas is the whole page
-  const keys = useRef((_: KeyboardEvent) => {});
-  keys.current = (e) => {
-    const t = e.target as HTMLElement | null;
-    if (t?.closest("input, textarea, select, [contenteditable], [data-own-keys]") || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.key === "/" && !quick) (e.preventDefault(), setQuick(true));
-    else if ((e.key === "Delete" || e.key === "Backspace") && (wire || selection.length)) {
-      e.preventDefault();
+  const rotateSelected = useCallback(async (cw: boolean) => {
+    if (!selection.length) return;
+    const step = cw ? 270 : 90; // CW: 270° CCW, CCW: 90° CCW (Modelica standard)
+    for (const part of model.components.filter((c) => selection.includes(c.name))) {
+      const rotation = ((part.placement.rotation + step) % 360) as Placement["rotation"];
+      await actions.move(part.name, { ...part.placement, rotation });
+    }
+  }, [selection, model.components, actions]);
+
+  const flipSelected = useCallback(async (axis: "x" | "y") => {
+    if (!selection.length) return;
+    for (const part of model.components.filter((c) => selection.includes(c.name))) {
+      if (axis === "x") {
+        await actions.move(part.name, { ...part.placement, mirror: !part.placement.mirror });
+      } else {
+        const rotation = (((part.placement.rotation + 180) % 360) as Placement["rotation"]);
+        await actions.move(part.name, { ...part.placement, rotation, mirror: !part.placement.mirror });
+      }
+    }
+  }, [selection, model.components, actions]);
+
+  const duplicateSelected = useCallback(async () => {
+    if (!selection.length) return;
+    const newNames: string[] = [];
+    for (const name of selection) {
+      const part = model.components.find((c) => c.name === name);
+      if (part) {
+        const spot = freeSpot(model, { x: part.placement.x + 40, y: part.placement.y + 40 });
+        const placedName = await actions.place(part.class, {
+          ...spot,
+          rotation: part.placement.rotation,
+          mirror: part.placement.mirror,
+        });
+        for (const [k, v] of Object.entries(part.params)) {
+          await api.setParam(`${placedName}.${k}`, v);
+        }
+        newNames.push(placedName);
+      }
+    }
+    if (newNames.length) api.select(newNames);
+  }, [selection, model, actions, api]);
+
+  const deleteSelected = useCallback(() => {
+    if (wire || selection.length) {
       void actions.remove(selection.filter((s) => model.components.some((c) => c.name === s)), wire ? [wire] : []);
       setWire(null);
-    } else if (e.key.toLowerCase() === "r" && selection.length) {
-      // R turns anticlockwise (Modelica's positive rotation), Shift+R clockwise
-      e.preventDefault();
-      const step = e.shiftKey ? 270 : 90;
-      void (async () => {
-        for (const part of model.components.filter((c) => selection.includes(c.name))) {
-          const rotation = ((part.placement.rotation + step) % 360) as Placement["rotation"];
-          await actions.move(part.name, { ...part.placement, rotation });
-        }
-      })();
     }
-  };
-  useEffect(() => {
-    const on = (e: KeyboardEvent) => keys.current(e);
-    window.addEventListener("keydown", on);
-    return () => window.removeEventListener("keydown", on);
-  }, []);
+  }, [wire, selection, model.components, actions]);
+
+  useCanvasHotkeys({
+    hasSelection: Boolean(selection.length || wire),
+    onInsert: () => !quick && setQuick(true),
+    onRotateCW: () => void rotateSelected(true),
+    onRotateCCW: () => void rotateSelected(false),
+    onFlipH: () => void flipSelected("x"),
+    onFlipV: () => void flipSelected("y"),
+    onDuplicate: () => void duplicateSelected(),
+    onDelete: deleteSelected,
+    onEscape: () => {
+      setWire(null);
+      api.select([]);
+    },
+  });
 
   const selectedWire = wire ? `${wire.a} - ${wire.b}` : undefined;
   const latest = useRef(actions);
@@ -256,6 +293,51 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
           }}
         >
           <Background />
+          {selection.length > 0 && (
+            <NodeToolbar
+              nodeId={selection}
+              isVisible={selection.length > 0}
+              position={Position.Top}
+              offset={14}
+              className="selection-dialog nodrag nopan nowheel"
+            >
+              <button
+                className="key small"
+                title="Rotate 90° clockwise (R)"
+                onClick={() => void rotateSelected(true)}
+              >
+                Rotate
+              </button>
+              <button
+                className="key small"
+                title="Flip horizontal (F)"
+                onClick={() => void flipSelected("x")}
+              >
+                Flip
+              </button>
+              <button
+                className="key small"
+                title="Flip vertical (Alt+F)"
+                onClick={() => void flipSelected("y")}
+              >
+                Flip ⇅
+              </button>
+              <button
+                className="key small"
+                title="Duplicate (Ctrl+D)"
+                onClick={() => void duplicateSelected()}
+              >
+                Duplicate
+              </button>
+              <button
+                className="key small"
+                title="Delete (Delete)"
+                onClick={deleteSelected}
+              >
+                Delete
+              </button>
+            </NodeToolbar>
+          )}
           <MiniMap
             pannable
             zoomable
@@ -269,6 +351,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
             maskStrokeWidth={1}
           />
         </ReactFlow>
+        <CanvasHelp />
       </WireDragContext.Provider>
       </SetBends.Provider>
       {actions.notice && (
