@@ -158,3 +158,14 @@ export async function exposeComponentPort(
   const action = portActionFor(component, port, api.model.connectors, api.model.entries);
   await api.addEntry(action.kind, `${component.name}.${port.id}`);
 }
+
+export type Box = { x: number; y: number; w: number; h: number };
+
+/** Where the popover goes, in the container's pixels: right of the block, or left when it would
+ *  run off the container, then clamped inside it. `node` is the block's box on screen. */
+export function popoverSpot(node: Box, pop: { w: number; h: number }, box: { w: number; h: number }, gap = 8): { left: number; top: number } {
+  let left = node.x + node.w + gap;
+  if (left + pop.w > box.w) left = node.x - pop.w - gap;
+  const clamp = (v: number, size: number, max: number) => Math.max(8, Math.min(v, max - size - 8));
+  return { left: clamp(left, pop.w, box.w), top: clamp(node.y, pop.h, box.h) };
+}

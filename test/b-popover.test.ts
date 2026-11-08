@@ -6,6 +6,7 @@ import {
   exposeComponentPort,
   paramUnit,
   parseParamBinding,
+  popoverSpot,
   portActionFor,
   resolveParamNumber,
   unbindParam,
@@ -77,4 +78,12 @@ test("popover: port actions map causal inputs to + Input; a physical pin gets no
     method: "addEntry",
     args: ["input", "R1.u"],
   });
+});
+
+test("popover: sits right of the block, flips left at the edge, stays inside", () => {
+  const pop = { w: 250, h: 200 };
+  const box = { w: 1000, h: 600 };
+  assert.deepEqual(popoverSpot({ x: 100, y: 100, w: 60, h: 40 }, pop, box), { left: 168, top: 100 });
+  assert.deepEqual(popoverSpot({ x: 900, y: 100, w: 60, h: 40 }, pop, box), { left: 642, top: 100 });
+  assert.deepEqual(popoverSpot({ x: 100, y: 580, w: 60, h: 40 }, pop, box), { left: 168, top: 392 });
 });
