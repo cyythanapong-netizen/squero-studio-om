@@ -37,6 +37,17 @@ export function Viewport3D({ run, theme }: { run: ShapeRun; theme: string }) {
   const project = useRef<(p: "persp" | "iso") => void>(() => {});
   const helpers = useRef<{ grid?: THREE.Object3D; axes?: THREE.Object3D }>({});
   const end = run.t[run.t.length - 1] ?? 0;
+  // The theme's colours land after React's render (the root's data-theme, or the OS scheme under
+  // "system"): rebuild when they actually change, not when the prop does.
+  const [look, setLook] = useState(0);
+  useEffect(() => {
+    const bump = () => setLook((n) => n + 1);
+    const seen = new MutationObserver(bump);
+    seen.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
+    const scheme = matchMedia("(prefers-color-scheme: dark)");
+    scheme.addEventListener("change", bump);
+    return () => (seen.disconnect(), scheme.removeEventListener("change", bump));
+  }, []);
 
   // the scene, once per run
   useEffect(() => {
@@ -142,14 +153,14 @@ export function Viewport3D({ run, theme }: { run: ShapeRun; theme: string }) {
       renderer.domElement.remove();
       helpers.current = {};
     };
-  }, [run, theme]); // eslint-disable-line react-hooks/exhaustive-deps -- projection, grid, axes apply below
+  }, [run, theme, look]); // eslint-disable-line react-hooks/exhaustive-deps -- projection, grid, axes apply below
 
-  useEffect(() => draw.current(time), [time, run, theme]);
+  useEffect(() => draw.current(time), [time, run, theme, look]);
   useEffect(() => project.current(projection), [projection]);
   useEffect(() => {
     if (helpers.current.grid) helpers.current.grid.visible = grid;
     if (helpers.current.axes) helpers.current.axes.visible = axes;
-  }, [grid, axes, run, theme]);
+  }, [grid, axes, run, theme, look]);
 
   // the clock: simulation time runs at `speed` × wall time
   useEffect(() => {

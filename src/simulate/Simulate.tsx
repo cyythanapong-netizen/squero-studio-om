@@ -136,9 +136,9 @@ function Channels({ names, picks, onChange }: { names: string[]; picks: string[]
         {shown.map((n) => {
           const i = picks.indexOf(n);
           return (
-            <label key={n} className="channel" style={i >= 0 ? ({ "--trace": `var(--trace-${(i % 8) + 1})` } as CSSProperties) : undefined}>
+            <label key={n} className="channel" title={n} style={i >= 0 ? ({ "--trace": `var(--trace-${(i % 8) + 1})` } as CSSProperties) : undefined}>
               <input type="checkbox" checked={i >= 0} onChange={() => onChange(i >= 0 ? picks.filter((x) => x !== n) : [...picks, n])} />
-              {n}
+              <span>{n}</span>
             </label>
           );
         })}
