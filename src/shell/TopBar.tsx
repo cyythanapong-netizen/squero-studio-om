@@ -1,10 +1,11 @@
-// The top bar: squero studio [ Om ] on the left, the menus, model title with dirty indicator,
-// and on the right: View toggles (Source & Simulate, Code split), Export action, OMC status chip, Theme switch.
+// The top bar: squero studio [ Om ], the menus and the model title on the left; on the right
+// only three quiet controls: the side-pane toggle, the OMC status chip and a theme cycle.
+// The source view and Export live in the side pane, the footer and the menus.
 
-import { MenuBar, Switch } from "@paperboat/shared/components";
+import { MenuBar } from "@paperboat/shared/components";
 import type { Command } from "@paperboat/shared";
+import type { JSX } from "react";
 import { chip, type OmcStatus } from "../omc/omc.ts";
-import type { View } from "../split/Split.tsx";
 
 export type Theme = "auto" | "light" | "dark";
 
@@ -32,14 +33,28 @@ export type TopBarProps = {
   model?: string;
   dirty?: boolean;
   commands: Command[];
-  view: View;
-  onView: (v: View) => void;
   side: boolean;
   onToggleSide: () => void;
   theme: Theme;
   onTheme: (t: Theme) => void;
-  onExport?: () => void;
   onStatusClick?: () => void;
+};
+
+const NEXT: Record<Theme, Theme> = { auto: "light", light: "dark", dark: "auto" };
+const GLYPH: Record<Theme, JSX.Element> = {
+  auto: (
+    <>
+      <circle cx="8" cy="8" r="5.5" />
+      <path d="M8 2.5a5.5 5.5 0 0 1 0 11z" className="fill" />
+    </>
+  ),
+  light: (
+    <>
+      <circle cx="8" cy="8" r="3" />
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3" />
+    </>
+  ),
+  dark: <path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5z" />,
 };
 
 export function TopBar({
@@ -47,13 +62,10 @@ export function TopBar({
   model,
   dirty = false,
   commands,
-  view,
-  onView,
   side,
   onToggleSide,
   theme,
   onTheme,
-  onExport,
   onStatusClick,
 }: TopBarProps) {
   return (
@@ -64,32 +76,18 @@ export function TopBar({
       <span className="spacer" />
       <button
         type="button"
-        className={`key small${side ? " on" : ""}`}
+        className={`key small icon-key${side ? " on" : ""}`}
         aria-pressed={side}
-        title="Toggle Source & Simulate pane"
+        aria-label="Source & Simulate pane"
+        title="Source & Simulate pane"
         onClick={onToggleSide}
       >
-        Source & Simulate
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+          <path d="M10 2.5v11" />
+          {side && <rect x="10" y="2.5" width="4.5" height="11" className="fill" />}
+        </svg>
       </button>
-      <Switch
-        label="View"
-        value={view}
-        onChange={onView}
-        options={[
-          { value: "mo", label: ".mo", hint: "Modelica source (.mo)" },
-          { value: "cpp", label: "ODE c++", hint: "Generated ODE C++ backend preview" },
-        ]}
-      />
-      {onExport && (
-        <button
-          type="button"
-          className="key small run"
-          title="Export Paperboat backend (Ctrl+E)"
-          onClick={onExport}
-        >
-          Export backend
-        </button>
-      )}
       <button
         type="button"
         className={`chip omc-${status.state}`}
@@ -100,16 +98,15 @@ export function TopBar({
         <i aria-hidden="true" />
         {chip(status)}
       </button>
-      <Switch
-        label="Theme"
-        value={theme}
-        onChange={onTheme}
-        options={[
-          { value: "auto", label: "Auto" },
-          { value: "light", label: "Light" },
-          { value: "dark", label: "Dark" },
-        ]}
-      />
+      <button
+        type="button"
+        className="key small icon-key"
+        aria-label={`Theme: ${theme}`}
+        title={`Theme: ${theme} (click for ${NEXT[theme]})`}
+        onClick={() => onTheme(NEXT[theme])}
+      >
+        <svg viewBox="0 0 16 16" aria-hidden="true">{GLYPH[theme]}</svg>
+      </button>
     </header>
   );
 }
