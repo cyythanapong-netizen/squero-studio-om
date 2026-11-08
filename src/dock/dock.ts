@@ -73,6 +73,7 @@ export function parseBalance(reply: string | Error): BalanceResult {
 
 export async function checkModelBalance(api: { omc: Pick<StudioApi["omc"], "call">; model: { name: string } }): Promise<BalanceResult> {
   try {
+    await api.omc.call("getErrorString()").catch(() => ""); // drop what other calls left, so the error read below is checkModel's
     const reply = await api.omc.call(`checkModel(${api.model.name})`);
     const res = parseBalance(reply);
     if (res.kind !== "error") return res;
