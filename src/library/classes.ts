@@ -23,19 +23,6 @@ export type ComponentCardItem = {
   ports?: ComponentPortSummary[];
 };
 
-export const STANDARD_CATEGORIES = [
-  "All",
-  "Electrical",
-  "Mechanics",
-  "Thermal",
-  "Fluid",
-  "Blocks",
-  "Math",
-  "Sources",
-] as const;
-
-export type StandardCategory = (typeof STANDARD_CATEGORIES)[number];
-
 /** Built-in curated catalog of common MSL components with descriptions and ports. */
 export const KNOWN_METADATA: Record<string, { comment: string; ports: ComponentPortSummary[] }> = {
   "Modelica.Electrical.Analog.Basic.Resistor": {
@@ -323,6 +310,15 @@ export function searchComponents(items: ComponentCardItem[], query: string, cate
     .filter(([s]) => s < 9)
     .sort((a, b) => a[0] - b[0] || a[1].name.length - b[1].name.length || a[1].full.localeCompare(b[1].full))
     .map(([, it]) => it);
+}
+
+/** How many parts sit under each package of `names`, at every depth: `A.B.C` counts for A and A.B. */
+export function packageCounts(names: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const n of names) {
+    for (let i = n.indexOf("."); i > 0; i = n.indexOf(".", i + 1)) out.set(n.slice(0, i), (out.get(n.slice(0, i)) ?? 0) + 1);
+  }
+  return out;
 }
 
 /** Packages that hold documentation and demos, not parts. */

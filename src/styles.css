@@ -56,8 +56,8 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .react-flow__attribution a { color: var(--text-muted) !important; }
 
 /* ---- Studio ------------------------------------------------------------------------ */
-.studio { height: 100%; display: grid; gap: var(--gutter); padding: var(--gutter); grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: var(--bar-height) minmax(0, 1fr) auto; grid-template-areas: "bar bar" "library canvas" "dock dock"; background: var(--surface-ground); }
-.studio.with-side { grid-template-columns: 280px minmax(0, 1fr) minmax(320px, 440px); grid-template-areas: "bar bar bar" "library canvas side" "dock dock dock"; }
+.studio { height: 100%; display: grid; gap: var(--gutter); padding: var(--gutter); grid-template-columns: auto minmax(0, 1fr); grid-template-rows: var(--bar-height) minmax(0, 1fr) auto; grid-template-areas: "bar bar" "library canvas" "dock dock"; background: var(--surface-ground); }
+.studio.with-side { grid-template-columns: auto minmax(0, 1fr) minmax(320px, 440px); grid-template-areas: "bar bar bar" "library canvas side" "dock dock dock"; }
 .studio > .bar { grid-area: bar; }
 .studio > .library { grid-area: library; }
 .studio > .canvas { grid-area: canvas; }
@@ -193,54 +193,28 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 }
 
 /* Category Tabs */
-.lib-tabs {
-  position: relative;
-  display: flex;
-  gap: 3px;
-  padding: 6px var(--space-2);
-  background: var(--surface-sunken);
-  border-bottom: 1px solid var(--line);
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: thin;
-}
-
-
 body.dragging-card .library {
   opacity: 0.45;
   transition: opacity 0.15s;
 }
 
-.lib-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  font: 500 var(--size-2xs) var(--font-sans);
-  cursor: pointer;
-  user-select: none;
-  flex: none;
-}
-.lib-tab:hover {
-  color: var(--text);
-  background: var(--surface-raised);
-}
-.lib-tab.on {
-  background: var(--surface-panel);
-  border-color: var(--line-ink);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
-}
-
-.lib-tab-num {
-  font: 400 var(--size-2xs) var(--font-mono);
-  opacity: 0.75;
-}
+/* Package tree, and the cards column that opens beside it (#17). */
+.library { flex-direction: row; }
+.lib-tree-col { width: 240px; flex: none; display: flex; flex-direction: column; min-height: 0; }
+.lib-tree { flex: 1; min-height: 0; overflow: auto; padding: var(--space-1) 0; scrollbar-width: thin; }
+.tree-row { display: flex; align-items: center; gap: 2px; height: 26px; padding-right: var(--space-2); font-size: var(--size-xs); color: var(--text-muted); }
+.tree-row:hover { background: var(--surface-sunken); color: var(--text); }
+.tree-row button { border: 0; background: none; color: inherit; font: inherit; padding: 0; cursor: pointer; }
+.tree-caret { width: 14px; flex: none; font-family: var(--font-mono); text-align: center; }
+.tree-name { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-num { font: 400 var(--size-2xs) var(--font-mono); opacity: 0.6; }
+.tree-row.hit { color: var(--text); }
+.tree-row.hit .tree-name { font-weight: 600; }
+.tree-row.hit .tree-name::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; background: var(--signal); vertical-align: middle; }
+.tree-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 2px 0 0 var(--line-ink); }
+.lib-cards-col { width: 300px; flex: none; display: flex; flex-direction: column; min-height: 0; border-left: 1px solid var(--line); }
+.lib-cards-head { display: flex; align-items: center; gap: var(--space-2); height: 41px; padding: 0 var(--space-2) 0 var(--space-3); border-bottom: 1px solid var(--line); }
+.lib-cards-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 var(--size-xs) var(--font-sans); }
 
 /* Cards List */
 .lib-cards {
@@ -464,13 +438,6 @@ body.dragging-card .library {
 }
 
 /* Legacy helpers for backwards compatibility */
-.lib-head { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; border-radius: 0; text-align: left; padding: 4px 12px; font: 500 var(--size-xs) var(--font-sans); }
-.lib-head.static { color: var(--text-muted); font-weight: 400; }
-.lib-caret { width: 10px; font-family: var(--font-mono); color: var(--text-muted); }
-.lib-part { display: flex; align-items: center; gap: var(--space-2); padding: 3px 12px; cursor: grab; font-size: var(--size-xs); }
-.lib-part:hover, .lib-part:focus-visible { background: var(--surface-sunken); outline-offset: -2px; }
-.lib-name { white-space: nowrap; }
-.lib-note { color: var(--text-muted); font: 400 var(--size-2xs) var(--font-sans); padding: 3px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Canvas */
 .canvas { position: relative; min-height: 0; min-width: 0; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; outline: none; }
@@ -777,3 +744,4 @@ body.dragging-card .library {
 .bar .icon-key { width: 28px; padding: 0; display: inline-grid; place-items: center; font-size: var(--size-sm); }
 .bar .icon-key svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.2; }
 .bar .icon-key svg .fill { fill: currentColor; stroke: none; opacity: 0.45; }
+.lib-filter::-webkit-search-cancel-button { display: none; }
