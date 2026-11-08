@@ -41,6 +41,12 @@ export type Actions = {
   preview(): Promise<{ path: "ode" | "fmu"; reason: string; files: Record<string, string>; notices: string[] }>;
   /** A local check run: every variable over [0, stop]. */
   simulate(stop: number): Promise<{ t: number[]; series: Record<string, (number | null)[]>; names: string[] }>;
+  dirty: boolean;
+  save(file?: string): Promise<void>;
+  saveAs(file: string): Promise<void>;
+  newModel(name: string): Promise<void>;
+  openFile(file: string, content?: string): Promise<void>;
+  loadLibrary(lib: string): Promise<void>;
 };
 
 const asGraph = (m: StudioModel): Graph => ({
@@ -50,6 +56,7 @@ const asGraph = (m: StudioModel): Graph => ({
 
 export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: StudioApi | null; actions: Actions; error: string } {
   const [model, setModel] = useState<StudioModel | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -83,8 +90,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
           throw new Error(why || `omc refused ${expr.slice(0, expr.indexOf("("))}`);
         }
       }
-      const m = current.current;
-      if (m) await omc.op("save", { model: m.name }).catch(() => undefined);
+      setDirty(true);
       await refresh();
     },
     [omc, refresh],
@@ -109,7 +115,10 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
     omc.op<{ file: string; model: string }>("open").then(
       async (opened) => {
         const m = await readModel(omc, opened.model, opened.file, looks.current);
-        if (live) setModel(m);
+        if (live) {
+          setModel(m);
+          setDirty(false);
+        }
       },
       (e: Error) => live && setError(e.message),
     );
@@ -274,8 +283,71 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         if (!m) return "";
         return String(parseValue(await omc.call(`list(${m.name})`)));
       },
+      dirty,
+      async save(file?: string) {
+        const m = current.current;
+        if (!m) return;
+        const target = file ?? m.file;
+        await enqueue(async () => {
+          await omc.op("save", { model: m.name, ...(target ? { file: target } : {}) });
+          setDirty(false);
+          say(`Saved ${m.name}${target ? ` to ${target}` : ""}`);
+        });
+      },
+      async saveAs(filePath: string) {
+        const m = current.current;
+        if (!m) return;
+        const target = filePath.trim();
+        if (!target) return;
+        await enqueue(async () => {
+          await omc.op("save", { model: m.name, file: target });
+          setDirty(false);
+          await refresh();
+          say(`Saved ${m.name} to ${target}`);
+        });
+      },
+      async newModel(name: string) {
+        const raw = name.trim();
+        if (!raw) return;
+        const file = raw.endsWith(".mo") ? raw : `${raw}.mo`;
+        await enqueue(async () => {
+          const opened = await omc.op<{ file: string; model: string }>("open", { file });
+          const m = await readModel(omc, opened.model, opened.file, looks.current);
+          setModel(m);
+          setDirty(false);
+          setSelection([]);
+          say(`Created model ${opened.model}`);
+        });
+      },
+      async openFile(file: string, content?: string) {
+        const target = file.trim();
+        if (!target) return;
+        await enqueue(async () => {
+          const opened = await omc.op<{ file: string; model: string }>("open", { file: target, ...(content ? { content } : {}) });
+          const m = await readModel(omc, opened.model, opened.file, looks.current);
+          setModel(m);
+          setDirty(false);
+          setSelection([]);
+          say(`Opened ${opened.model}`);
+        });
+      },
+      async loadLibrary(lib: string) {
+        const raw = lib.trim();
+        if (!raw) return;
+        await enqueue(async () => {
+          let ans = await omc.call(`loadModel(${raw})`).catch(() => "false");
+          if (ans !== "true") {
+            ans = await omc.call(`loadFile("${raw}")`).catch(() => "false");
+          }
+          if (ans !== "true") {
+            const why = (await omc.call("getErrorString()").catch(() => "")).replace(/^"|"$/g, "").replace(/\\n/g, "\n").trim();
+            throw new Error(why || `Could not load library ${raw}`);
+          }
+          say(`Loaded library ${raw}`);
+        });
+      },
     }),
-    [notice, say, edit, omc, undo, redo, canUndo, canRedo],
+    [notice, say, edit, omc, undo, redo, canUndo, canRedo, dirty, enqueue, refresh],
   );
 
   return { api, actions, error };

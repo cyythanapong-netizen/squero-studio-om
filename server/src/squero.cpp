@@ -105,9 +105,16 @@ std::string load_file(Omc& omc, const fs::path& file) {
   throw std::runtime_error("no class in " + file.string());
 }
 
-json op_open(Omc& omc, const Session& session) {
-  fs::path file = session.file.empty() ? fs::path("Untitled.mo") : session.file;
-  if (!fs::exists(file)) {
+json op_open(Omc& omc, const json& in, const Session& session) {
+  fs::path file;
+  if (in.contains("file") && in["file"].is_string() && !in["file"].get<std::string>().empty()) {
+    file = in["file"].get<std::string>();
+  } else {
+    file = session.file.empty() ? fs::path("Untitled.mo") : session.file;
+  }
+  if (in.contains("content") && in["content"].is_string()) {
+    std::ofstream(file) << in["content"].get<std::string>();
+  } else if (!fs::exists(file)) {
     const std::string name = file.stem().string();
     std::ofstream(file) << "model " << name << "\nend " << name << ";\n";
   }
@@ -116,9 +123,21 @@ json op_open(Omc& omc, const Session& session) {
 
 json op_save(Omc& omc, const json& in) {
   const std::string model = user_model(in);
-  const std::string file = text_of(omc.call("getSourceFile(" + model + ")"));
+  std::string file = in.value("file", "");
+  if (file.empty()) file = text_of(omc.call("getSourceFile(" + model + ")"));
   if (file.empty()) throw std::runtime_error(model + " has no file to save to");
-  if (omc.call("save(" + model + ")") != "true") throw std::runtime_error("cannot save " + model + ": " + omc.errors());
+  if (in.contains("content") && in["content"].is_string()) {
+    std::ofstream(file) << in["content"].get<std::string>();
+  } else {
+    if (omc.call("save(" + model + ")") != "true") {
+      const std::string listed = text_of(omc.call("list(" + model + ")"));
+      if (!listed.empty()) {
+        std::ofstream(file) << listed << "\n";
+      } else {
+        throw std::runtime_error("cannot save " + model + ": " + omc.errors());
+      }
+    }
+  }
   return {{"file", file}};
 }
 
@@ -247,7 +266,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       }
       out["result"] = omc.call(expr);
     } else if (op == "open") {
-      out["result"] = op_open(omc, session);
+      out["result"] = op_open(omc, in, session);
     } else if (op == "save") {
       out["result"] = op_save(omc, in);
     } else if (op == "icon") {

@@ -3,21 +3,21 @@
 
 import { ReactFlowProvider } from "@xyflow/react";
 import { useShortcuts, type Command } from "@paperboat/shared";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Canvas } from "./canvas/Canvas.tsx";
+import { defaultExportFolder, runBackendExport } from "./dock/dock.ts";
+import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
 import { StudioContext } from "./model/types.ts";
 import { OmcClient, type OmcStatus } from "./omc/omc.ts";
-import { StudioDock } from "./dock/index.tsx";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
-import { TopBar } from "./shell/TopBar.tsx";
+import { LibraryModal, PromptModal, StatusModal, Toast } from "./shell/Dialogs.tsx";
+import { TopBar, type Theme } from "./shell/TopBar.tsx";
 import { Simulate } from "./simulate/Simulate.tsx";
 import { Split, type View } from "./split/Split.tsx";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
-
-type Theme = "auto" | "light" | "dark";
 
 function serverUrl(): string {
   const given = new URLSearchParams(location.search).get("server");
@@ -50,6 +50,15 @@ export function App() {
   ) : null;
 }
 
+type PromptSpec = {
+  title: string;
+  label: string;
+  value?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+  onConfirm: (val: string) => void | Promise<void>;
+};
+
 function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const { api, actions, error } = useStudioStore(omc, status);
   const [popover, setPopover] = useState<string | null>(null);
@@ -57,31 +66,167 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [side, setSide] = useState(true);
   const [view, setView] = useState<View>("mo");
   const [theme, setTheme] = useTheme();
+  const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
+  const [libraryModalOpen, setLibraryModalOpen] = useState(false);
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const classes = useClassIndex(omc);
-
-  const commands = useMemo<Command[]>(
-    () => [
-      { id: "undo", label: "Undo", menu: "edit", group: "history", shortcut: "Ctrl+Z", enabled: actions.canUndo, run: actions.undo },
-      { id: "redo", label: "Redo", menu: "edit", group: "history", shortcut: "Ctrl+Shift+Z", enabled: actions.canRedo, run: actions.redo },
-      { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
-      { id: "mo", label: ".mo", menu: "view", group: "source", checked: view === "mo", run: () => (setView("mo"), setSide(true)) },
-      { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },
-      { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
-      ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
-    ],
-    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, side, view, theme, setTheme],
-  );
-  useShortcuts(commands);
 
   const model = api?.model;
   useEffect(() => {
     if (popover && model && !model.components.some((c) => c.name === popover)) setPopover(null);
   }, [popover, model]);
 
+  useEffect(() => {
+    if (actions.notice) setToastMessage(actions.notice);
+  }, [actions.notice]);
+
+  const handleExportBackend = async () => {
+    if (!api) return;
+    const target = defaultExportFolder(api.model.name);
+    const outcome = await runBackendExport(api, target, () => {});
+    if (outcome.ok) {
+      setToastMessage(`Exported backend to ${outcome.result.out} (${outcome.result.path})`);
+    } else {
+      setToastMessage(`Export failed: ${outcome.line}`);
+    }
+  };
+
+  const handleFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const content = String(reader.result ?? "");
+      try {
+        await actions.openFile(file.name, content);
+      } catch (err) {
+        setToastMessage((err as Error).message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const commands = useMemo<Command[]>(
+    () => [
+      // File menu (Issue #11)
+      {
+        id: "file.new",
+        label: "New Model",
+        menu: "file",
+        group: "model",
+        shortcut: "Ctrl+N",
+        chord: { key: "n", ctrl: true },
+        run: () =>
+          setPromptModal({
+            title: "New Model",
+            label: "Model Name",
+            value: "NewModel.mo",
+            confirmLabel: "Create",
+            onConfirm: (name) => actions.newModel(name).catch((err: Error) => setToastMessage(err.message)),
+          }),
+      },
+      {
+        id: "file.open",
+        label: "Open / Import .mo…",
+        menu: "file",
+        group: "model",
+        shortcut: "Ctrl+O",
+        chord: { key: "o", ctrl: true },
+        run: () => fileInputRef.current?.click(),
+      },
+      {
+        id: "file.open-path",
+        label: "Open from Path…",
+        menu: "file",
+        group: "model",
+        run: () =>
+          setPromptModal({
+            title: "Open Modelica File",
+            label: "File Path",
+            placeholder: "e.g. models/MyModel.mo",
+            confirmLabel: "Open",
+            onConfirm: (path) => actions.openFile(path).catch((err: Error) => setToastMessage(err.message)),
+          }),
+      },
+      {
+        id: "file.save",
+        label: "Save",
+        menu: "file",
+        group: "save",
+        shortcut: "Ctrl+S",
+        chord: { key: "s", ctrl: true },
+        enabled: Boolean(model),
+        run: () => void actions.save().catch((err: Error) => setToastMessage(err.message)),
+      },
+      {
+        id: "file.save-as",
+        label: "Save As…",
+        menu: "file",
+        group: "save",
+        shortcut: "Ctrl+Shift+S",
+        chord: { key: "s", ctrl: true, shift: true },
+        enabled: Boolean(model),
+        run: () =>
+          setPromptModal({
+            title: "Save Model As",
+            label: "File Path",
+            value: model?.file ?? `${model?.name}.mo`,
+            confirmLabel: "Save",
+            onConfirm: (path) => actions.saveAs(path).catch((err: Error) => setToastMessage(err.message)),
+          }),
+      },
+      {
+        id: "file.load-library",
+        label: "Load Modelica Library…",
+        menu: "file",
+        group: "library",
+        run: () => setLibraryModalOpen(true),
+      },
+      {
+        id: "file.export",
+        label: "Export Paperboat Backend",
+        menu: "file",
+        group: "export",
+        shortcut: "Ctrl+E",
+        chord: { key: "e", ctrl: true },
+        run: () => void handleExportBackend(),
+      },
+
+      // Edit menu
+      { id: "undo", label: "Undo", menu: "edit", group: "history", shortcut: "Ctrl+Z", enabled: actions.canUndo, run: actions.undo },
+      { id: "redo", label: "Redo", menu: "edit", group: "history", shortcut: "Ctrl+Shift+Z", enabled: actions.canRedo, run: actions.redo },
+
+      // View menu
+      { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
+      { id: "mo", label: ".mo", menu: "view", group: "source", checked: view === "mo", run: () => (setView("mo"), setSide(true)) },
+      { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },
+      { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
+      ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
+    ],
+    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, theme, setTheme, model, api],
+  );
+  useShortcuts(commands);
+
   return (
     <StudioContext.Provider value={api}>
       <div className={`studio${side ? " with-side" : ""}`}>
-        <TopBar status={status} model={model?.name} commands={commands} />
+        <TopBar
+          status={status}
+          model={model?.name}
+          dirty={actions.dirty}
+          commands={commands}
+          view={view}
+          onView={setView}
+          side={side}
+          onToggleSide={() => setSide((s) => !s)}
+          theme={theme}
+          onTheme={setTheme}
+          onExport={handleExportBackend}
+          onStatusClick={() => setStatusModalOpen(true)}
+        />
         {api && model ? (
           <>
             <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model))} />
@@ -102,6 +247,45 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           <p className="opening" role="status">
             {error || (status.state === "failed" ? "No Studio server: start one with squero-om" : "opening the model…")}
           </p>
+        )}
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".mo,.moe"
+          style={{ display: "none" }}
+          onChange={handleFileInputChange}
+        />
+
+        {promptModal && (
+          <PromptModal
+            title={promptModal.title}
+            label={promptModal.label}
+            value={promptModal.value}
+            placeholder={promptModal.placeholder}
+            confirmLabel={promptModal.confirmLabel}
+            onConfirm={promptModal.onConfirm}
+            onClose={() => setPromptModal(null)}
+          />
+        )}
+
+        {libraryModalOpen && (
+          <LibraryModal
+            onLoad={(lib) => actions.loadLibrary(lib).catch((err: Error) => setToastMessage(err.message))}
+            onClose={() => setLibraryModalOpen(false)}
+          />
+        )}
+
+        {statusModalOpen && (
+          <StatusModal
+            status={status}
+            serverUrl={serverUrl()}
+            onClose={() => setStatusModalOpen(false)}
+          />
+        )}
+
+        {toastMessage && (
+          <Toast message={toastMessage} onClose={() => setToastMessage(null)} />
         )}
       </div>
     </StudioContext.Provider>
