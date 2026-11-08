@@ -7,13 +7,9 @@
 }
 
 .studio-sheet {
-  position: fixed;
-  top: calc(var(--bar-height) + var(--gutter));
-  right: var(--gutter);
-  bottom: var(--gutter);
+  grid-area: sheet;
   width: 396px;
-  max-width: calc(100vw - 2 * var(--gutter));
-  z-index: 25;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--surface-panel);
@@ -22,13 +18,32 @@
   color: var(--text);
   font: 400 var(--size-xs) var(--font-sans);
   overflow: hidden;
-  transform: translateX(calc(100% + 2 * var(--gutter)));
-  transition: transform var(--slide);
+  transition: width var(--slide);
 }
 
-.studio-sheet.open {
-  transform: translateX(0);
+/* Folded to a thin standing tab; the head and body come back when it opens. */
+.studio-sheet:not(.open) { width: 34px; }
+.studio-sheet > [hidden] { display: none; }
+.studio-sheet > :not(.studio-sheet-tab) { min-width: 394px; }
+
+.studio-sheet-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: 500 var(--size-xs) var(--font-sans);
+  cursor: pointer;
 }
+.studio-sheet-tab:hover { color: var(--text); background: var(--surface-sunken); }
+.studio-sheet-tab svg, .studio-sheet-fold svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; display: block; }
+.studio-sheet-tab-name { writing-mode: vertical-rl; transform: rotate(180deg); }
+.studio-sheet-glyph { font: 600 var(--size-sm) var(--font-mono); color: var(--text); }
+.studio-sheet-fold { width: 24px; height: 24px; padding: 0; display: inline-grid; place-items: center; }
 
 .studio-sheet-head {
   display: flex;
