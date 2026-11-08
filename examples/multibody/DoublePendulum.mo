@@ -9,6 +9,8 @@ model DoublePendulum "Double pendulum from two revolute joints and two box bodie
     Placement(transformation(extent = {{-20, -10}, {0, 10}})));
   Modelica.Mechanics.MultiBody.Joints.Revolute revolute2(useAxisFlange = true, phi(fixed = true), w(fixed = true)) annotation(
     Placement(transformation(extent = {{20, -10}, {40, 10}})));
+  Modelica.Mechanics.Rotational.Components.Damper damper2(d = 0.1) annotation(
+    Placement(transformation(extent = {{20, 30}, {40, 50}})));
   Modelica.Mechanics.MultiBody.Parts.BodyBox boxBody2(r = {0.5, 0, 0}, width = 0.06) annotation(
     Placement(transformation(extent = {{60, -10}, {80, 10}})));
   Modelica.Blocks.Interfaces.RealInput tau1 "Torque at the upper joint" annotation(
@@ -30,6 +32,8 @@ model DoublePendulum "Double pendulum from two revolute joints and two box bodie
 equation
   connect(tau1, torque1.tau);
   connect(torque1.flange, revolute1.axis);
+  connect(revolute2.support, damper2.flange_a);
+  connect(damper2.flange_b, revolute2.axis);
   connect(tau2, torque2.tau);
   connect(torque2.flange, revolute2.axis);
   connect(revolute1.axis, angle1.flange);
