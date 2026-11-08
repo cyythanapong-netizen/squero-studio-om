@@ -173,3 +173,10 @@ test("export folder follows the generator's backend_name", () => {
   assert.equal(defaultExportFolder("Lib.Pkg.CartPole"), "cart-pole-cpp");
   assert.equal(defaultExportFolder("my_model2"), "my-model2-cpp");
 });
+
+test("omc's type-incompatible connect is explained in plain words", async () => {
+  const { explainOmcError } = await import("../src/dock/dock.ts");
+  assert.match(explainOmcError("The connectors in connect(R1.n, n) are not type compatible."), /^R1\.n and n can't be wired: .*sensor/);
+  assert.match(explainOmcError("simulation failed: The connectors in connect(m.R1.n, m.n) are not type compatible."), /^R1\.n and n can't/);
+  assert.equal(explainOmcError("something else"), "something else");
+});

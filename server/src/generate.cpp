@@ -1287,8 +1287,16 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
     if (o.progress) o.progress(stage, fraction);
   };
   progress("check", 0);
-  r.model = load(omc, o.source, o.model);
-  if (const CheckResult c = check(omc, o.source, r.model); !c.ok) throw GenerateError(c.message);
+  const bool live = o.live && !o.model.empty() &&
+                    !trim(parse_value(omc.call("getClassRestriction(" + o.model + ")")).atom).empty();
+  if (live) {
+    r.model = o.model;
+    const std::string said = trim(parse_value(omc.call("checkModel(" + r.model + ")")).atom);
+    if (said.find("completed successfully") == std::string::npos) throw GenerateError(said + "\n" + omc.errors());
+  } else {
+    r.model = load(omc, o.source, o.model);
+    if (const CheckResult c = check(omc, o.source, r.model); !c.ok) throw GenerateError(c.message);
+  }
 
   progress("flatten", 0.25);
   const OmValue dump = parse_value(ok_call(
@@ -1401,7 +1409,8 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   write(r, fs::path("domain") / (spec.id + ".hpp"), hpp(spec));
   write(r, fs::path("domain") / (spec.id + ".cpp"), domain);
   const fs::path mo = fs::path("modelica") / (spec.label + ".mo");
-  if (o.dry || !fs::exists(r.out / mo) || !fs::equivalent(r.out / mo, o.source)) write(r, mo, read_file(o.source));
+  if (live) write(r, mo, parse_value(omc.call("list(" + r.model + ")")).atom + "\n");
+  else if (o.dry || !fs::exists(r.out / mo) || !fs::equivalent(r.out / mo, o.source)) write(r, mo, read_file(o.source));
   write(r, "backend.toml", backend_toml(spec, port), true);
   write(r, "descriptor.toml", descriptor(spec), true);
   write(r, "README.md", readme(spec, r), true);

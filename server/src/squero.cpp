@@ -170,7 +170,7 @@ json op_set_icon(Omc& omc, const json& in) {
 
 json op_generate(Omc& omc, const json& in, const Session& session) {
   GenerateOptions o{.source = in.value("source", ""), .model = in.value("model", ""), .out = in.value("out", ""),
-                    .path = in.value("path", "auto"), .dry = in.value("dry", false)};
+                    .path = in.value("path", "auto"), .dry = in.value("dry", false), .live = true};
   if (o.source.empty()) throw std::runtime_error("generate needs a source .mo");
   if (!o.dry && o.out.empty()) throw std::runtime_error("generate needs an out folder");
   const json id = in.value("id", json());
@@ -277,7 +277,11 @@ json op_simulate(Omc& omc, const json& in) {
   if (file.empty() || !std::getline(csv, header)) {
     const auto m = answer.find("messages = \"");
     std::string why = m == std::string::npos ? "" : answer.substr(m + 12, answer.find("\",\n", m) - m - 12);
-    throw std::runtime_error("simulation failed: " + trim(why.empty() ? omc.errors() : why));
+    // "Failed to build model: X" says nothing; omc's first Error line says why
+    const std::string errors = omc.errors();
+    const auto e = errors.find("Error: ");
+    const std::string cause = e == std::string::npos ? "" : errors.substr(e + 7, errors.find('\n', e) - e - 7);
+    throw std::runtime_error("simulation failed: " + trim(!cause.empty() ? cause : why.empty() ? errors : why));
   }
   json names = json::array();
   std::vector<std::vector<json>> columns;

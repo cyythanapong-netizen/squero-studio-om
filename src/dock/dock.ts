@@ -71,6 +71,14 @@ export function parseBalance(reply: string | Error): BalanceResult {
   };
 }
 
+/** omc's error, in the words the footer shows: the common ones say what to do. */
+export function explainOmcError(why: string): string {
+  const wire = /connectors in connect\(([^,]+),\s*([^)]+)\) are not type compatible/.exec(why);
+  const local = (path: string) => path.replace(/^m\./, ""); // Simulate's harness holds the model as m
+  if (wire) return `${local(wire[1])} and ${local(wire[2])} can't be wired: they are different kinds of port (say a pin and a signal). Delete that wire; to read a pin as a signal, put a sensor such as VoltageSensor in between.`;
+  return why;
+}
+
 export async function checkModelBalance(api: { omc: Pick<StudioApi["omc"], "call">; model: { name: string } }): Promise<BalanceResult> {
   try {
     await api.omc.call("getErrorString()").catch(() => ""); // drop what other calls left, so the error read below is checkModel's
@@ -79,7 +87,7 @@ export async function checkModelBalance(api: { omc: Pick<StudioApi["omc"], "call
     if (res.kind !== "error") return res;
     // an empty reply means omc refused the model: its first error says why
     const why = /Error: ([^\n"]*)/.exec(await api.omc.call("getErrorString()").catch(() => ""))?.[1];
-    return why ? { ...res, words: why } : res;
+    return why ? { ...res, words: explainOmcError(why) } : res;
   } catch (err) {
     return parseBalance(err instanceof Error ? err : new Error(String(err)));
   }
@@ -280,7 +288,7 @@ export async function runBackendExport(
     const msg = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
-      line: msg || "export failed",
+      line: explainOmcError(msg) || "export failed",
     };
   }
 }
