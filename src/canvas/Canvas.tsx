@@ -16,6 +16,7 @@ import {
   type Node,
   type NodeChange,
   type NodeProps,
+  MiniMap,
 } from "@xyflow/react";
 import { netWireType, orthoPoints, roundedPolyline, squareUp, type BlockDef, type Connectors, type IconDef, type WirePoint } from "@paperboat/shared";
 import { CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboat/shared/components";
@@ -247,6 +248,18 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
           }}
         >
           <Background />
+          <MiniMap
+            pannable
+            zoomable
+            ariaLabel="Overview of the diagram: click or drag to move the view"
+            nodeColor={(n) => (n.selected ? "var(--text)" : "var(--line-strong)")}
+            nodeStrokeColor="var(--line-strong)"
+            nodeStrokeWidth={3}
+            nodeBorderRadius={2}
+            maskColor="var(--surface-float)"
+            maskStrokeColor="var(--line-ink)"
+            maskStrokeWidth={1}
+          />
         </ReactFlow>
       </WireDragContext.Provider>
       </SetBends.Provider>
