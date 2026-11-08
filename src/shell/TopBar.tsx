@@ -36,6 +36,9 @@ export type TopBarProps = {
   onTheme: (t: Theme) => void;
   onStatusClick?: () => void;
   running?: boolean;
+  errors?: number;
+  consoleShown?: boolean;
+  onConsole?: () => void;
 };
 
 const STATES: OmcState[] = ["checking", "ready", "failed"];
@@ -52,6 +55,9 @@ export function TopBar({
   onTheme,
   onStatusClick,
   running = false,
+  errors = 0,
+  consoleShown = false,
+  onConsole,
 }: TopBarProps) {
   return (
     <header className="bar">
@@ -59,6 +65,9 @@ export function TopBar({
       <MenuBar commands={commands} />
       {model && <ProjectLabel name={model} dirty={dirty} />}
       <span className="spacer" />
+      <button type="button" className={`key small${errors ? " err" : ""}${consoleShown ? " on" : ""}`} aria-pressed={consoleShown} title="Open the Console" onClick={onConsole}>
+        {errors ? `${errors} ${errors === 1 ? "error" : "errors"}` : "Console"}
+      </button>
       <button
         type="button"
         className={`key small icon-key${side ? " on" : ""}`}
