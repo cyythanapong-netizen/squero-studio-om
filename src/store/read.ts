@@ -91,19 +91,22 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
     }
   }
 
-  const params = await readParams(omc, name);
+  const decl = new Map(comps.map((c) => [atom(list(c)[1]), { cls: atom(list(c)[0]), private: atom(list(c)[3]) === "protected" }]));
+  const params = await readParams(omc, name, decl);
   const own = await omc.op<{ icon?: StudioModel["icon"]; connectors?: StudioModel["connectors"] }>("icon", { class: name }).catch(() => ({}) as { icon?: StudioModel["icon"] });
   return { name, ...(file ? { file } : {}), components, connections: wires, params, entries, ...(own.icon ? { icon: own.icon } : {}), connectors };
 }
 
-async function readParams(omc: OmcCalls, model: string): Promise<StudioModel["params"]> {
+async function readParams(omc: OmcCalls, model: string, decl: Map<string, { cls: string; private: boolean }>): Promise<StudioModel["params"]> {
   const out: StudioModel["params"] = [];
   for (const id of list(parseValue(await omc.call(`getParameterNames(${model})`))).map(atom)) {
     const raw = atom(parseValue(await omc.call(`getParameterValue(${model}, ${quoted(id)})`)));
     const v = Number(raw);
-    if (raw === "true" || raw === "false") out.push({ id, type: "boolean", default: raw === "true" });
-    else if (raw !== "" && Number.isFinite(v)) out.push({ id, type: "number", default: v });
-    else out.push({ id, type: "text", default: raw });
+    const d = decl.get(id);
+    const more = { ...(d?.cls ? { modelica: d.cls } : {}), ...(d?.private ? { private: true } : {}) };
+    if (raw === "true" || raw === "false") out.push({ id, type: "boolean", default: raw === "true", ...more });
+    else if (raw !== "" && Number.isFinite(v)) out.push({ id, type: "number", default: v, ...more });
+    else out.push({ id, type: "text", default: raw, ...more });
   }
   return out;
 }

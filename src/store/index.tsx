@@ -13,7 +13,7 @@ import * as x from "./exprs.ts";
 import { classLook, type IconCache } from "./looks.ts";
 import { readModel } from "./read.ts";
 import { freshName, splicePlan, throughPorts } from "./splice.ts";
-import { entryExprs, connectExprs, iconPortExprs, removeEntryExprs, removeExprs, setParamExprs } from "./plans.ts";
+import { addVariableExprs, entryExprs, connectExprs, iconPortExprs, removeEntryExprs, removeExprs, removeVariableExprs, renameVariableExprs, setParamExprs } from "./plans.ts";
 import { endOf, split } from "./wires.ts";
 
 type PartNode = Node<{ part: PartSnap }>;
@@ -182,6 +182,18 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       },
       async addComponent(cls, partName, at) {
         await edit([x.addComponent(name, cls, partName, at)]);
+      },
+      async addVariable(id, value, isPrivate) {
+        await edit(addVariableExprs(model, id, value, isPrivate));
+      },
+      async setPrivate(id, isPrivate) {
+        await edit([x.setVariable(name, id, isPrivate)]);
+      },
+      async renameVariable(from, to) {
+        await edit(renameVariableExprs(model, from, to));
+      },
+      async removeVariable(id) {
+        await edit(removeVariableExprs(model, id));
       },
       async connect(a, b) {
         const plan = connectExprs(model, a, b);

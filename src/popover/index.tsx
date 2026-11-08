@@ -10,6 +10,7 @@ import {
   portActionFor,
   resolveParamNumber,
   unbindParam,
+  VAR_DRAG,
 } from "./popover.ts";
 import "./popover.css";
 
@@ -20,6 +21,8 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
   const rootRef = useRef<HTMLDivElement>(null);
   const [bindingParam, setBindingParam] = useState<string | null>(null);
   const [bindName, setBindName] = useState("");
+  const [bindPrivate, setBindPrivate] = useState(false);
+  const [dropOn, setDropOn] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
   const comp = api.model.components.find((c) => c.name === component);
@@ -59,8 +62,8 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
     setBindName(`${paramId}_load`);
   };
 
-  const submitBind = async (paramId: string, rawVal: string) => {
-    const ok = await bindParamToTopLevel(api, comp.name, paramId, bindName, rawVal);
+  const submitBind = async (paramId: string, rawVal: string, name = bindName) => {
+    const ok = await bindParamToTopLevel(api, comp.name, paramId, name, rawVal, bindPrivate);
     if (ok) {
       setBindingParam(null);
       setTick((t) => t + 1);
@@ -95,7 +98,23 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
 
             return (
               <div key={paramId}>
-                <div className="studio-param-row">
+                <div
+                  className={`studio-param-row${dropOn === paramId ? " drop-on" : ""}`}
+                  onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes(VAR_DRAG)) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "link";
+                    setDropOn(paramId);
+                  }}
+                  onDragLeave={() => setDropOn(null)}
+                  onDrop={(e) => {
+                    setDropOn(null);
+                    const name = e.dataTransfer.getData(VAR_DRAG);
+                    if (!name) return;
+                    e.preventDefault();
+                    void api.setParam(`${comp.name}.${paramId}`, name).then(() => setTick((t) => t + 1));
+                  }}
+                >
                   <span className="studio-param-id">{paramId}</span>
                   <div className="studio-param-controls">
                     {parsed.bound ? (
@@ -128,7 +147,7 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
                         <button
                           type="button"
                           className="studio-key"
-                          title={`Bind ${paramId} to a top-level Station parameter`}
+                          title={`Bind ${paramId} to a variable (or drop one here from the sheet)`}
                           onClick={() => startBind(paramId)}
                         >
                           =
@@ -138,26 +157,40 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
                   </div>
                 </div>
                 {bindingParam === paramId && (
-                  <form
-                    className="studio-bind-inline"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      void submitBind(paramId, rawVal);
-                    }}
-                  >
-                    <input
-                      className="studio-bind-input"
-                      autoFocus
-                      spellCheck={false}
-                      value={bindName}
-                      placeholder={`${paramId}_load`}
-                      aria-label={`Top-level parameter name for ${paramId}`}
-                      onChange={(e) => setBindName(e.target.value)}
-                    />
-                    <button type="submit" className="studio-key">
-                      Bind
-                    </button>
-                  </form>
+                  <div className="studio-bind-pick" role="listbox" aria-label={`Variables for ${paramId}`}>
+                    {api.model.params.length > 0 && <span className="studio-popover-label">Variables</span>}
+                    {api.model.params.map((v) => (
+                      <button key={v.id} type="button" role="option" aria-selected={false} className="studio-bind-item" onClick={() => void submitBind(paramId, rawVal, v.id)}>
+                        <span>= {v.id}</span>
+                        <span className="studio-unit">
+                          {String(v.default)} · {v.private ? "private" : "public"}
+                        </span>
+                      </button>
+                    ))}
+                    <form
+                      className="studio-bind-inline"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void submitBind(paramId, rawVal);
+                      }}
+                    >
+                      <input
+                        className="studio-bind-input"
+                        autoFocus
+                        spellCheck={false}
+                        value={bindName}
+                        placeholder={`${paramId}_load`}
+                        aria-label={`New variable name for ${paramId}`}
+                        onChange={(e) => setBindName(e.target.value)}
+                      />
+                      <button type="button" className="studio-key" aria-pressed={!bindPrivate} title="Public: a Station property. Private: only inside the model." onClick={() => setBindPrivate((v) => !v)}>
+                        {bindPrivate ? "private" : "public"}
+                      </button>
+                      <button type="submit" className="studio-key">
+                        New
+                      </button>
+                    </form>
+                  </div>
                 )}
               </div>
             );

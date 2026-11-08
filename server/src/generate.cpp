@@ -517,9 +517,10 @@ struct Spec {
 
 bool top_level(const Var& v) { return v.name.find('.') == std::string::npos && v.name.find('$') == std::string::npos; }
 
-// `components`: the model's top-level components in declaration order; probes among them.
+// `components`: the model's top-level components in declaration order; probes among them;
+// `hidden`: the protected ones (private variables: computed inside, never props).
 Spec build(const Dae& d, const std::string& model, const std::vector<std::string>& components,
-           const std::set<std::string>& probes) {
+           const std::set<std::string>& probes, const std::set<std::string>& hidden) {
   Spec s;
   s.model = model;
   s.label = short_name(model);
@@ -570,7 +571,7 @@ Spec build(const Dae& d, const std::string& model, const std::vector<std::string
   // Props: the top-level parameters with a value, then the fixed states' starts.
   std::set<std::string> prop_vars;
   for (const auto& v : d.known) {
-    if (!top_level(v) || v.variability != "parameter" || v.direction == "input") continue;
+    if (!top_level(v) || v.variability != "parameter" || v.direction == "input" || hidden.contains(v.name)) continue;
     if (v.type != "Real" && v.type != "Integer" && v.type != "Boolean") continue;
     const auto value = number(v.bind.empty() ? v.start : v.bind);
     if (!value) {
@@ -1203,13 +1204,17 @@ std::string load(Omc& omc, const fs::path& source, const std::string& model) {
                                     : "pick one with --model:" + list);
 }
 
-// The top-level components in order, and those marked annotation(__paperboat(probe = true)).
-std::set<std::string> probes(Omc& omc, const std::string& model, std::vector<std::string>& components) {
+// The top-level components in order (the protected ones also in `hidden`), and those marked
+// annotation(__paperboat(probe = true)).
+std::set<std::string> probes(Omc& omc, const std::string& model, std::vector<std::string>& components,
+                             std::set<std::string>& hidden) {
   std::set<std::string> out;
   const OmValue comps = parse_value(omc.call("getComponents(" + model + ")"));
   const OmValue notes = parse_value(omc.call("getComponentAnnotations(" + model + ")"));
-  for (const auto& c : comps.items)
+  for (const auto& c : comps.items) {
     if (c.size() > 1) components.push_back(c[1].atom);
+    if (c.size() > 3 && c[3].atom == "protected") hidden.insert(c[1].atom);
+  }
   for (std::size_t i = 0; i < comps.size() && i < notes.size(); ++i) {
     std::string text;
     for (const auto& a : notes[i].items) text += a.atom;
@@ -1292,8 +1297,9 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   if (!dump.is_list || dump.size() < 2 || dump[0].atom != "true") throw GenerateError("dumpXMLDAE failed: " + omc.errors());
   const Dae dae = parse_dae(read_file(dump[1].atom));
   std::vector<std::string> components;
-  const std::set<std::string> probed = probes(omc, r.model, components);
-  Spec spec = build(dae, r.model, components, probed);
+  std::set<std::string> hidden;
+  const std::set<std::string> probed = probes(omc, r.model, components, hidden);
+  Spec spec = build(dae, r.model, components, probed, hidden);
   const OmValue description = parse_value(omc.call("getClassComment(" + r.model + ")"));
   spec.description = trim(description.atom);
 

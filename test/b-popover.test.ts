@@ -33,7 +33,7 @@ test("popover: '=' binds a param to a top-level parameter and produces the right
   assert.equal(ok, true);
 
   assert.deepEqual(api.calls.slice(-2), [
-    { method: "setParam", args: ["R_load", "10"] },
+    { method: "addVariable", args: ["R_load", "10", false] },
     { method: "setParam", args: ["R1.R", "R_load"] },
   ]);
 

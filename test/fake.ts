@@ -16,6 +16,10 @@ export type RecordedCall = {
     | "select"
     | "setParam"
     | "addComponent"
+    | "addVariable"
+    | "setPrivate"
+    | "renameVariable"
+    | "removeVariable"
     | "connect"
     | "addEntry"
     | "removeEntry"
@@ -361,6 +365,32 @@ export function createFakeStudio(options: FakeStudioOptions = {}): FakeStudio {
           ];
         }
       }
+      notify();
+    },
+
+    async addVariable(name: string, value: string, isPrivate: boolean): Promise<void> {
+      calls.push({ method: "addVariable", args: [name, value, isPrivate] });
+      const num = Number(value);
+      model.params = [...model.params, { id: name, type: "number", default: Number.isFinite(num) ? num : 0, ...(isPrivate ? { private: true } : {}) }];
+      notify();
+    },
+
+    async setPrivate(name: string, isPrivate: boolean): Promise<void> {
+      calls.push({ method: "setPrivate", args: [name, isPrivate] });
+      model.params = model.params.map((p) => (p.id === name ? { ...p, private: isPrivate } : p));
+      notify();
+    },
+
+    async renameVariable(from: string, to: string): Promise<void> {
+      calls.push({ method: "renameVariable", args: [from, to] });
+      model.params = model.params.map((p) => (p.id === from ? { ...p, id: to } : p));
+      for (const c of model.components) for (const [k, v] of Object.entries(c.params)) if (v === from) c.params = { ...c.params, [k]: to };
+      notify();
+    },
+
+    async removeVariable(name: string): Promise<void> {
+      calls.push({ method: "removeVariable", args: [name] });
+      model.params = model.params.filter((p) => p.id !== name);
       notify();
     },
 

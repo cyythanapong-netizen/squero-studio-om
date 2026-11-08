@@ -6,12 +6,48 @@ import type { Connection, StudioModel } from "../model/types.ts";
 import * as x from "./exprs.ts";
 import { endOf, hasWire, split, wireError } from "./wires.ts";
 
-/** "R1.R" sets a part's modifier; "J" a top-level parameter's default, made first when it isn't there. */
+/** "R1.R" sets a part's modifier; "J" a top-level parameter's default, made (public) first when it isn't there. */
 export function setParamExprs(model: StudioModel, path: string, value: string): string[] {
   if (path.includes(".")) return [x.setModifier(model.name, path, value)];
-  return model.params.some((p) => p.id === path)
-    ? [x.setParameter(model.name, path, value)]
-    : [x.addPlain(model.name, "Real", path), x.setParameter(model.name, path, value)];
+  return model.params.some((p) => p.id === path) ? [x.setParameter(model.name, path, value)] : addVariableExprs(model, path, value, false);
+}
+
+/** `parameter Real name = value`, in the protected section when private. */
+export function addVariableExprs(model: StudioModel, name: string, value: string, isPrivate: boolean, cls = "Real"): string[] {
+  if (!/^[A-Za-z_]\w*$/.test(name)) throw new Error(`${name || "an empty name"} isn't a Modelica name`);
+  if (model.params.some((p) => p.id === name) || model.components.some((c) => c.name === name)) throw new Error(`${name} is taken`);
+  return [x.addPlain(model.name, cls, name), x.setVariable(model.name, name, isPrivate), x.setParameter(model.name, name, value)];
+}
+
+const reads = (name: string) => new RegExp(`(?<![\\w.])${name}(?!\\w)`, "g");
+
+/** Where a top-level parameter is read: "R1.R" for a modifier, "k" for another parameter's binding. */
+export function usesOf(model: StudioModel, name: string): string[] {
+  const re = reads(name);
+  return [
+    ...model.components.flatMap((c) => Object.entries(c.params).filter(([, v]) => v.match(re)).map(([k]) => `${c.name}.${k}`)),
+    ...model.params.filter((p) => p.id !== name && typeof p.default === "string" && p.default.match(re)).map((p) => p.id),
+  ];
+}
+
+/** omc's renameComponent crashes, so: the new one, every reader rewritten, the old one gone. */
+export function renameVariableExprs(model: StudioModel, from: string, to: string): string[] {
+  const p = model.params.find((q) => q.id === from);
+  if (!p) throw new Error(`no variable ${from}`);
+  if (from === to) return [];
+  const re = reads(from);
+  const out = addVariableExprs(model, to, String(p.default), !!p.private, p.modelica ?? "Real");
+  for (const c of model.components)
+    for (const [k, v] of Object.entries(c.params)) if (v.match(re)) out.push(x.setModifier(model.name, `${c.name}.${k}`, v.replace(re, to)));
+  for (const q of model.params)
+    if (q.id !== from && typeof q.default === "string" && q.default.match(re)) out.push(x.setParameter(model.name, q.id, q.default.replace(re, to)));
+  return [...out, x.deleteComponent(model.name, from)];
+}
+
+export function removeVariableExprs(model: StudioModel, name: string): string[] {
+  const uses = usesOf(model, name);
+  if (uses.length) throw new Error(`${uses.join(", ")} ${uses.length > 1 ? "read" : "reads"} ${name}: unbind ${uses.length > 1 ? "them" : "it"} first`);
+  return [x.deleteComponent(model.name, name)];
 }
 
 /** One wire a-b: refused in words (the §4 rules, a wire that is already there), or the one expression. */

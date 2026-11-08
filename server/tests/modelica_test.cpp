@@ -101,8 +101,10 @@ TEST_CASE("generate picks the ODE path when it can and says why when it can't", 
   Modelica.Blocks.Interfaces.RealOutput y(unit = "m");
   Real x(start = 1, fixed = true, unit = "m");
   Real rate = k * x annotation(__paperboat(probe = true));
+protected
+  parameter Real g = 1 "a private variable: computed inside, not a prop";
 equation
-  der(x) = u - k * x;
+  der(x) = u - k * g * x;
   y = x;
 end Decay;
 )";
@@ -125,6 +127,8 @@ end Bounce;
   CHECK(domain.find("class Decay final : public paperboat::Model") != std::string::npos);
   CHECK(domain.find(R"({.id = "k", .default_value = 2.0, .unit = "1/s"})") != std::string::npos);
   CHECK(domain.find(R"({.id = "x_start", .default_value = 1.0, .unit = "m"})") != std::string::npos);
+  CHECK(domain.find(R"({.id = "g")") == std::string::npos);
+  CHECK(domain.find("p_.g = 1.0;") != std::string::npos);
   CHECK(domain.find(R"(.outputs = {{"y", "signal", "m"}, {"rate", "signal", ""}})") != std::string::npos);
   CHECK(domain.find(".view = {.icon = nlohmann::json::parse(") != std::string::npos);
   CHECK(domain.find("registry.add_connector(\"decay\", \"RealInput\"") != std::string::npos);

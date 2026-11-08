@@ -80,10 +80,12 @@ export async function commitParamValue(
   await api.setParam(`${componentName}.${paramId}`, String(value));
 }
 
+/** A variable dragged from the sheet onto a parameter field. */
+export const VAR_DRAG = "application/x-squero-variable";
+
 /**
- * Binds `componentName.paramId` to a top-level Station property `topParamName` (`R = R_load`):
- * 1. Sets/creates the top-level parameter default via `setParam(topParamName, defaultStr)`.
- * 2. Sets the component modifier via `setParam("R1.R", topParamName)`.
+ * Binds `componentName.paramId` to the top-level variable `topParamName` (`R = R_load`): the
+ * variable is made first, with the field's value, when it isn't there (public = a Station prop).
  */
 export async function bindParamToTopLevel(
   api: StudioApi,
@@ -91,11 +93,12 @@ export async function bindParamToTopLevel(
   paramId: string,
   topParamName: string,
   currentRawValue: string,
+  isPrivate = false,
 ): Promise<boolean> {
   const cleanName = topParamName.trim();
   if (!/^[A-Za-z_]\w*$/.test(cleanName)) return false;
-  const numValue = resolveParamNumber(paramId, currentRawValue, api.model);
-  await api.setParam(cleanName, String(numValue));
+  if (!api.model.params.some((p) => p.id === cleanName))
+    await api.addVariable(cleanName, String(resolveParamNumber(paramId, currentRawValue, api.model)), isPrivate);
   await api.setParam(`${componentName}.${paramId}`, cleanName);
   return true;
 }
