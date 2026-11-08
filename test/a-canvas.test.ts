@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Ground, Inertia, Resistor } from "@paperboat/shared/fixtures/icons";
 import { iconValid } from "@paperboat/shared/icon";
-import { centreFor, plateOf, squareUp, topLeft } from "../src/canvas/geometry.ts";
+import { centreFor, plateOf, topLeft } from "../src/canvas/geometry.ts";
 import { rotateIcon } from "../src/canvas/rotate.ts";
 import { children, flat, search } from "../src/library/classes.ts";
 import type { ComponentInst } from "../src/model/types.ts";
@@ -45,11 +45,6 @@ test("a placement is the plate's centre; the node sits half a plate up and left"
   assert.deepEqual(topLeft(part), [136, 72]);
   assert.deepEqual(centreFor(part, { x: 136, y: 72 }), [200, 100]);
   assert.deepEqual(plateOf({ ...part, placement: { x: 0, y: 0, rotation: 90 } }), { w: 64, h: 112 });
-});
-
-test("a stored bend is squared up with the port it leaves", () => {
-  assert.deepEqual(squareUp([100, 103], [[140, 100], [140, 200]], [200, 197]), [[100, 103], [140, 103], [140, 197], [200, 197]]);
-  assert.deepEqual(squareUp([0, 0], [], [10, 10]), [[0, 0], [10, 10]]);
 });
 
 test("search finds a part by its name first, then its path", () => {

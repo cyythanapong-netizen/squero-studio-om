@@ -6,8 +6,8 @@ import {
   Background,
   BaseEdge,
   ConnectionMode,
-  getSmoothStepPath,
   MarkerType,
+  Position,
   ReactFlow,
   applyNodeChanges,
   useReactFlow,
@@ -17,21 +17,22 @@ import {
   type NodeChange,
   type NodeProps,
 } from "@xyflow/react";
-import { netWireType, roundedPolyline, type BlockDef, type Connectors, type IconDef } from "@paperboat/shared";
-import { CompactBlock, SNAP, WireDragContext, type WireDrag } from "@paperboat/shared/components";
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { netWireType, orthoPoints, roundedPolyline, squareUp, type BlockDef, type Connectors, type IconDef, type WirePoint } from "@paperboat/shared";
+import { CompactBlock, SNAP, useWireBends, WireDragContext, type WireDrag } from "@paperboat/shared/components";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { DRAG_TYPE } from "../library/Library.tsx";
 import type { ComponentInst, Connection, StudioApi } from "../model/types.ts";
 import { snap } from "../store/exprs.ts";
 import { freeSpot } from "../store/plans.ts";
 import type { Actions } from "../store/index.tsx";
 import { endOf, pathOf, split, wireError } from "../store/wires.ts";
-import { centreFor, placedIcon, squareUp, topLeft } from "./geometry.ts";
+import { centreFor, placedIcon, topLeft } from "./geometry.ts";
 import { QuickAdd } from "./QuickAdd.tsx";
 
 type PartData = { part: ComponentInst; icon: IconDef; connectors: Connectors; wires: Record<string, number> };
 type PartNode = Node<PartData, "part">;
-type WireData = { points?: [number, number][]; kind: string; causal: boolean; missing: boolean };
+/** `points`: the bends in drawn order (source end first); `wire`: the connection as the model has it. */
+type WireData = { points?: WirePoint[]; wire: Connection; flipped: boolean; kind: string; causal: boolean; missing: boolean };
 type WireEdge = Edge<WireData, "wire">;
 
 const noop = () => undefined;
@@ -42,13 +43,23 @@ function PartView({ id, data, selected }: NodeProps<PartNode>) {
   return <CompactBlock id={id} def={def} params={part.params} selected={selected} onExpand={noop} popover={null} connectors={connectors} wires={wires} />;
 }
 
+/** Save a wire's dragged bends (in the model's a-to-b order). */
+const SetBends = createContext<(wire: Connection, bends: WirePoint[]) => Promise<void>>(() => Promise.resolve());
+
+const sideOf = (p: Position) => (p === Position.Left ? "left" : p === Position.Top ? "top" : p === Position.Bottom ? "bottom" : "right");
+
 function WireView({ id, data, selected, markerEnd, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition }: EdgeProps<WireEdge>) {
-  const bends = data?.points;
-  const path = bends ? roundedPolyline(squareUp([sourceX, sourceY], bends, [targetX, targetY]), 8) : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 8 })[0];
+  const setBends = useContext(SetBends);
+  const from: WirePoint = [sourceX, sourceY];
+  const to: WirePoint = [targetX, targetY];
+  const routed = data?.points ? squareUp(from, data.points, to) : orthoPoints(from, sideOf(sourcePosition), to, sideOf(targetPosition));
+  const { points, handles } = useWireBends(routed, !!selected && !!data, (bends) => setBends(data!.wire, data!.flipped ? bends.reverse() : bends));
+  const path = roundedPolyline(points, 8);
   return (
     <>
       <path d={path} className="wire-casing" />
       <BaseEdge id={id} path={path} markerEnd={markerEnd} interactionWidth={16} className={`wire-${data?.kind ?? "signal"}${data?.missing ? " wire-missing" : ""}${selected ? " lit" : ""}`} />
+      {handles}
     </>
   );
 }
@@ -100,7 +111,8 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
       let [a, b] = [c.a, c.b];
       const ea = endOf(model, a);
       const eb = endOf(model, b);
-      if (ea?.kind === "input" && eb?.kind === "output") [a, b] = [b, a]; // a causal wire is drawn from its output
+      const flipped = ea?.kind === "input" && eb?.kind === "output";
+      if (flipped) [a, b] = [b, a]; // a causal wire is drawn from its output
       const pa = split(a);
       const pb = split(b);
       const kind = ea?.kind === "acausal" ? netWireType(model.connectors[ea.cls]) : "signal";
@@ -113,7 +125,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
         targetHandle: pb.port,
         selected: wire?.a === c.a && wire.b === c.b,
         markerEnd: kind === "signal" ? { type: MarkerType.ArrowClosed, width: 14, height: 14 } : undefined,
-        data: { ...(c.points ? { points: c.points } : {}), kind, causal: kind === "signal", missing: !ea || !eb },
+        data: { ...(c.points ? { points: flipped ? [...c.points].reverse() : c.points } : {}), wire: c, flipped, kind, causal: kind === "signal", missing: !ea || !eb },
       });
     }
     return out;
@@ -180,6 +192,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
 
   return (
     <div ref={root} className="canvas" tabIndex={0} onDragOver={(e) => e.dataTransfer.types.includes(DRAG_TYPE) && e.preventDefault()} onDrop={onDrop} data-testid="canvas">
+      <SetBends.Provider value={actions.bend}>
       <WireDragContext.Provider value={drag}>
         <ReactFlow<PartNode, WireEdge>
           nodes={nodes}
@@ -226,6 +239,7 @@ export function Canvas({ api, actions, classes, onOpen }: Props) {
           <Background />
         </ReactFlow>
       </WireDragContext.Provider>
+      </SetBends.Provider>
       {actions.notice && (
         <p className="notice" role="status">
           {actions.notice}
