@@ -118,6 +118,8 @@ export type PortAction = {
   portId: string;
   portClass: string;
   kind: "input" | "output";
+  /** Only a signal port takes + Input / + Probe; a pin needs a sensor first. */
+  causal: boolean;
   buttonLabel: "+ Input" | "+ Probe";
   unit?: string;
   existingEntry?: string;
@@ -131,6 +133,7 @@ export function portActionFor(
 ): PortAction {
   const conn = connectors[port.class];
   const isCausalInput = conn?.kind === "input" || /Input$/.test(port.class);
+  const causal = isCausalInput || conn?.kind === "output" || /Output$/.test(port.class);
   const kind: "input" | "output" = isCausalInput ? "input" : "output";
   const buttonLabel = isCausalInput ? "+ Input" : "+ Probe";
   const unit = conn?.potential?.[0]?.unit ?? conn?.flow?.[0]?.unit;
@@ -140,6 +143,7 @@ export function portActionFor(
     portId: port.id,
     portClass: port.class,
     kind,
+    causal,
     buttonLabel,
     unit,
     existingEntry: existing,

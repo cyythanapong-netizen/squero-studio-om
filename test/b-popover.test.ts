@@ -55,7 +55,7 @@ test("popover: '=' binds a param to a top-level parameter and produces the right
   assert.equal(r1.params.R, "10");
 });
 
-test("popover: port actions map causal inputs to + Input and physical/output ports to + Probe", async () => {
+test("popover: port actions map causal inputs to + Input; a physical pin gets no button (a probe there is a type error)", async () => {
   const api = createFakeStudio();
   const r1 = api.model.components.find((c) => c.name === "R1")!;
   const pPort = r1.ports.find((p) => p.id === "p")!;
@@ -65,14 +65,16 @@ test("popover: port actions map causal inputs to + Input and physical/output por
   assert.equal(pAction.kind, "output");
   assert.equal(pAction.buttonLabel, "+ Probe");
   assert.equal(pAction.unit, "V");
+  assert.equal(pAction.causal, false);
 
   const uAction = portActionFor(r1, uPort, api.model.connectors, []);
   assert.equal(uAction.kind, "input");
   assert.equal(uAction.buttonLabel, "+ Input");
+  assert.equal(uAction.causal, true);
 
-  await exposeComponentPort(api, r1, pPort);
+  await exposeComponentPort(api, r1, uPort);
   assert.deepEqual(api.calls.at(-1), {
     method: "addEntry",
-    args: ["output", "R1.p"],
+    args: ["input", "R1.u"],
   });
 });
