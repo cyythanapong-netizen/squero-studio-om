@@ -234,7 +234,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         />
         {api && model ? (
           <>
-            <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model))} />
+            <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
             <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />
             {side && (
               <aside className={`side focus-${focus}`}>

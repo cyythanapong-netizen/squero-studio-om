@@ -13,9 +13,11 @@ import {
 test("library: domainOf maps Modelica class paths to domain categories", () => {
   assert.ok(STANDARD_CATEGORIES.includes("Electrical"));
   assert.ok(STANDARD_CATEGORIES.includes("Mechanics"));
+  assert.ok(STANDARD_CATEGORIES.includes("Fluid"));
   assert.equal(domainOf("Modelica.Electrical.Analog.Basic.Resistor"), "Electrical");
   assert.equal(domainOf("Modelica.Mechanics.Rotational.Components.Inertia"), "Mechanics");
   assert.equal(domainOf("Modelica.Thermal.HeatTransfer.Components.HeatCapacitor"), "Thermal");
+  assert.equal(domainOf("Modelica.Fluid.Pipes.StaticPipe"), "Fluid");
   assert.equal(domainOf("Modelica.Blocks.Continuous.Integrator"), "Blocks");
   assert.equal(domainOf("Modelica.Blocks.Math.Add"), "Math");
   assert.equal(domainOf("Modelica.Blocks.Sources.Sine"), "Sources");
@@ -103,4 +105,9 @@ test("library: searchComponents respects category filter", () => {
   const filtered = searchComponents(items, "source", "Electrical");
   assert.ok(filtered.some((it) => it.name === "ConstantVoltage"));
   assert.ok(!filtered.some((it) => it.category === "Mechanics"));
+
+  const fluidOnly = searchComponents(items, "", "Fluid");
+  assert.ok(fluidOnly.length > 0);
+  assert.ok(fluidOnly.some((it) => it.name === "StaticPipe"));
+  assert.ok(fluidOnly.some((it) => it.name === "ValveLinear"));
 });

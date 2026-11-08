@@ -188,6 +188,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 
 /* Category Tabs */
 .lib-tabs {
+  position: relative;
   display: flex;
   gap: 3px;
   padding: 6px var(--space-2);
@@ -196,6 +197,20 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
   overflow-x: auto;
   white-space: nowrap;
   scrollbar-width: thin;
+}
+
+.lib-tabs .glide-bracket {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  opacity: 0;
+  white-space: pre;
+}
+
+body.dragging-card .library {
+  opacity: 0.45;
+  transition: opacity 0.15s;
 }
 
 .lib-tab {

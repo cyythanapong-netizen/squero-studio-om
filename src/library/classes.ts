@@ -28,6 +28,7 @@ export const STANDARD_CATEGORIES = [
   "Electrical",
   "Mechanics",
   "Thermal",
+  "Fluid",
   "Blocks",
   "Math",
   "Sources",
@@ -136,6 +137,25 @@ export const KNOWN_METADATA: Record<string, { comment: string; ports: ComponentP
       { id: "port_a", class: "HeatPort_a", kind: "acausal" },
       { id: "port_b", class: "HeatPort_b", kind: "acausal" },
     ],
+  },
+  "Modelica.Fluid.Pipes.StaticPipe": {
+    comment: "Basic pipe component for single-phase incompressible fluid",
+    ports: [
+      { id: "port_a", class: "FluidPort_a", kind: "acausal" },
+      { id: "port_b", class: "FluidPort_b", kind: "acausal" },
+    ],
+  },
+  "Modelica.Fluid.Valves.ValveLinear": {
+    comment: "Valve with linear pressure drop characteristic",
+    ports: [
+      { id: "port_a", class: "FluidPort_a", kind: "acausal" },
+      { id: "port_b", class: "FluidPort_b", kind: "acausal" },
+      { id: "opening", class: "RealInput", kind: "input" },
+    ],
+  },
+  "Modelica.Fluid.Sources.MassFlowSource_T": {
+    comment: "Ideal mass flow source with fixed temperature",
+    ports: [{ id: "ports", class: "FluidPort_b", kind: "acausal" }],
   },
   "Modelica.Blocks.Continuous.Integrator": {
     comment: "Continuous-time integrator",
