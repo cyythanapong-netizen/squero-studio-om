@@ -1526,6 +1526,19 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   else if (o.dry || !fs::exists(r.out / mo) || !fs::equivalent(r.out / mo, o.source)) write(r, mo, read_file(o.source));
   write(r, "backend.toml", backend_toml(spec, port), true);
   write(r, "descriptor.toml", descriptor(spec, scene), true);
+  // A kept descriptor still follows the model gaining or losing shapes: swap the generated
+  // [station] lines, leaving the user's own edits alone.
+  if (!o.dry && fs::exists(r.out / "descriptor.toml")) {
+    const std::string graph = "# A model has no geometry of its own: the Station shows its objects as a graph.\n[station]\nview = \"graph\"\n";
+    const std::string shown = "# Its MultiBody shapes draw in the Station's 3D scene.\n[station]\nview = \"scene\"\n";
+    std::string text = read_file(r.out / "descriptor.toml");
+    const std::string& from = scene ? graph : shown;
+    if (const auto at = text.find(from); at != std::string::npos) {
+      text.replace(at, from.size(), scene ? shown : graph);
+      std::ofstream(r.out / "descriptor.toml", std::ios::binary) << text;
+      r.notices.push_back(std::string("descriptor.toml: the Station view is now ") + (scene ? "the 3D scene" : "a graph"));
+    }
+  }
   write(r, "README.md", readme(spec, r), true);
   progress("generate", 1);
   return r;
