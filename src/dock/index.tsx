@@ -67,12 +67,13 @@ export function StudioDock() {
     if (!isBalanced || busy) return;
     setBusy(true);
     setOutcome(null);
-    if (mode === "serve" && running) await runBackendExport(api, "stop", () => {}, running.port);
+    const again = mode === "serve" ? running?.port : undefined; // a restart keeps its port
+    if (again) await runBackendExport(api, "stop", () => {}, again);
     setRunning(null);
     setProgress({ stage: "check", fraction: 0 });
     const res = await runBackendExport(api, mode, (p) => {
       setProgress({ ...p });
-    });
+    }, again);
     setProgress(null);
     setOutcome(res);
     if (mode === "serve" && res.ok && res.result.port) setRunning({ port: res.result.port, up: false });

@@ -22,7 +22,8 @@ import {
   tabIsEmpty,
   type DashboardLayout,
 } from "@paperboat/shared";
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { createPortal } from "react-dom";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { Dock, NumberField } from "@paperboat/shared/components";
@@ -179,6 +180,9 @@ export function Simulate({
   const a = arrangeScopes(layout);
   const page = a.tabs.length ? (a.tabs.includes(tab) ? tab : a.tabs[0]) : "";
   const gridRef = useRef<HTMLDivElement>(null);
+  // The run dock floats at the bottom middle of the canvas, as in Paperboat: portal it there.
+  const [canvas, setCanvas] = useState<Element | null>(null);
+  useLayoutEffect(() => setCanvas(document.querySelector(".studio > .canvas")), []);
 
   const edit = (next: DashboardLayout) => {
     setLayout(next);
@@ -356,6 +360,8 @@ export function Simulate({
             );
           })}
       </div>
+      {canvas &&
+        createPortal(
       <Dock
         canRun={phase.state !== "running"}
         whyNot="simulating"
@@ -371,7 +377,9 @@ export function Simulate({
         }
         onRun={() => void go()}
         onCancel={cancel}
-      />
+      />,
+          canvas,
+        )}
     </section>
   );
 }

@@ -334,7 +334,7 @@ json serve_stop(int port) {
 }
 
 // Export without a folder of the user's, into <tmp>/ssom_<model>: mode "ppk" packs it and returns
-// the archive (base64); "serve" starts it on a free port and returns at once (poll "status": the
+// the archive (base64); "serve" starts it on the given port if free, else a free one and returns at once (poll "status": the
 // first start builds the engine, minutes); "stop" ends one.
 json op_export(Omc& omc, const json& in, const Session& session) {
   const std::string mode = in.value("mode", "ppk");
@@ -360,7 +360,9 @@ json op_export(Omc& omc, const json& in, const Session& session) {
     out["file"] = "ssom_" + stem + ".ppk";
     out["ppk"] = base64(std::string(std::istreambuf_iterator<char>(f), {}));
   } else {
-    const int port = free_port();
+    // a restart asks for the port it just left, so a paperboat tab on it reconnects
+    const int want = in.value("port", 0);
+    const int port = want > 0 && !listening(want) ? want : free_port();
     const pid_t pid = spawn_paperboat({"start", dir.string(), "--port", std::to_string(port)}, log);
     {
       std::lock_guard lock(served_mutex);
