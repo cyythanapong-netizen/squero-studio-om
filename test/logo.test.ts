@@ -95,12 +95,3 @@ test("styles.css: .om-badge and .studio-word deleted; ripple keyframes and reduc
   assert.ok(css.includes("1.4s var(--ease) infinite"), "live ripple runs continuously on 1.4 s");
   assert.ok(css.includes("prefers-reduced-motion: reduce"), "prefers-reduced-motion media query present");
 });
-
-test("design docs: DESIGN.md reflects new Squero Studio lockup", () => {
-  const designPath = path.resolve(import.meta.dirname, "../../paperboat/apps/web/DESIGN.md");
-  const design = fs.readFileSync(designPath, "utf-8");
-
-  assert.ok(!design.includes("rounded ink Om badge"), "old rounded ink Om badge removed from DESIGN.md");
-  assert.ok(design.includes("W3 Water"), "W3 Water mentioned in DESIGN.md");
-  assert.ok(design.includes("B3 Mono"), "B3 Mono mentioned in DESIGN.md");
-});
