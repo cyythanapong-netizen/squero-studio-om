@@ -234,7 +234,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             {side && (
               <aside className="side">
                 <Split model={model} actions={actions} view={view} onView={setView} />
-                <Simulate actions={actions} theme={theme} />
+                <Simulate actions={actions} model={model} theme={theme} />
               </aside>
             )}
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}

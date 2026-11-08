@@ -555,6 +555,32 @@ end Decay;
   CHECK(x.back().get<double>() == Catch::Approx(std::exp(-2.0)).epsilon(0.01));  // x' = -2x
   CHECK(sim["result"]["series"].size() == 1);
 
+  // A top-level input is driven by its stimulus (0 unless given); names stay the model's own.
+  std::ofstream(dir / "Lag.mo") << R"(model Lag
+  Modelica.Blocks.Interfaces.RealInput u;
+  Modelica.Blocks.Interfaces.RealOutput y;
+  Real x(start = 0, fixed = true);
+equation
+  der(x) = u - x;
+  y = x;
+end Lag;
+)";
+  REQUIRE(op(omc, {{"id", 6}, {"op", "omc"}, {"expr", "loadFile(" + mo::quote((dir / "Lag.mo").string()) + ")"}}, session)["ok"] == true);
+  const json lag = op(omc, {{"id", 7}, {"op", "simulate"}, {"model", "Lag"}, {"stop", 2.0}, {"vars", {"u", "y"}},
+                            {"inputs", {{"u", {{"kind", "step"}, {"k", 3.0}, {"t0", 1.0}}}}}}, session);
+  INFO(lag.dump());
+  REQUIRE(lag["ok"] == true);
+  const auto& u = lag["result"]["series"]["u"];
+  REQUIRE_FALSE(u.empty());
+  CHECK(u.front().get<double>() == 0.0);
+  CHECK(u.back().get<double>() == Catch::Approx(3.0));
+  CHECK(lag["result"]["series"]["y"].back().get<double>() == Catch::Approx(3.0 * (1 - std::exp(-1.0))).epsilon(0.01));
+  CHECK(op(omc, {{"id", 8}, {"op", "omc"}, {"expr", "getClassNames()"}}, session)["result"].get<std::string>().find("SqueroSimHarness") ==
+        std::string::npos);  // the harness is gone
+  CHECK(op(omc, {{"id", 9}, {"op", "simulate"}, {"model", "Lag"}, {"stop", 1.0}, {"inputs", {{"u", {{"kind", "noise"}}}}}}, session)["error"]
+            .get<std::string>()
+            .find("constant, step, ramp or sine") != std::string::npos);
+
   fs::remove_all(dir);
 }
 

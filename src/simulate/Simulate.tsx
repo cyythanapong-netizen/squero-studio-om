@@ -5,7 +5,9 @@
 import { useEffect, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import type { Actions } from "../store/index.tsx";
+import { NumberField } from "@paperboat/shared/components";
+import type { StudioModel } from "../model/types.ts";
+import type { Actions, Stimulus } from "../store/index.tsx";
 
 type Run = Awaited<ReturnType<Actions["simulate"]>>;
 
@@ -15,6 +17,53 @@ export function defaultPicks(names: string[], limit = 3): string[] {
     .filter((n) => !n.startsWith("der("))
     .sort((a, b) => a.split(".").length - b.split(".").length || a.localeCompare(b))
     .slice(0, limit);
+}
+
+/** Why the model won't balance, in words: a top-level output wired to nothing has no equation. */
+export function outputWarnings(model: StudioModel): string[] {
+  return model.entries
+    .filter((e) => e.kind === "output" && !e.target)
+    .map((e) => `${e.name} isn't wired to anything: an output needs an equation, so the model is unbalanced. Wire it to a port or remove it.`);
+}
+
+const KINDS: Stimulus["kind"][] = ["constant", "step", "ramp", "sine"];
+const K_LABEL: Record<Stimulus["kind"], string> = { constant: "value", step: "height", ramp: "slope", sine: "amp" };
+
+/** One row per top-level input: what drives it in this local run (nothing is exported). */
+function Stimuli({ inputs, value, onChange }: { inputs: string[]; value: Record<string, Stimulus>; onChange: (v: Record<string, Stimulus>) => void }) {
+  if (!inputs.length) return null;
+  return (
+    <div className="stimuli" role="group" aria-label="Input stimuli">
+      {inputs.map((name) => {
+        const s = value[name] ?? { kind: "constant", k: 0 };
+        const set = (patch: Partial<Stimulus>) => onChange({ ...value, [name]: { ...s, ...patch } });
+        return (
+          <div key={name} className="stimulus">
+            <span className="lbl mono">{name}</span>
+            <select className="well" aria-label={`Stimulus for ${name}`} value={s.kind} onChange={(e) => set({ kind: e.target.value as Stimulus["kind"] })}>
+              {KINDS.map((k) => (
+                <option key={k}>{k}</option>
+              ))}
+            </select>
+            <span className="lbl">{K_LABEL[s.kind]}</span>
+            <NumberField className="well" aria-label={`${name} ${K_LABEL[s.kind]}`} value={s.k} onChange={(k) => set({ k })} />
+            {(s.kind === "step" || s.kind === "ramp") && (
+              <>
+                <span className="lbl">at t</span>
+                <NumberField className="well" aria-label={`${name} start time`} value={s.t0 ?? 0} onChange={(t0) => set({ t0 })} />
+              </>
+            )}
+            {s.kind === "sine" && (
+              <>
+                <span className="lbl">Hz</span>
+                <NumberField className="well" aria-label={`${name} frequency`} value={s.f ?? 1} onChange={(f) => set({ f })} />
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888";
@@ -48,8 +97,11 @@ function Plot({ run, picks, theme }: { run: Run; picks: string[]; theme: string 
   return <div className="plot" ref={host} role="img" aria-label={`Plot of ${picks.join(", ")}`} />;
 }
 
-export function Simulate({ actions, theme }: { actions: Actions; theme: string }) {
+export function Simulate({ actions, model, theme }: { actions: Actions; model: StudioModel; theme: string }) {
   const [stop, setStop] = useState("1");
+  const [stimuli, setStimuli] = useState<Record<string, Stimulus>>({});
+  const inputs = model.entries.filter((e) => e.kind === "input").map((e) => e.name);
+  const warnings = outputWarnings(model);
   const [run, setRun] = useState<Run | null>(null);
   const [picks, setPicks] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -61,7 +113,7 @@ export function Simulate({ actions, theme }: { actions: Actions; theme: string }
     setBusy(true);
     setError("");
     try {
-      const result = await actions.simulate(t);
+      const result = await actions.simulate(t, Object.fromEntries(Object.entries(stimuli).filter(([n]) => inputs.includes(n))));
       setRun(result);
       setPicks((p) => (p.filter((n) => result.names.includes(n)).length ? p.filter((n) => result.names.includes(n)) : defaultPicks(result.names)));
     } catch (e) {
@@ -80,6 +132,12 @@ export function Simulate({ actions, theme }: { actions: Actions; theme: string }
           {busy ? "simulating…" : "Simulate"}
         </button>
       </header>
+      <Stimuli inputs={inputs} value={stimuli} onChange={setStimuli} />
+      {warnings.map((w) => (
+        <p key={w} className="warning" role="status">
+          {w}
+        </p>
+      ))}
       {error && <p className="error" role="alert">{error}</p>}
       {run && (
         <>
