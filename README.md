@@ -5,7 +5,9 @@ look: a library tree, a canvas of components and connectors, a split view of `.m
 generated C++, and a dock that checks the model's balance and exports a Paperboat backend
 (Download `.ppk`, or Start it as `ssom_<model>` on a free port and Stop it). Both generate into
 `<tmp>/ssom_<model>` and run `paperboat pack`/`start` there: the sibling `../paperboat/bin/paperboat`,
-else `$PAPERBOAT_BIN` or `paperboat` on PATH. The first export of a model builds the engine (minutes). Every edit goes through `omc`, so the `.mo` stays OMEdit-compatible.
+else `$PAPERBOAT_BIN` or `paperboat` on PATH. The first export of a model builds the engine (minutes).
+In the backend, the model's parameters (e.g. a `parameter Real C1F`) are props of its Station
+object, edited on the Station page; the Flow block carries only the inputs and outputs. Every edit goes through `omc`, so the `.mo` stays OMEdit-compatible.
 
 This repo contains both the React web application (`src/`) and the native C++ server & tools (`server/`).
 The server provides `squero/0`, the `omc` bridge, the `.mo` importer (`extends` resolver, `Icon(graphics)` and
