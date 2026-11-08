@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useReactFlow, useViewport } from "@xyflow/react";
 import { NumberField } from "@paperboat/shared/components";
 import { useStudio } from "../model/types.ts";
 import {
@@ -6,6 +7,7 @@ import {
   commitParamValue,
   exposeComponentPort,
   paramUnit,
+  popoverSpot,
   parseParamBinding,
   portActionFor,
   resolveParamNumber,
@@ -26,6 +28,27 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
   const [, setTick] = useState(0);
 
   const comp = api.model.components.find((c) => c.name === component);
+
+  // Sit beside the block on screen; follows pan and zoom (the viewport changes re-run this).
+  const flow = useReactFlow();
+  const viewport = useViewport();
+  const [spot, setSpot] = useState<{ left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    const host = el?.offsetParent as HTMLElement | null;
+    const node = flow.getInternalNode(component);
+    if (!el || !host || !node) return;
+    const at = flow.flowToScreenPosition(node.internals.positionAbsolute);
+    const r = host.getBoundingClientRect();
+    const z = viewport.zoom;
+    setSpot(
+      popoverSpot(
+        { x: at.x - r.left, y: at.y - r.top, w: (node.measured.width ?? 0) * z, h: (node.measured.height ?? 0) * z },
+        { w: el.offsetWidth, h: el.offsetHeight },
+        { w: host.clientWidth, h: host.clientHeight },
+      ),
+    );
+  }, [flow, component, viewport.x, viewport.y, viewport.zoom, comp?.placement.x, comp?.placement.y, bindingParam]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -55,8 +78,6 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
   const shortClass = comp.class.split(".").pop() ?? comp.class;
   // every numeric parameter of the class, set or not; a set one (a modifier) shows over the default
   const paramEntries = Object.entries({ ...comp.defaults, ...comp.params });
-  const left = Math.max(16, comp.placement.x + 76);
-  const top = Math.max(56, comp.placement.y);
 
   const startBind = (paramId: string) => {
     setBindingParam(paramId);
@@ -77,7 +98,7 @@ export function ComponentPopover({ component, onClose }: ComponentPopoverProps) 
       className="studio-popover"
       role="dialog"
       aria-label={`${comp.name} parameters`}
-      style={{ left: `${left}px`, top: `${top}px` }}
+      style={{ left: spot?.left ?? 0, top: spot?.top ?? 0, visibility: spot ? "visible" : "hidden" }}
       data-own-keys
     >
       <header className="studio-popover-head">
