@@ -252,7 +252,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               </aside>
             )}
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
-            <InterfaceSheet open={sheet} onClose={() => setSheet(false)} />
+            <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} />
             <div className="dock-slot">
               <StudioDock />
             </div>

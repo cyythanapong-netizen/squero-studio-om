@@ -56,8 +56,8 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .react-flow__attribution a { color: var(--text-muted) !important; }
 
 /* ---- Studio ------------------------------------------------------------------------ */
-.studio { height: 100%; display: grid; gap: var(--gutter); padding: var(--gutter); grid-template-columns: auto minmax(0, 1fr); grid-template-rows: var(--bar-height) minmax(0, 1fr) auto; grid-template-areas: "bar bar" "library canvas" "dock dock"; background: var(--surface-ground); }
-.studio.with-side { grid-template-columns: auto minmax(0, 1fr) minmax(320px, 440px); grid-template-areas: "bar bar bar" "library canvas side" "dock dock dock"; }
+.studio { height: 100%; display: grid; gap: var(--gutter); padding: var(--gutter); grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: var(--bar-height) minmax(0, 1fr) auto; grid-template-areas: "bar bar bar" "library canvas sheet" "dock dock dock"; background: var(--surface-ground); }
+.studio.with-side { grid-template-columns: auto minmax(0, 1fr) minmax(320px, 440px) auto; grid-template-areas: "bar bar bar bar" "library canvas side sheet" "dock dock dock dock"; }
 .studio > .bar { grid-area: bar; }
 .studio > .library { grid-area: library; }
 .studio > .canvas { grid-area: canvas; }

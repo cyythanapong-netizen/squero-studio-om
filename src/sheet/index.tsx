@@ -47,7 +47,7 @@ import {
 } from "./look.ts";
 import "./sheet.css";
 
-export type InterfaceSheetProps = { open: boolean; onClose: () => void };
+export type InterfaceSheetProps = { open: boolean; onOpen: () => void; onClose: () => void };
 
 type SheetTab = "interface" | "look";
 
@@ -187,7 +187,7 @@ function VariableRow({ p, onError }: { p: Param; onError: (words: string) => voi
   );
 }
 
-export function InterfaceSheet({ open, onClose }: InterfaceSheetProps) {
+export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
   const api = useStudio();
   const [tab, setTab] = useState<SheetTab>(initialTabFromUrl);
   const [draftIcon, setDraftIcon] = useState<IconDef>(() =>
@@ -311,11 +311,18 @@ export function InterfaceSheet({ open, onClose }: InterfaceSheetProps) {
     <aside
       className={`studio-sheet${open ? " open" : ""}`}
       aria-label="Interface and Look"
-      aria-hidden={!open}
-      inert={!open}
       data-own-keys
     >
-      <header className="studio-sheet-head">
+      {/* Folded: a standing tab at the right edge, as Paperboat's Variables sheet. */}
+      <button type="button" className="studio-sheet-tab" hidden={open} onClick={onOpen} title="Open the Variables (Alt+V)" aria-expanded={false}>
+        <svg viewBox="0 0 14 14" aria-hidden="true">
+          <path d="M9 3L5 7l4 4" />
+        </svg>
+        <span className="studio-sheet-glyph" aria-hidden="true">=</span>
+        <span className="studio-sheet-tab-name">Variables</span>
+        <span className="lbl">{api.model.params.filter((p) => !p.private).length}</span>
+      </button>
+      <header className="studio-sheet-head" hidden={!open}>
         <h2 className="studio-sheet-title">{shortModel}</h2>
         <Switch<SheetTab>
           label="Tab"
@@ -326,12 +333,14 @@ export function InterfaceSheet({ open, onClose }: InterfaceSheetProps) {
             { value: "look", label: "look", hint: "Custom block icon and port placement" },
           ]}
         />
-        <button type="button" className="studio-look-key" title="Close (Alt+V or Esc)" onClick={onClose}>
-          Close
+        <button type="button" className="studio-look-key studio-sheet-fold" title="Fold (Alt+V or Esc)" aria-label="Fold the sheet" aria-expanded onClick={onClose}>
+          <svg viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M5 3l4 4-4 4" />
+          </svg>
         </button>
       </header>
 
-      <div className="studio-sheet-body">
+      <div className="studio-sheet-body" hidden={!open}>
         {tab === "interface" ? (
           <>
             <VariablesSection />
