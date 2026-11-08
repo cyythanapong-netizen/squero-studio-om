@@ -24,6 +24,8 @@ export type Actions = {
   notice: string;
   say(words: string): void;
   move(name: string, to: Placement): Promise<void>;
+  /** Redraws a wire through `points` (its bends, a end first). */
+  bend(wire: Connection, points: [number, number][]): Promise<void>;
   remove(names: string[], wires: Connection[]): Promise<void>;
   /** Places `cls` at `at` with a fresh name; returns the name. */
   place(cls: string, at: Placement): Promise<string>;
@@ -217,6 +219,11 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         const part = m?.components.find((c) => c.name === partName);
         if (!m || !part || (part.placement.x === to.x && part.placement.y === to.y)) return;
         await edit([x.updateComponent(m.name, part.class, partName, to)]).catch(() => undefined);
+      },
+      async bend(wire, points) {
+        const m = current.current;
+        if (!m) return;
+        await edit([x.deleteConnection(m.name, wire.a, wire.b), x.addConnection(m.name, wire.a, wire.b, points.map(([px, py]) => [x.snap(px), x.snap(py)]))]).catch(() => undefined);
       },
       async remove(names, wires) {
         const m = current.current;

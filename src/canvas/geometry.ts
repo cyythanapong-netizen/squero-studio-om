@@ -23,17 +23,3 @@ export function centreFor(part: ComponentInst, position: { x: number; y: number 
   const { w, h } = plateOf(part);
   return [position.x + w / 2, position.y + h / 2];
 }
-
-/** A wire's drawn points: the ports at each end and the bends between, each bend turned square with its neighbour. */
-export function squareUp(from: [number, number], bends: [number, number][], to: [number, number]): [number, number][] {
-  const mid = bends.map((b): [number, number] => [...b]);
-  const fix = (b: [number, number], end: [number, number]) => {
-    if (Math.abs(b[1] - end[1]) <= Math.abs(b[0] - end[0])) b[1] = end[1];
-    else b[0] = end[0];
-  };
-  if (mid.length) {
-    fix(mid[0], from);
-    fix(mid[mid.length - 1], to);
-  }
-  return [from, ...mid, to];
-}
