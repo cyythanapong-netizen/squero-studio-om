@@ -1,13 +1,11 @@
 // The top bar: squero studio [ Om ], the menus and the model title on the left; on the right
-// only three quiet controls: the side-pane toggle, the OMC status chip and a theme cycle.
+// only three quiet controls: the side-pane toggle, the OMC status pill and a theme cycle (both
+// from @paperboat/shared, the same as Paperboat's top bar).
 // The source view and Export live in the side pane, the footer and the menus.
 
-import { MenuBar } from "@paperboat/shared/components";
+import { MenuBar, StatusPill, ThemeToggle, type Theme } from "@paperboat/shared/components";
 import type { Command } from "@paperboat/shared";
-import type { JSX } from "react";
-import { chip, type OmcStatus } from "../omc/omc.ts";
-
-export type Theme = "auto" | "light" | "dark";
+import { chip, type OmcState, type OmcStatus } from "../omc/omc.ts";
 
 export function Wordmark() {
   return (
@@ -40,22 +38,8 @@ export type TopBarProps = {
   onStatusClick?: () => void;
 };
 
-const NEXT: Record<Theme, Theme> = { auto: "light", light: "dark", dark: "auto" };
-const GLYPH: Record<Theme, JSX.Element> = {
-  auto: (
-    <>
-      <circle cx="8" cy="8" r="5.5" />
-      <path d="M8 2.5a5.5 5.5 0 0 1 0 11z" className="fill" />
-    </>
-  ),
-  light: (
-    <>
-      <circle cx="8" cy="8" r="3" />
-      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3" />
-    </>
-  ),
-  dark: <path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5z" />,
-};
+const STATES: OmcState[] = ["checking", "ready", "failed"];
+const TONE = { ready: "ok", checking: "busy", failed: "bad" } as const;
 
 export function TopBar({
   status,
@@ -88,25 +72,14 @@ export function TopBar({
           {side && <rect x="10" y="2.5" width="4.5" height="11" className="fill" />}
         </svg>
       </button>
-      <button
-        type="button"
-        className={`chip omc-${status.state}`}
-        role="status"
+      <StatusPill
+        label={chip(status)}
+        labels={STATES.map((state) => chip({ ...status, state }))}
+        tone={TONE[status.state]}
         title="OMC runtime status (click for diagnostics)"
         onClick={onStatusClick}
-      >
-        <i aria-hidden="true" />
-        {chip(status)}
-      </button>
-      <button
-        type="button"
-        className="key small icon-key"
-        aria-label={`Theme: ${theme}`}
-        title={`Theme: ${theme} (click for ${NEXT[theme]})`}
-        onClick={() => onTheme(NEXT[theme])}
-      >
-        <svg viewBox="0 0 16 16" aria-hidden="true">{GLYPH[theme]}</svg>
-      </button>
+      />
+      <ThemeToggle theme={theme} onTheme={onTheme} />
     </header>
   );
 }

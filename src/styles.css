@@ -99,21 +99,6 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .proj-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj .dirty { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
 
-.bar button.chip {
-  cursor: pointer;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  padding: 2px 8px;
-  background: var(--surface-raised);
-  color: var(--text-muted);
-}
-.bar button.chip:hover {
-  border-color: var(--line-ink);
-  color: var(--text);
-}
-.chip.omc-failed i { background: none; border-color: var(--danger); }
-.chip.omc-failed { color: var(--danger); }
-.chip.omc-checking i { background: none; }
 
 /* ---- Library & Component Browser (squero#12) --------------------------------------- */
 .library {
@@ -740,9 +725,5 @@ body.dragging-card .library {
   color: var(--text);
 }
 
-/* Square icon keys in the top bar (pane toggle, theme). */
-.bar .icon-key { width: 28px; padding: 0; display: inline-grid; place-items: center; font-size: var(--size-sm); }
-.bar .icon-key svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.2; }
-.bar .icon-key svg .fill { fill: currentColor; stroke: none; opacity: 0.45; }
 .lib-filter::-webkit-search-cancel-button { display: none; }
 .react-flow__minimap { background: var(--surface-sunken); border: 1px solid var(--line-strong); border-radius: var(--radius-md); overflow: hidden; }
