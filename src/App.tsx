@@ -217,6 +217,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "redo", label: "Redo", menu: "edit", group: "history", shortcut: "Ctrl+Shift+Z", enabled: actions.canRedo, run: actions.redo },
 
       // View menu
+      { id: "solver", label: "Solver settings…", menu: "run", group: "solver", run: () => (setSide(true), window.dispatchEvent(new Event("squero:solver"))) },
       { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
       { id: "mo", label: ".mo", menu: "view", group: "source", checked: view === "mo", run: () => (setView("mo"), setSide(true)) },
       { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },

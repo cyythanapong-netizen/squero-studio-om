@@ -26,7 +26,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { createPortal } from "react-dom";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { Dock, NumberField } from "@paperboat/shared/components";
+import { Dock, NumberField, SolverSettings } from "@paperboat/shared/components";
+import { DEFAULTS, loadSolver, OPTIONS, saveSolver, SOLVERS, summary, type SolverChoice } from "./solver.ts";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions, Stimulus } from "../store/index.tsx";
 import { explainOmcError } from "../dock/dock.ts";
@@ -136,9 +137,9 @@ function Channels({ names, picks, onChange }: { names: string[]; picks: string[]
         {shown.map((n) => {
           const i = picks.indexOf(n);
           return (
-            <label key={n} className="channel" style={i >= 0 ? ({ "--trace": `var(--trace-${(i % 8) + 1})` } as CSSProperties) : undefined}>
+            <label key={n} className="channel" title={n} style={i >= 0 ? ({ "--trace": `var(--trace-${(i % 8) + 1})` } as CSSProperties) : undefined}>
               <input type="checkbox" checked={i >= 0} onChange={() => onChange(i >= 0 ? picks.filter((x) => x !== n) : [...picks, n])} />
-              {n}
+              <span>{n}</span>
             </label>
           );
         })}
@@ -168,6 +169,16 @@ export function Simulate({
 }) {
   const [stop, setStop] = useState("1");
   const [stimuli, setStimuli] = useState<Record<string, Stimulus>>({});
+  const [solver, setSolverState] = useState<SolverChoice>(() => loadSolver(model.name));
+  useEffect(() => setSolverState(loadSolver(model.name)), [model.name]);
+  const setSolver = (v: SolverChoice) => (setSolverState(v), saveSolver(model.name, v));
+  const [solverOpen, setSolverOpen] = useState(false);
+  // Run ▸ Solver settings… opens it from the menu bar
+  useEffect(() => {
+    const open = () => setSolverOpen(true);
+    window.addEventListener("squero:solver", open);
+    return () => window.removeEventListener("squero:solver", open);
+  }, []);
   const inputs = model.entries.filter((e) => e.kind === "input").map((e) => e.name);
   const warnings = outputWarnings(model);
   const [run, setRun] = useState<Run | null>(null);
@@ -212,7 +223,7 @@ export function Simulate({
     setPhase({ state: "running", since });
     setError("");
     try {
-      const result = await actions.simulate(t, Object.fromEntries(Object.entries(stimuli).filter(([n]) => inputs.includes(n))));
+      const result = await actions.simulate(t, Object.fromEntries(Object.entries(stimuli).filter(([n]) => inputs.includes(n))), solver);
       if (mine !== ticket.current) return;
       setRun(result);
       onRun?.(result);
@@ -372,16 +383,40 @@ export function Simulate({
         status={phase.state === "running" ? "running" : phase.state === "failed" ? "failed" : "done"}
         statusText={status}
         optionsSlot={
+          <>
           <label className="dock-stop">
             <span className="lbl">stop</span>
             <input className="well" inputMode="decimal" aria-label="Stop time (s)" value={stop} onChange={(e) => setStop(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void go()} />
             <span className="lbl">s</span>
           </label>
+          <label className="dock-stop">
+            <span className="lbl">solver</span>
+            <button className="key small dock-solver" title="Solver settings (Run ▸ Solver settings…): the method omc runs and its options" onClick={() => setSolverOpen(true)}>
+              {summary(solver)} ▾
+            </button>
+          </label>
+          </>
         }
         onRun={() => void go()}
         onCancel={cancel}
       />,
           canvas,
+        )}
+      {solverOpen &&
+        createPortal(
+          <SolverSettings
+            intro="How omc runs this model's Simulate. An export keeps it as far as an FMU can: CVODE, or Euler if picked."
+            solvers={SOLVERS}
+            options={OPTIONS}
+            solver={solver.method}
+            values={solver as unknown as Record<string, number | undefined>}
+            defaults={DEFAULTS}
+            onSolver={(method) => setSolver({ ...solver, method })}
+            onOption={(k, v) => setSolver({ ...solver, [k]: v })}
+            onReset={() => setSolver({ method: "dassl" })}
+            onClose={() => setSolverOpen(false)}
+          />,
+          document.body,
         )}
     </section>
   );

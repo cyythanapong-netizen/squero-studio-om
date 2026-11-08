@@ -156,7 +156,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
   display: inline-flex; align-items: center; gap: var(--space-2); max-width: min(320px, 26vw);
   font: 400 var(--size-xs) var(--font-mono); color: var(--text-muted); pointer-events: auto; cursor: default;
 }
-@media (max-width: 1100px) { .bar > .proj { position: static; transform: none; } }
+@media (max-width: 1600px) { .bar > .proj { position: static; transform: none; min-width: 0; flex: 0 1 auto; } }
 .proj-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj .dirty { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
 
@@ -648,7 +648,9 @@ body.dragging-card .library {
 .channels { position: relative; }
 .channels > summary { list-style: none; cursor: pointer; font-size: var(--size-2xs); padding: 0 6px; }
 .channels > summary::-webkit-details-marker { display: none; }
-.channels-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 8; display: flex; flex-direction: column; gap: 2px; min-width: 180px; max-height: 240px; overflow: auto; padding: var(--space-2); background: var(--surface-float); backdrop-filter: var(--float-blur); border: 1px solid var(--line-strong); border-radius: var(--radius-md); }
+.channels-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 8; display: flex; flex-direction: column; gap: 2px; min-width: 180px; max-width: min(360px, calc(var(--side-w) - 48px)); max-height: 240px; overflow-y: auto; overflow-x: hidden; padding: var(--space-2); background: var(--surface-float); backdrop-filter: var(--float-blur); border: 1px solid var(--line-strong); border-radius: var(--radius-md); }
+.channels-pop .channel { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.channels-pop .channel > span { overflow: hidden; text-overflow: ellipsis; }
 .channels-pop .well { width: 100% !important; height: 24px !important; margin-bottom: 4px; }
 .channel { display: flex; align-items: center; gap: 6px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; box-shadow: inset 3px 0 0 var(--trace, transparent); padding-left: 6px; }
 .channel:has(input:checked) { color: var(--text); }

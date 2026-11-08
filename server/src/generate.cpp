@@ -1,12 +1,15 @@
 #include "squero/generate.hpp"
 
 #include "squero/import.hpp"
+#include "squero/squero.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <cstdlib>
 #include <fstream>
+#include <array>
+#include <cmath>
 #include <map>
 #include <optional>
 #include <set>
@@ -854,7 +857,117 @@ Fmu read_model_description(const std::string& xml) {
   return f;
 }
 
-std::string fmu_cpp(const Spec& s, const Fmu& f, std::vector<std::string>& notices) {
+// The MultiBody shapes (visual_shapes(), crefs already FMU variable names) as the adapter's
+// table: each value a constant or a value reference, read through the FMU every frame.
+std::string shapes_cpp(const nlohmann::json& shapes, const Fmu& f, std::vector<std::string>& notices) {
+  std::string rows;
+  std::size_t n = 0;
+  for (const auto& sh : shapes) {
+    const std::string ident = sh["ident"];
+    if (ident.starts_with("world.")) continue;  // the World's arrows and letters
+    std::string slots;
+    const auto slot = [&](const nlohmann::json& v) {
+      std::string text;
+      if (v.is_number()) text = "{false, 0u, " + std::to_string(v.get<double>()) + "}";
+      else if (const auto it = f.vars.find(v.get<std::string>()); it != f.vars.end()) text = "{true, " + std::to_string(it->second.vr) + "u, 0.0}";
+      else {
+        notices.push_back("the FMU has no " + v.get<std::string>() + "; its shape uses 0");
+        text = "{false, 0u, 0.0}";
+      }
+      slots += (slots.empty() ? "" : ", ") + text;
+    };
+    for (const char* k : {"T", "r", "r_shape", "lengthDir", "widthDir"})
+      for (std::size_t i = 0; i < (std::string_view(k) == "T" ? 9u : 3u); ++i) slot(i < sh[k].size() ? sh[k][i] : nlohmann::json(0.0));
+    for (const char* k : {"length", "width", "height"}) slot(sh[k]);
+    char color[8] = "#888888";
+    if (sh["color"].size() == 3 && sh["color"][0].is_number() && sh["color"][1].is_number() && sh["color"][2].is_number())
+      std::snprintf(color, sizeof color, "#%02x%02x%02x", std::clamp(sh["color"][0].get<int>(), 0, 255), std::clamp(sh["color"][1].get<int>(), 0, 255),
+                    std::clamp(sh["color"][2].get<int>(), 0, 255));
+    const std::string type = sh["type"];
+    const char* kind = type == "sphere" ? "1" : (type == "cylinder" || type == "pipecylinder" || type == "pipe" || type == "gearwheel" || type == "spring" || type == "cone") ? "2" : "0";
+    rows += "    Look{" + cpp_string(ident) + ", " + kind + ", " + cpp_string(color) + ", {{" + slots + "}}},\n";
+    ++n;
+  }
+  if (!n) return "";
+  return R"(
+// Its MultiBody shapes (omc's _visual.xml): T (world → frame, row-major), r, r_shape, lengthDir,
+// widthDir, length, width, height; each a constant or an FMU variable.
+struct Slot {
+  bool var;
+  Ref vr;
+  double k;
+};
+struct Look {
+  const char* id;
+  int kind;  // 0 box, 1 sphere, 2 cylinder (cones, pipes, springs too); ponytail: CAD parts draw as their box
+  const char* color;
+  std::array<Slot, 24> s;
+};
+const std::array<Look, )" + std::to_string(n) + R"(> kShapes = {{
+)" + rows + "}};\n";
+}
+
+// The C++ that turns kShapes into Station entities, in the adapter's entities().
+constexpr const char* kShapeEntities = R"(
+  std::vector<paperboat::Entity> entities(const std::string& id, double) const override {
+    std::vector<paperboat::Entity> out;
+    for (const auto& look : kShapes) {
+      std::array<double, 24> v{};
+      for (std::size_t i = 0; i < v.size(); ++i) {
+        v[i] = look.s[i].k;
+        if (look.s[i].var) get_real_(c_, &look.s[i].vr, 1, &v[i]);  // ponytail: one call a value; batch if it shows
+      }
+      using V = std::array<double, 3>;
+      const auto dot = [](const V& a, const V& b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; };
+      const auto unit = [](V a) {
+        const double n = std::hypot(a[0], a[1], a[2]);
+        return n > 1e-12 ? V{a[0] / n, a[1] / n, a[2] / n} : V{0, 0, 0};
+      };
+      const auto cross = [](const V& a, const V& b) { return V{a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]}; };
+      const double* T = v.data();
+      const auto world = [&](const V& u) {  // Tᵀu: a frame vector in world
+        return V{T[0] * u[0] + T[3] * u[1] + T[6] * u[2], T[1] * u[0] + T[4] * u[1] + T[7] * u[2], T[2] * u[0] + T[5] * u[1] + T[8] * u[2]};
+      };
+      const V r{v[9], v[10], v[11]}, rs{v[12], v[13], v[14]}, ld{v[15], v[16], v[17]}, wd{v[18], v[19], v[20]};
+      const double L = v[21], W = v[22], H = v[23];
+      const V ex = unit(ld);
+      const double k = dot(wd, ex);
+      V ey = unit(V{wd[0] - k * ex[0], wd[1] - k * ex[1], wd[2] - k * ex[2]});
+      if (std::hypot(ey[0], ey[1], ey[2]) == 0) ey = unit(cross(ex, std::abs(ex[0]) < 0.9 ? V{1, 0, 0} : V{0, 1, 0}));
+      const V X = world(ex), Y = world(ey), Z = world(cross(ex, ey)), p = world(rs);
+      // the shape runs from its origin along the length: its centre is half a length on
+      paperboat::Entity e;
+      e.id = id + "/" + look.id;
+      e.color = look.color;
+      e.pos = {r[0] + p[0] + X[0] * L / 2, r[1] + p[1] + X[1] * L / 2, r[2] + p[2] + X[2] * L / 2};
+      // a rotation with columns a, b, c (unit) as Euler angles, x then y then z (three.js's XYZ order)
+      const auto euler = [](const V& a, const V& b, const V& c) {
+        const double s13 = std::clamp(c[0], -1.0, 1.0);
+        if (std::abs(s13) < 0.9999999) return V{std::atan2(-c[1], c[2]), std::asin(s13), std::atan2(-b[0], a[0])};
+        return V{std::atan2(b[2], b[1]), std::asin(s13), 0.0};
+      };
+      const auto u = [&](const V& a) { return unit(a); };
+      if (look.kind == 1) {
+        e.shape = "sphere";
+        e.size = {L / 2, L / 2, L / 2};
+      } else if (look.kind == 2) {
+        // the Station's cylinder runs along its y: length on y, the width the diameter
+        e.shape = "cylinder";
+        e.size = {W / 2, L, W / 2};
+        const V nz = u(Z);
+        e.rot = euler(u(Y), u(X), V{-nz[0], -nz[1], -nz[2]});
+      } else {
+        e.size = {L, W, H};
+        e.rot = euler(u(X), u(Y), u(Z));
+      }
+      out.push_back(e);
+    }
+    return out;
+  }
+)";
+
+std::string fmu_cpp(const Spec& s, const Fmu& f, std::vector<std::string>& notices, const nlohmann::json& shapes = nlohmann::json::array()) {
+  const std::string table = shapes_cpp(shapes, f, notices);
   auto refs = [&](const std::vector<std::string>& names, const char* what) {
     std::string out;
     for (const auto& n : names) {
@@ -893,7 +1006,9 @@ std::string fmu_cpp(const Spec& s, const Fmu& f, std::vector<std::string>& notic
 
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -926,7 +1041,7 @@ constexpr std::array<const char*, )" + std::to_string(in_ids.size()) + R"(> kInp
 constexpr std::array<Ref, )" + std::to_string(in_ids.size()) + R"(> kInputRefs = )" + refs(in_names, "input") + R"(;
 constexpr std::array<const char*, )" + std::to_string(out_ids.size()) + R"(> kOutputIds = )" + ids(out_ids) + R"(;
 constexpr std::array<Ref, )" + std::to_string(out_ids.size()) + R"(> kOutputRefs = )" + refs(out_names, "output") + R"(;
-
+)" + table + R"(
 class )" + s.cls + R"( final : public paperboat::StationObject {
  public:
   explicit )" + s.cls + R"((const Values& props) {
@@ -973,8 +1088,7 @@ class )" + s.cls + R"( final : public paperboat::StationObject {
     ok(do_step_(c_, ctx.t, ctx.dt, 1), "step");
   }
 
-  std::vector<paperboat::Entity> entities(const std::string&, double) const override { return {}; }
-
+)" + (table.empty() ? std::string("  std::vector<paperboat::Entity> entities(const std::string&, double) const override { return {}; }\n") : std::string(kShapeEntities)) + R"(
  private:
   template <class F>
   void load(F& fn, const char* name) {
@@ -1061,7 +1175,7 @@ target_link_libraries(paperboat-)" + s.name + R"( PRIVATE ${CMAKE_DL_LIBS})
   return out;
 }
 
-std::string main_cpp(const Spec& s, int port) {
+std::string main_cpp(const Spec& s, int port, const nlohmann::json& view = nullptr) {
   return header(s, "main") + R"(
 // The model is domain/)" + s.id + R"(.cpp: a station object with a linked block. The descriptor,
 // next to this file, is yours: imports, starters, variables.
@@ -1077,7 +1191,8 @@ int main(int argc, char** argv) {
     return r;
   }();
   static const paperboat::Catalog catalog = paperboat::load_descriptor_file(PAPERBOAT_DESCRIPTOR, registry);
-  return paperboat::main({.engine = "cpp-)" + s.name + R"(", .catalog = &catalog}, argc, argv, )" + std::to_string(port) + R"();
+  return paperboat::main({.engine = "cpp-)" + s.name + R"(", .catalog = &catalog)" +
+         (view.is_null() ? "" : ", .view = nlohmann::json::parse(R\"(" + view.dump() + ")\")") + R"(}, argc, argv, )" + std::to_string(port) + R"();
 }
 )";
 }
@@ -1117,7 +1232,7 @@ std::string connectors_toml(const Spec& s) {
   return out;
 }
 
-std::string descriptor(const Spec& s) {
+std::string descriptor(const Spec& s, bool scene = false) {
   std::string nodes = "  { id = " + toml_string(s.name + "-1") + ", type = " + toml_string(s.name) + ", pos = [260, 0] },\n";
   std::string edges;
   int y = 0;
@@ -1140,8 +1255,9 @@ std::string descriptor(const Spec& s) {
          "# parameters and fixed starts); each one spawns a linked block on the Flow page.\n"
          "domain = " + toml_string(s.name) + "\nimport = [\"signal\", \"math\", \"control\", \"dashboard\"]\n\n" +
          connectors_toml(s) +
-         "# A model has no geometry of its own: the Station shows its objects as a graph.\n"
-         "[station]\nview = \"graph\"\nobjects = [\n  { id = " + toml_string(s.name + "-1") + ", type = " + toml_string(s.name) + " },\n]\n\n"
+         (scene ? "# Its MultiBody shapes draw in the Station's 3D scene.\n[station]\nview = \"scene\"\nobjects = ["
+                : "# A model has no geometry of its own: the Station shows its objects as a graph.\n"
+                  "[station]\nview = \"graph\"\nobjects = [") + "\n  { id = " + toml_string(s.name + "-1") + ", type = " + toml_string(s.name) + " },\n]\n\n"
          "# Starter: a step on each input, a graph on each output.\n[graph]\nnodes = [\n" + nodes + "]\nedges = [\n" +
          edges + "]\n";
 }
@@ -1165,6 +1281,59 @@ std::string readme(const Spec& s, const GenerateResult& r) {
 }
 
 // --- omc ---
+
+// A MultiBody model's shapes (visual_shapes(), crefs left as names) and the Station's view hint
+// fitted to its start (camera on its box, the floor under its reach): a 0-length simulate with
+// -d=visxml writes <prefix>_visual.xml and a result to read the start from. Empty for a model
+// without MultiBody.
+struct Multibody {
+  nlohmann::json shapes = nlohmann::json::array();
+  nlohmann::json view = nullptr;
+};
+Multibody multibody_shapes(Omc& omc, const std::string& model, const std::string& label) {
+  Multibody m;
+  if (parse_value(omc.call("list(" + model + ")")).atom.find("MultiBody") == std::string::npos) return m;
+  const std::string prefix = label + "_visual";
+  omc.call("setCommandLineOptions(\"-d=visxml\")");
+  const std::string answer = omc.call("simulate(" + model + ", stopTime=0.0, numberOfIntervals=1, fileNamePrefix=\"" + prefix + "\")", std::chrono::minutes(5));
+  const auto at = answer.find("resultFile = \"");
+  const std::string mat = at == std::string::npos ? "" : answer.substr(at + 14, answer.find('"', at + 14) - at - 14);
+  const std::string xml = read_file(fs::path(omc.workdir()) / (prefix + "_visual.xml"));
+  m.shapes = visual_shapes(xml, [](const std::string& c) { return nlohmann::json(c); });
+  if (mat.empty()) return m;
+  // the start: each shape's two ends (its origin, then a length on), padded by its width
+  const nlohmann::json start = visual_shapes(xml, [&](const std::string& c) {
+    return nlohmann::json(std::strtod(parse_value(omc.call("val(" + c + ", 0.0, \"" + mat + "\")")).atom.c_str(), nullptr));
+  });
+  std::array<double, 3> lo{1e9, 1e9, 1e9}, hi{-1e9, -1e9, -1e9};
+  for (const auto& sh : start) {
+    if (sh["ident"].get<std::string>().starts_with("world.")) continue;
+    const auto n = [&](const char* k, std::size_t i) { return sh[k].size() > i && sh[k][i].is_number() ? sh[k][i].get<double>() : 0.0; };
+    const auto world = [&](double x, double y, double z) {  // Tᵀu
+      return std::array<double, 3>{n("T", 0) * x + n("T", 3) * y + n("T", 6) * z, n("T", 1) * x + n("T", 4) * y + n("T", 7) * z,
+                                   n("T", 2) * x + n("T", 5) * y + n("T", 8) * z};
+    };
+    const double len = std::hypot(n("lengthDir", 0), n("lengthDir", 1), n("lengthDir", 2));
+    const double L = sh["length"].is_number() ? sh["length"].get<double>() : 0.0;
+    const double pad = std::max(sh["width"].is_number() ? sh["width"].get<double>() : 0.0, sh["height"].is_number() ? sh["height"].get<double>() : 0.0) / 2;
+    const auto rs = world(n("r_shape", 0), n("r_shape", 1), n("r_shape", 2));
+    const auto ld = len > 0 ? world(n("lengthDir", 0) / len, n("lengthDir", 1) / len, n("lengthDir", 2) / len) : std::array<double, 3>{};
+    for (const double f : {0.0, 1.0})
+      for (int i = 0; i < 3; ++i) {
+        const double p = n("r", i) + rs[i] + ld[i] * L * f;
+        lo[i] = std::min(lo[i], p - pad);
+        hi[i] = std::max(hi[i], p + pad);
+      }
+  }
+  if (lo[0] > hi[0]) return m;
+  const std::array<double, 3> c{(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2};
+  // ponytail: the reach is the start's box diagonal, from its centre; a model that travels further leaves it
+  const double reach = std::max(0.5, std::hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]));
+  m.view = {{"mode", "3d"},
+            {"floor", c[1] - reach},
+            {"camera", {{"target", c}, {"eye", {c[0] + 0.6 * reach * 1.6, c[1] + 0.5 * reach * 1.6, c[2] + reach * 1.6}}}}};
+  return m;
+}
 
 std::string ok_call(Omc& omc, const std::string& expr) {
   std::string out = omc.call(expr);
@@ -1373,6 +1542,8 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   progress("generate", 0.5);
   if (!o.dry) fs::create_directories(r.out);
   std::string domain;
+  bool scene = false;
+  nlohmann::json view = nullptr;
   if (fmu && o.dry) {
     r.notices.push_back("dry run: the FMU path builds with omc, so no files are previewed");
     progress("generate", 1);
@@ -1380,10 +1551,20 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   }
   if (fmu) {
     progress("build", 0.6);
+    // a MultiBody model's shapes read protected variables: the FMU exposes them too, for this build only
+    const Multibody mb = multibody_shapes(omc, r.model, spec.label);
+    const nlohmann::json& shapes = mb.shapes;
+    view = mb.view;
+    omc.call(std::string("setCommandLineOptions(\"--fmiFilter=") + (shapes.empty() ? "protected" : "internal") + "\")");
+    // CVODE inside the FMU unless asked: explicit Euler at Paperboat's step gains energy (a
+    // pendulum spins up from rest)
+    if (o.fmu_solver != "cvode" && o.fmu_solver != "euler") throw GenerateError("the FMU solver is cvode or euler, not " + o.fmu_solver);
+    omc.call("setCommandLineOptions(\"--fmiFlags=s:" + o.fmu_solver + "\")");
     const OmValue built = parse_value(ok_call(
         omc, "buildModelFMU(" + r.model + ", version=\"2.0\", fmuType=\"cs\", fileNamePrefix=\"" + spec.label +
                  "\", platforms={\"static\"})"));
     const fs::path fmu_file = built.atom;
+    omc.call("setCommandLineOptions(\"--fmiFilter=protected\")");
     if (!fs::is_regular_file(fmu_file)) throw GenerateError("buildModelFMU failed: " + omc.errors());
     fs::create_directories(r.out / "fmu");
     fs::copy_file(fmu_file, r.out / "fmu" / (spec.label + ".fmu"), fs::copy_options::overwrite_existing);
@@ -1392,7 +1573,8 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
     fs::create_directories(tmp);
     run_tool("cd " + shell_quote(tmp.string()) + " && cmake -E tar xf " + shell_quote(fs::absolute(fmu_file).string()) +
              " modelDescription.xml");
-    domain = fmu_cpp(spec, read_model_description(read_file(tmp / "modelDescription.xml")), r.notices);
+    domain = fmu_cpp(spec, read_model_description(read_file(tmp / "modelDescription.xml")), r.notices, shapes);
+    scene = domain.find("kShapes") != std::string::npos;
   } else {
     domain = ode_cpp(spec);
     std::error_code ec;
@@ -1400,14 +1582,27 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
   }
 
   write(r, "CMakeLists.txt", cmake(spec, fmu));
-  write(r, "main.cpp", main_cpp(spec, port));
+  write(r, "main.cpp", main_cpp(spec, port, view));
   write(r, fs::path("domain") / (spec.id + ".hpp"), hpp(spec));
   write(r, fs::path("domain") / (spec.id + ".cpp"), domain);
   const fs::path mo = fs::path("modelica") / (spec.label + ".mo");
   if (live) write(r, mo, parse_value(omc.call("list(" + r.model + ")")).atom + "\n");
   else if (o.dry || !fs::exists(r.out / mo) || !fs::equivalent(r.out / mo, o.source)) write(r, mo, read_file(o.source));
   write(r, "backend.toml", backend_toml(spec, port), true);
-  write(r, "descriptor.toml", descriptor(spec), true);
+  write(r, "descriptor.toml", descriptor(spec, scene), true);
+  // A kept descriptor still follows the model gaining or losing shapes: swap the generated
+  // [station] lines, leaving the user's own edits alone.
+  if (!o.dry && fs::exists(r.out / "descriptor.toml")) {
+    const std::string graph = "# A model has no geometry of its own: the Station shows its objects as a graph.\n[station]\nview = \"graph\"\n";
+    const std::string shown = "# Its MultiBody shapes draw in the Station's 3D scene.\n[station]\nview = \"scene\"\n";
+    std::string text = read_file(r.out / "descriptor.toml");
+    const std::string& from = scene ? graph : shown;
+    if (const auto at = text.find(from); at != std::string::npos) {
+      text.replace(at, from.size(), scene ? shown : graph);
+      std::ofstream(r.out / "descriptor.toml", std::ios::binary) << text;
+      r.notices.push_back(std::string("descriptor.toml: the Station view is now ") + (scene ? "the 3D scene" : "a graph"));
+    }
+  }
   write(r, "README.md", readme(spec, r), true);
   progress("generate", 1);
   return r;

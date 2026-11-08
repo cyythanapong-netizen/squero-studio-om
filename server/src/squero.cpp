@@ -180,7 +180,8 @@ json op_set_icon(Omc& omc, const json& in) {
 
 json op_generate(Omc& omc, const json& in, const Session& session) {
   GenerateOptions o{.source = in.value("source", ""), .model = in.value("model", ""), .out = in.value("out", ""),
-                    .path = in.value("path", "auto"), .dry = in.value("dry", false), .live = true};
+                    .path = in.value("path", "auto"), .dry = in.value("dry", false), .live = true,
+                    .fmu_solver = in.value("fmu_solver", "cvode")};
   if (o.source.empty()) throw std::runtime_error("generate needs a source .mo");
   if (!o.dry && o.out.empty()) throw std::runtime_error("generate needs an out folder");
   const json id = in.value("id", json());
@@ -437,6 +438,16 @@ json op_simulate(Omc& omc, const json& in) {
   const std::string model = user_model(in);
   const double stop = in.value("stop", 1.0);
   if (!(stop > 0.0) || !std::isfinite(stop)) throw std::runtime_error("stop time must be above 0");
+  // The solver settings (Studio's Simulate ▸ solver): omc's method, its tolerance, the output
+  // intervals and the start time.
+  static const std::set<std::string> methods = {"dassl", "ida", "cvode", "euler", "heun", "rungekutta", "impeuler", "trapezoid", "gbode"};
+  const std::string method = in.value("method", "dassl");
+  if (!methods.contains(method)) throw std::runtime_error("no solver " + method);
+  const double tolerance = in.value("tolerance", 1e-6), start = in.value("start", 0.0);
+  const int intervals = in.value("intervals", 500);
+  if (!(tolerance > 0.0) || !(tolerance < 1.0)) throw std::runtime_error("the tolerance is between 0 and 1");
+  if (intervals < 1 || intervals > 1000000) throw std::runtime_error("intervals are 1 to 1000000");
+  if (!(start < stop) || !std::isfinite(start)) throw std::runtime_error("the start time is before the stop time");
 
   // Top-level inputs have nothing driving them on their own: simulate a harness that holds the
   // model as `m` and feeds each input its stimulus (0 unless given), then name things as the model does.
@@ -472,8 +483,14 @@ json op_simulate(Omc& omc, const json& in) {
   // .mat, as it alone keeps parameters: a shape's sizes are often parameters, read back with val().
   // -d=visxml writes <model>_visual.xml next to it: the MultiBody shapes and what drives them.
   omc.call("setCommandLineOptions(\"-d=visxml\")");
-  std::string expr = "simulate(" + (inputs.empty() ? model : harness) + ", startTime=0, stopTime=" + std::to_string(stop) +
-                     ", numberOfIntervals=500";
+  const auto num = [](double v) {
+    std::ostringstream o;
+    o.precision(17);
+    o << v;
+    return o.str();
+  };
+  std::string expr = "simulate(" + (inputs.empty() ? model : harness) + ", startTime=" + num(start) + ", stopTime=" + num(stop) +
+                     ", numberOfIntervals=" + std::to_string(intervals) + ", method=\"" + method + "\", tolerance=" + num(tolerance);
   // a filtered run is plain CSV: just those variables, no shapes
   if (!filter.empty()) expr += ", outputFormat=\"csv\", variableFilter=" + quote(filter);
   const std::string answer = omc.call(expr + ")", std::chrono::minutes(5));
@@ -528,6 +545,8 @@ json op_simulate(Omc& omc, const json& in) {
       const double v = std::strtod(text_of(omc.call("val(" + cref + ", 0.0, " + quote(mat) + ")")).c_str(), nullptr);
       return std::isfinite(v) ? json(v) : json(0.0);
     });
+    // the harness's m.world is the model's world
+    for (auto& sh : out["shapes"]) sh["ident"] = unprefix(sh["ident"].get<std::string>());
   }
   return out;
 }

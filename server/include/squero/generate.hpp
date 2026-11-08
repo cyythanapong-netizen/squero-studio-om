@@ -41,6 +41,8 @@ struct GenerateOptions {
   // Studio: generate the class as loaded in omc (unsaved edits included), never reloading `source`;
   // a loadFile would build the stale file and wipe the edits from the session.
   bool live = false;
+  // The solver inside an FMU (OpenModelica's CS FMUs have two): "cvode" or "euler".
+  std::string fmu_solver = "cvode";
   // Called as the stages go by: "check", "flatten", "generate", "build", fraction 0..1.
   std::function<void(std::string_view stage, double fraction)> progress = {};
 };
