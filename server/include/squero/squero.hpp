@@ -20,12 +20,14 @@
 //                                                  the imported look of a class (`paperboat modelica icon`)
 //   set_icon  {model, icon}                     → {}                 IconDef → Icon(graphics) annotation;
 //                                                  the inverse of the importer, `g` and size only
-//   generate  {source, model, out, dry?, path?} → {model, path, reason, out, notices, files?}
+//   generate  {source, model, out, dry?, path?, fmu_solver?}
+//                                              → {model, path, reason, out, notices, files?}
 //                                                  pushes {op: "progress", id, stage, fraction} first, stage
 //                                                  check|flatten|generate|build; `files` (relative path →
 //                                                  text) only when `dry`, which writes nothing
-//   simulate  {model, stop, vars?}              → {t, series, names, shapes?}  a local check run with omc,
-//                                                  500 intervals; series for `vars` (all when omitted),
+//   simulate  {model, stop, vars?, method?, tolerance?, intervals?, start?}
+//                                               → {t, series, names, shapes?}  a local check run with omc,
+//                                                  method dassl, tolerance 1e-6, 500 intervals from 0 unless given; series for `vars` (all when omitted),
 //                                                  `names` every variable in the result; `shapes` (no
 //                                                  `vars`) the MultiBody shapes, see visual_shapes()
 //

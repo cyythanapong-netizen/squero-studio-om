@@ -3,6 +3,7 @@
 // shared undo.ts over the model's parts and wires; going back replays the difference through omc.
 
 import type { Shape } from "../viewport3d/shapes.ts";
+import { fmuSolver, loadSolver, type SolverChoice } from "../simulate/solver.ts";
 import { useUndo, type IconDef } from "@paperboat/shared";
 import type { Edge, Node } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -45,7 +46,7 @@ export type Actions = {
   preview(): Promise<{ path: "ode" | "fmu"; reason: string; files: Record<string, string>; notices: string[] }>;
   /** A local check run: every variable over [0, stop]; each top-level input fed its stimulus (0 when not given). */
   /** `shapes`: a MultiBody model's visual shapes, for the 3D view. */
-  simulate(stop: number, inputs?: Record<string, Stimulus>): Promise<{ t: number[]; series: Record<string, (number | null)[]>; names: string[]; shapes?: Shape[] }>;
+  simulate(stop: number, inputs?: Record<string, Stimulus>, solver?: SolverChoice): Promise<{ t: number[]; series: Record<string, (number | null)[]>; names: string[]; shapes?: Shape[] }>;
   dirty: boolean;
   save(file?: string): Promise<void>;
   saveAs(file: string): Promise<void>;
@@ -229,7 +230,7 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       async exportBackend(mode: ExportMode, onProgress: (p: ExportProgress) => void, port?: number): Promise<ExportResult> {
         return enqueue(async () => {
           if (!model.file) throw new Error("save the model to a file first");
-          return omc.op<ExportResult>("export", { source: model.file, model: name, mode, port }, (stage, fraction) =>
+          return omc.op<ExportResult>("export", { source: model.file, model: name, mode, port, fmu_solver: fmuSolver(loadSolver(name)) }, (stage, fraction) =>
             onProgress({ stage: stage as ExportProgress["stage"], fraction }),
           );
         });
@@ -291,10 +292,10 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         // queued behind edits: generating reloads the file, so a half-saved edit must not be in flight
         return enqueue(() => omc.op<{ path: "ode" | "fmu"; reason: string; files?: Record<string, string>; notices?: string[] }>("generate", { source: m.file, model: m.name, dry: true })).then((r) => ({ path: r.path, reason: r.reason, files: r.files ?? {}, notices: r.notices ?? [] }));
       },
-      simulate(stop, inputs = {}) {
+      simulate(stop, inputs = {}, solver) {
         const m = current.current;
         if (!m) return Promise.reject(new Error("no model"));
-        return omc.op("simulate", { model: m.name, stop, inputs });
+        return omc.op("simulate", { model: m.name, stop, inputs, ...solver });
       },
       async source() {
         const m = current.current;

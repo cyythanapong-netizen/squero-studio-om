@@ -1556,9 +1556,10 @@ GenerateResult generate(Omc& omc, const GenerateOptions& o) {
     const nlohmann::json& shapes = mb.shapes;
     view = mb.view;
     omc.call(std::string("setCommandLineOptions(\"--fmiFilter=") + (shapes.empty() ? "protected" : "internal") + "\")");
-    // CVODE inside the FMU: the default explicit Euler at Paperboat's step gains energy (a
+    // CVODE inside the FMU unless asked: explicit Euler at Paperboat's step gains energy (a
     // pendulum spins up from rest)
-    omc.call("setCommandLineOptions(\"--fmiFlags=s:cvode\")");
+    if (o.fmu_solver != "cvode" && o.fmu_solver != "euler") throw GenerateError("the FMU solver is cvode or euler, not " + o.fmu_solver);
+    omc.call("setCommandLineOptions(\"--fmiFlags=s:" + o.fmu_solver + "\")");
     const OmValue built = parse_value(ok_call(
         omc, "buildModelFMU(" + r.model + ", version=\"2.0\", fmuType=\"cs\", fileNamePrefix=\"" + spec.label +
                  "\", platforms={\"static\"})"));
