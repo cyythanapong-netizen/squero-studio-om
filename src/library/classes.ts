@@ -326,7 +326,7 @@ const SKIP = new Set(["UsersGuide", "Examples", "Icons", "Internal", "Types", "I
 
 export const isPartPath = (full: string) => !full.split(".").some((s, i) => i > 0 && SKIP.has(s));
 
-/** The children of package `pkg`: packages to open, and models, blocks and connectors to place. */
+/** The sub-packages of `pkg`, for the tree: one omc call per child (omc answers one at a time). */
 const seen = new Map<string, Promise<Entry[]>>();
 
 export function children(omc: OmcCalls, pkg: string): Promise<Entry[]> {
@@ -347,11 +347,7 @@ async function read(omc: OmcCalls, pkg: string): Promise<Entry[]> {
       .map(async (name): Promise<Entry | null> => {
         const full = `${pkg}.${name}`;
         const restriction = atom(parseValue(await omc.call(`getClassRestriction(${full})`).catch(() => '""')));
-        if (restriction === "package") return { name, full, kind: "package", comment: "" };
-        if (!["model", "block", "connector", "class"].includes(restriction)) return null;
-        if (atom(parseValue(await omc.call(`isPartial(${full})`).catch(() => "false"))) === "true") return null;
-        const comment = atom(parseValue(await omc.call(`getClassComment(${full})`).catch(() => '""')));
-        return { name, full, kind: "part", comment };
+        return restriction === "package" ? { name, full, kind: "package", comment: "" } : null;
       }),
   );
   return out.filter((e): e is Entry => e !== null);

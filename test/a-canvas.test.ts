@@ -77,7 +77,7 @@ function tree(): OmcCalls {
   } as unknown as OmcCalls;
 }
 
-test("the tree opens a package at a time: packages to open, parts to place, no demos or partial classes", async () => {
+test("the tree opens a package at a time: sub-packages only, no demos", async () => {
   const omc = tree();
   assert.deepEqual((await children(omc, "Modelica.Electrical")).map((e) => [e.name, e.kind]), [["Analog", "package"], ["Machines", "package"]]);
   assert.deepEqual((await children(omc, "Modelica.Electrical.Analog")).map((e) => [e.name, e.kind]), [["Basic", "package"]]);
