@@ -6,13 +6,12 @@
 import { MenuBar, StatusPill, ThemeToggle, type Theme } from "@paperboat/shared/components";
 import type { Command } from "@paperboat/shared";
 import { chip, type OmcState, type OmcStatus } from "../omc/omc.ts";
+import { SqueroLogo } from "./SqueroLogo.tsx";
 
-export function Wordmark() {
+export function Wordmark({ running = false }: { running?: boolean }) {
   return (
     <span className="wordmark" aria-label="Squero Studio: OpenModelica">
-      <b>squero</b>
-      <span className="studio-word">studio</span>
-      <span className="om-badge">Om</span>
+      <SqueroLogo product="OM" height={20} running={running} />
     </span>
   );
 }
@@ -36,6 +35,7 @@ export type TopBarProps = {
   theme: Theme;
   onTheme: (t: Theme) => void;
   onStatusClick?: () => void;
+  running?: boolean;
 };
 
 const STATES: OmcState[] = ["checking", "ready", "failed"];
@@ -51,10 +51,11 @@ export function TopBar({
   theme,
   onTheme,
   onStatusClick,
+  running = false,
 }: TopBarProps) {
   return (
     <header className="bar">
-      <Wordmark />
+      <Wordmark running={running} />
       <MenuBar commands={commands} />
       {model && <ProjectLabel name={model} dirty={dirty} />}
       <span className="spacer" />

@@ -65,6 +65,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [popover, setPopover] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   const [side, setSide] = useState(true);
+  const [running, setRunning] = useState(false);
   const [view, setView] = useState<View>("mo");
   const [focus, setFocus] = useState<Focus>("split");
   const [theme, setTheme, shown] = useThemeChoice();
@@ -225,6 +226,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           theme={theme}
           onTheme={setTheme}
           onStatusClick={() => setStatusModalOpen(true)}
+          running={running}
         />
         {api && model ? (
           <>
@@ -245,7 +247,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                   />
                 </div>
                 <Split model={model} actions={actions} view={view} onView={setView} />
-                <Simulate actions={actions} model={model} theme={shown} />
+                <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} />
               </aside>
             )}
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}

@@ -7,6 +7,11 @@ export default defineConfig({
   plugins: [react()],
   resolve: { dedupe: ["react", "react-dom", "@xyflow/react"] },
   build: { chunkSizeWarningLimit: 800 },
-  server: { port: 3048 },
+  server: {
+    port: 3048,
+    fs: {
+      allow: [".."],
+    },
+  },
   preview: { port: 3048 },
 });
