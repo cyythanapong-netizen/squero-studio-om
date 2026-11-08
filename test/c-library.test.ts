@@ -5,15 +5,12 @@ import {
   domainOf,
   makeComponentItem,
   searchComponents,
-  STANDARD_CATEGORIES,
+  packageCounts,
   DEFAULT_MSL_CLASSES,
   type ComponentCardItem,
 } from "../src/library/classes.ts";
 
 test("library: domainOf maps Modelica class paths to domain categories", () => {
-  assert.ok(STANDARD_CATEGORIES.includes("Electrical"));
-  assert.ok(STANDARD_CATEGORIES.includes("Mechanics"));
-  assert.ok(STANDARD_CATEGORIES.includes("Fluid"));
   assert.equal(domainOf("Modelica.Electrical.Analog.Basic.Resistor"), "Electrical");
   assert.equal(domainOf("Modelica.Mechanics.Rotational.Components.Inertia"), "Mechanics");
   assert.equal(domainOf("Modelica.Thermal.HeatTransfer.Components.HeatCapacitor"), "Thermal");
@@ -110,4 +107,12 @@ test("library: searchComponents respects category filter", () => {
   assert.ok(fluidOnly.length > 0);
   assert.ok(fluidOnly.some((it) => it.name === "StaticPipe"));
   assert.ok(fluidOnly.some((it) => it.name === "ValveLinear"));
+});
+
+test("library: packageCounts counts parts under every enclosing package", () => {
+  const c = packageCounts(["Modelica.Electrical.Analog.Basic.Resistor", "Modelica.Electrical.Analog.Basic.Capacitor", "Modelica.Blocks.Math.Add", "Top"]);
+  assert.equal(c.get("Modelica"), 3);
+  assert.equal(c.get("Modelica.Electrical.Analog.Basic"), 2);
+  assert.equal(c.get("Modelica.Blocks"), 1);
+  assert.equal(c.has("Top"), false);
 });
