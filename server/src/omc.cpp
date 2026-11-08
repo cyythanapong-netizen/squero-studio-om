@@ -13,6 +13,7 @@
 #include <array>
 #include <atomic>
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -104,6 +105,7 @@ struct Omc::Impl {
   std::string session;
   fs::path workdir;
   std::string version;
+  OmcRuntime runtime;
   OmcState state = OmcState::Ready;
   int restarts = 0;  // in a row
   bool started_once = false;
@@ -160,6 +162,8 @@ struct Omc::Impl {
     workdir = fs::temp_directory_path() / ("paperboat-omc-" + session);
     fs::create_directories(workdir);
     const std::string zarg = "-z=" + session;
+    if (runtime.mode.empty()) runtime = options.omc.empty() ? resolve_omc() : OmcRuntime{"native", options.omc, ""};
+    std::vector<std::string> command = omc_command(runtime, workdir.string(), {"--interactive=zmq", zarg});
     pid = fork();
     if (pid < 0) throw OmcError("cannot start omc: fork failed");
     if (pid == 0) {
@@ -171,16 +175,23 @@ struct Omc::Impl {
       if (devnull >= 0) {
         dup2(devnull, STDIN_FILENO);
         dup2(devnull, STDOUT_FILENO);
+        // the engine's own chatter (a stop signal racing the container's exit) isn't omc's
+        if (runtime.mode != "native") dup2(devnull, STDERR_FILENO);
       }
       close_range(3, ~0U, 0);  // not the server's sockets
-      execlp(options.omc.c_str(), options.omc.c_str(), "--interactive=zmq", zarg.c_str(), nullptr);
+      std::vector<char*> argv;
+      for (auto& a : command) argv.push_back(a.data());
+      argv.push_back(nullptr);
+      execvp(argv[0], argv.data());
       _exit(127);
     }
     fs::path file;
-    for (int i = 0; i < 400 && (file = port_file()).empty(); ++i) {  // up to 20 s
+    // up to 20 s; a container's first start pulls the image, so minutes
+    const int tries = runtime.mode == "native" ? 400 : 20 * 60 * 10;
+    for (int i = 0; i < tries && (file = port_file()).empty(); ++i) {
       if (waitpid(pid, nullptr, WNOHANG) == pid) {
         pid = -1;
-        throw OmcError("omc exited at start (is `" + options.omc + "` OpenModelica's omc?)");
+        throw OmcError("omc exited at start (" + runtime.mode + ": `" + runtime.exe + "`" + (runtime.why.empty() ? "" : "; " + runtime.why) + ")");
       }
       std::this_thread::sleep_for(50ms);
     }
@@ -291,6 +302,73 @@ OmcState Omc::state() const {
 std::string Omc::version() const { return impl_->version; }
 void Omc::on_status(StatusFn fn) { impl_->status_fn = std::move(fn); }
 std::string Omc::workdir() const { return impl_->workdir.string(); }
+std::string Omc::mode() const { return impl_->runtime.mode; }
+
+namespace {
+// `name` on PATH (or a path that exists), else "".
+std::string which(const std::string& name) {
+  if (name.find('/') != std::string::npos) return fs::exists(name) ? name : "";
+  const char* path = std::getenv("PATH");
+  std::string_view rest = path ? path : "";
+  while (!rest.empty()) {
+    const auto colon = rest.find(':');
+    const fs::path f = fs::path(std::string(rest.substr(0, colon))) / name;
+    if (access(f.c_str(), X_OK) == 0) return f.string();
+    rest = colon == std::string_view::npos ? "" : rest.substr(colon + 1);
+  }
+  return "";
+}
+
+// Why a native omc can't build FMUs, or "": every file of its FMU build project must be
+// readable (OpenModelica nightlies have shipped config.guess and config.sub root-only).
+std::string unhealthy(const std::string& omc) {
+  std::error_code ec;
+  const fs::path project = fs::canonical(omc, ec).parent_path().parent_path() / "share/omc/runtime/c/fmi/buildproject";
+  if (ec || !fs::is_directory(project, ec)) return "";
+  for (const auto& e : fs::directory_iterator(project, ec))
+    if (e.is_regular_file() && access(e.path().c_str(), R_OK) != 0)
+      return e.path().string() + " is not readable, so omc can't build FMUs";
+  return "";
+}
+}  // namespace
+
+OmcRuntime resolve_omc() {
+  const auto env = [](const char* k) { const char* v = std::getenv(k); return std::string(v ? v : ""); };
+  for (const char* k : {"SQUERO_OMC_BIN", "PAPERBOAT_OMC_BIN"})
+    if (!env(k).empty()) return {"native", env(k), ""};
+  const std::string force = env("SQUERO_OMC");
+  const std::string native = which("omc");
+  const std::string engine = force == "docker" ? which("docker") : force == "podman" ? which("podman")
+                             : !which("podman").empty() ? which("podman") : which("docker");
+  const std::string engine_mode = engine.empty() ? "" : fs::path(engine).filename().string();
+  if (force == "native") return {"native", native.empty() ? "omc" : native, ""};
+  if ((force == "podman" || force == "docker") && !engine.empty()) return {engine_mode, engine, ""};
+  const std::string sick = native.empty() ? "no omc on PATH" : unhealthy(native);
+  if (!native.empty() && sick.empty()) return {"native", native, ""};
+  if (!engine.empty()) return {engine_mode, engine, sick};
+  return {"native", native.empty() ? "omc" : native, sick + (native.empty() ? ", and no podman or docker to run it in" : "")};
+}
+
+std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args) {
+  std::vector<std::string> out;
+  if (rt.mode == "native") {
+    out.push_back(rt.exe);
+  } else {
+    const char* home = std::getenv("HOME");
+    const std::string h = home ? home : "/root";
+    const std::string tmp = fs::temp_directory_path().string();
+    out = {rt.exe, "run", "--rm", "-i", "--network=host", "--security-opt", "label=disable", "-e", "HOME=" + h,
+           "-e", "USER=" + std::string(std::getenv("USER") ? std::getenv("USER") : "omc"), "-v", tmp + ":" + tmp, "-v", h + ":" + h, "-w", workdir};
+    // files omc writes are the user's: podman maps the user in, docker runs as them
+    if (rt.mode == "podman") out.insert(out.begin() + 2, "--userns=keep-id");
+    else out.insert(out.begin() + 2, {"--user", std::to_string(getuid()) + ":" + std::to_string(getgid())});
+    if (tmp != "/tmp") out.insert(out.end() - 2, {"-v", "/tmp:/tmp"});
+    out.push_back(kImage);
+    out.push_back("omc");
+  }
+  out.insert(out.end(), args.begin(), args.end());
+  return out;
+}
 
 // --- allow-list ---
 
