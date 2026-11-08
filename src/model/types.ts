@@ -11,6 +11,7 @@ export type ComponentInst = {
   name: string; // "R1"
   class: string; // "Modelica.Electrical.Analog.Basic.Resistor"
   params: Record<string, string>; // modifiers as Modelica text: { R: "10" }
+  defaults?: Record<string, string>; // the class's numeric parameters when unset: { C: "1" }
   placement: Placement;
   icon?: IconDef; // from the Wave 2 importer
   ports: IconPort[];
