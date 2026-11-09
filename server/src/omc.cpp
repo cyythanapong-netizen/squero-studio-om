@@ -21,6 +21,7 @@
 #include <optional>
 #include <type_traits>
 #include <thread>
+#include <utility>
 
 namespace squero {
 namespace {
@@ -85,6 +86,55 @@ std::string trim(std::string s) {
   return s.substr(i);
 }
 
+// `getErrorString()` as separate messages. omc writes one per line, a source span in brackets
+// when it has one: `[/tmp/M.mo:18:5-18:10:writable] Error: …`.
+std::vector<OmcMessage> parse_messages(std::string_view raw) {
+  std::vector<OmcMessage> out;
+  std::size_t at = 0;
+  while (at < raw.size()) {
+    const std::size_t end = raw.find('\n', at);
+    std::string line = trim(std::string(raw.substr(at, end == std::string_view::npos ? raw.size() - at : end - at)));
+    at = end == std::string_view::npos ? raw.size() : end + 1;
+    if (line.empty()) continue;
+    OmcMessage message;
+    std::string text = line;
+    if (line.front() == '[') {
+      if (const std::size_t close = line.find(']'); close != std::string::npos) {
+        const std::string inside = line.substr(1, close - 1);
+        if (const std::size_t colon = inside.find(':'); colon != std::string::npos) {
+          message.file = inside.substr(0, colon);
+          std::size_t p = colon + 1;
+          const auto number = [&](int& value) {
+            const std::size_t start = p;
+            while (p < inside.size() && std::isdigit(static_cast<unsigned char>(inside[p]))) ++p;
+            if (p == start) return false;
+            value = std::stoi(inside.substr(start, p - start));
+            return true;
+          };
+          if (number(message.line) && p < inside.size() && inside[p] == ':') {
+            ++p;
+            number(message.column);
+          }
+        }
+        text = trim(line.substr(close + 1));
+      }
+    }
+    for (const auto& [prefix, level] : {std::pair{"Error:", "error"}, std::pair{"Warning:", "warning"},
+                                        std::pair{"Notification:", "info"}, std::pair{"Info:", "info"}}) {
+      if (text.rfind(prefix, 0) == 0) {
+        message.level = level;
+        text = trim(text.substr(std::string_view(prefix).size()));
+        break;
+      }
+    }
+    if (message.level.empty()) message.level = "info";
+    if (text.empty()) continue;
+    message.text = std::move(text);
+    out.push_back(std::move(message));
+  }
+  return out;
+}
+
 }  // namespace
 
 std::string_view name(OmcState state) {
@@ -111,7 +161,10 @@ struct Omc::Impl {
   bool started_once = false;
   std::vector<std::string> replay;  // loadModel / loadFile calls that succeeded
   StatusFn status_fn;
+  LogFn log_fn;
   mutable std::mutex state_mutex;
+  std::string last_raw;             // getErrorString() as the last drain saw it
+  std::vector<OmcMessage> last_msgs;
 
   void set_state(OmcState s) {
     {
@@ -270,6 +323,21 @@ struct Omc::Impl {
       }
     }
   }
+
+  // Drain omc's message buffer into the last-drain cache and tell the log listener. One extra
+  // round trip; callers decide when it is worth it.
+  std::pair<std::string, std::vector<OmcMessage>> drain() {
+    const std::string raw = trim(parse_value(call("getErrorString()", options.timeout)).atom);
+    std::vector<OmcMessage> messages = parse_messages(raw);
+    {
+      std::lock_guard lock(state_mutex);
+      last_raw = raw;
+      last_msgs = messages;
+    }
+    if (log_fn)
+      for (const auto& message : messages) log_fn(message);
+    return {raw, std::move(messages)};
+  }
 };
 
 Omc::Omc() : Omc(Options{}) {}
@@ -290,10 +358,30 @@ Omc::~Omc() {
 std::string Omc::call(std::string_view expr) { return impl_->call(expr, impl_->options.timeout); }
 std::string Omc::call(std::string_view expr, std::chrono::milliseconds timeout) { return impl_->call(expr, timeout); }
 
-std::string Omc::errors() {
-  const OmValue v = parse_value(call("getErrorString()"));
-  return trim(v.atom);
+std::string Omc::errors() { return impl_->drain().first; }
+
+std::vector<OmcMessage> Omc::messages() { return impl_->drain().second; }
+
+std::vector<OmcMessage> Omc::last_messages() const {
+  std::lock_guard lock(impl_->state_mutex);
+  return impl_->last_msgs;
 }
+
+std::string Omc::take_errors() {
+  std::lock_guard lock(impl_->state_mutex);
+  std::string raw = std::move(impl_->last_raw);
+  impl_->last_raw.clear();
+  impl_->last_msgs.clear();
+  return raw;
+}
+
+void Omc::clear_messages() {
+  std::lock_guard lock(impl_->state_mutex);
+  impl_->last_raw.clear();
+  impl_->last_msgs.clear();
+}
+
+void Omc::on_log(LogFn fn) { impl_->log_fn = std::move(fn); }
 
 OmcState Omc::state() const {
   std::lock_guard lock(impl_->state_mutex);
@@ -377,7 +465,7 @@ const std::vector<std::string>& allowed_calls() {
       "loadModel", "loadFile", "getClassNames", "getComponents", "getComponentAnnotations",
       "getNthComponentCondition", "getInheritedClasses", "getClassRestriction", "isConnector",
       "getComponentModifierValue", "getDerivedClassModifierValue", "getIconAnnotation", "getDiagramAnnotation",
-      "getConnectionCount", "getNthConnection", "checkModel", "addComponent", "deleteComponent", "addConnection",
+      "getConnectionCount", "getNthConnection", "checkModel", "instantiateModel", "addComponent", "deleteComponent", "addConnection",
       "deleteConnection", "setComponentModifierValue", "list", "dumpXMLDAE", "buildModelFMU", "getVersion",
       "getErrorString",  // read-only, how a client words a failed call
       "isPartial", "getSourceFile", "getClassComment",  // read-only: the library tree and open

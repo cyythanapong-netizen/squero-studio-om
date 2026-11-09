@@ -11,7 +11,7 @@ import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
 import { StudioContext } from "./model/types.ts";
 import { OmcClient, type OmcStatus } from "./omc/omc.ts";
-import { ConsoleWindow, type Log } from "@paperboat/shared/components";
+import { type Log, type Message } from "@paperboat/shared/components";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { LibraryModal, PromptModal, StatusModal } from "./shell/Dialogs.tsx";
@@ -21,6 +21,7 @@ import { Opening } from "./shell/Opening.tsx";
 import { Simulate } from "./simulate/Simulate.tsx";
 import { Viewport3D, type ShapeRun } from "./viewport3d/Viewport3D.tsx";
 import { Split, type View } from "./split/Split.tsx";
+import { StudioConsole, type ConsoleTab } from "./shell/StudioConsole.tsx";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
 
@@ -80,8 +81,20 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [logs, setLogs] = useState<Log[]>([]);
   const [consoleShown, setConsoleShown] = useState(false);
+  const [consoleTab, setConsoleTab] = useState<ConsoleTab>("console");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [sourceLine, setSourceLine] = useState(0);
   const errors = logs.filter((l) => l.level === "error").length;
   const say = (text: string, level: Log["level"] = "info") => setLogs((l) => [...l, { level, text }]);
+  // omc's own messages stream into the Console while it works; the server pushes them.
+  useEffect(() => {
+    omc.onLog((message) => {
+      const at = message.file ? ` (${message.file}${message.line ? `:${message.line}` : ""})` : "";
+      setLogs((l) => [...l, { level: message.level === "warning" ? "warn" : message.level, text: `${message.text}${at}` }]);
+    });
+  }, [omc]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setConsoleShown(false);
     document.addEventListener("keydown", onKey);
@@ -95,6 +108,13 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   useEffect(() => {
     if (popover && model && !model.components.some((c) => c.name === popover)) setPopover(null);
   }, [popover, model]);
+
+  // A new document starts with no messages and no highlighted line.
+  useEffect(() => {
+    setMessages([]);
+    setSelectedMessage(null);
+    setSourceLine(0);
+  }, [model?.name]);
 
   useEffect(() => {
     if (actions.notice) say(actions.notice);
@@ -124,6 +144,47 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     };
     reader.readAsText(file);
     e.target.value = "";
+  };
+
+  const openConsole = (tab: ConsoleTab) => {
+    setConsoleTab(tab);
+    setConsoleShown(true);
+  };
+
+  const toggleConsole = () => {
+    if (!consoleShown) openConsole("console");
+    else if (consoleTab === "messages") setConsoleTab("console");
+    else setConsoleShown(false);
+  };
+
+  const runCheck = async () => {
+    if (!api) return;
+    setChecking(true);
+    try {
+      const result = await actions.checkModel();
+      setMessages(result.messages);
+      setSelectedMessage(null);
+      openConsole("messages");
+      say(
+        result.messages.length
+          ? `check: ${result.messages.length} ${result.messages.length === 1 ? "message" : "messages"}`
+          : `check: ${result.equations} / ${result.unknowns} equations / unknowns`,
+      );
+    } catch (err) {
+      say((err as Error).message, "error");
+      openConsole("console");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const openMessage = (message: Message) => {
+    setSelectedMessage(message);
+    setSourceLine(message.line ?? 0);
+    setView("mo");
+    setSide(true);
+    const part = model?.components.find((component) => message.text.includes(component.name))?.name;
+    if (part) api?.select([part]);
   };
 
   const commands = useMemo<Command[]>(
@@ -216,17 +277,50 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "undo", label: "Undo", menu: "edit", group: "history", shortcut: "Ctrl+Z", enabled: actions.canUndo, run: actions.undo },
       { id: "redo", label: "Redo", menu: "edit", group: "history", shortcut: "Ctrl+Shift+Z", enabled: actions.canRedo, run: actions.redo },
 
+      // Model menu (#68)
+      {
+        id: "model.check",
+        label: "Check Model",
+        menu: "model",
+        group: "check",
+        shortcut: "Ctrl+Shift+C",
+        chord: { key: "c", ctrl: true, shift: true },
+        enabled: Boolean(model),
+        run: () => void runCheck(),
+      },
+      {
+        id: "model.flat",
+        label: "Show Flat Model…",
+        menu: "model",
+        group: "check",
+        shortcut: "Ctrl+Shift+F",
+        chord: { key: "f", ctrl: true, shift: true },
+        enabled: Boolean(model),
+        run: () => (setView("flat"), setSide(true)),
+      },
+      {
+        id: "model.messages",
+        label: "Messages",
+        menu: "model",
+        group: "show",
+        meta: messages.length ? String(messages.length) : undefined,
+        checked: consoleShown && consoleTab === "messages",
+        enabled: Boolean(model),
+        run: () => openConsole("messages"),
+      },
+
       // View menu
       { id: "solver", label: "Solver settings…", menu: "run", group: "solver", run: () => (setSide(true), window.dispatchEvent(new Event("squero:solver"))) },
       { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
       { id: "mo", label: ".mo", menu: "view", group: "source", checked: view === "mo", run: () => (setView("mo"), setSide(true)) },
+      { id: "flat", label: "flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(true)) },
       { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },
       ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Code and scopes" : f === "code" ? "Focus code" : "Focus scopes", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(true)) })),
-      { id: "console", label: "Console", menu: "view", group: "sheet", checked: consoleShown, run: () => setConsoleShown((c) => !c) },
+      { id: "console", label: "Console", menu: "view", group: "sheet", checked: consoleShown, run: toggleConsole },
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
       ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
     ],
-    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, focus, theme, setTheme, model, api, consoleShown],
+    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole],
   );
   useShortcuts(commands);
 
@@ -255,7 +349,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           showFocus={side}
           errors={errors}
           consoleShown={consoleShown}
-          onConsole={() => setConsoleShown((c) => !c)}
+          onConsole={toggleConsole}
           theme={theme}
           onTheme={setTheme}
           onStatusClick={() => setStatusModalOpen(true)}
@@ -287,7 +381,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               </div>
             </main>
             <aside className={`side focus-${focus}`} inert={!side}>
-                <Split model={model} actions={actions} view={view} onView={setView} />
+                <Split model={model} actions={actions} view={view} onView={setView} line={sourceLine} />
                 <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
               </aside>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
@@ -335,7 +429,20 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           />
         )}
 
-        {consoleShown && <ConsoleWindow logs={logs} errors={errors} onClose={() => setConsoleShown(false)} />}
+        {consoleShown && (
+          <StudioConsole
+            logs={logs}
+            messages={messages}
+            tab={consoleTab}
+            selected={selectedMessage}
+            checking={checking}
+            onTab={setConsoleTab}
+            onSelect={setSelectedMessage}
+            onOpen={openMessage}
+            onCheck={() => void runCheck()}
+            onClose={() => setConsoleShown(false)}
+          />
+        )}
       </div>
     </StudioContext.Provider>
   );

@@ -7,9 +7,10 @@ import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
 import { CodeView } from "./CodeView.tsx";
 
-export type View = "mo" | "cpp";
+export type View = "mo" | "flat" | "cpp";
 const OPTIONS: { value: View; label: string }[] = [
   { value: "mo", label: ".mo" },
+  { value: "flat", label: "flat" },
   { value: "cpp", label: "causal ODE c++" },
 ];
 
@@ -38,8 +39,21 @@ function useLater<T>(model: StudioModel, load: () => Promise<T>, on: boolean): {
   return state;
 }
 
-export function Split({ model, actions, view, onView }: { model: StudioModel; actions: Actions; view: View; onView: (v: View) => void }) {
+export function Split({
+  model,
+  actions,
+  view,
+  onView,
+  line,
+}: {
+  model: StudioModel;
+  actions: Actions;
+  view: View;
+  onView: (v: View) => void;
+  line?: number;
+}) {
   const mo = useLater<string>(model, actions.source, view === "mo");
+  const flat = useLater<string>(model, actions.flatModel, view === "flat");
   const cpp = useLater<Preview>(model, actions.preview, view === "cpp");
   const [file, setFile] = useState("");
   const names = Object.keys(cpp.value?.files ?? {});
@@ -57,7 +71,24 @@ export function Split({ model, actions, view, onView }: { model: StudioModel; ac
         </div>
       </header>
       {view === "mo" ? (
-        <CodeView code={mo.value ?? (mo.error || "…")} lang="mo" ariaLabel="Modelica source" />
+        <CodeView code={mo.value ?? (mo.error || "…")} lang="mo" ariaLabel="Modelica source" line={line} />
+      ) : view === "flat" ? (
+        <>
+          <p className="code-about" role="status">
+            <b>flat model</b> · instantiateModel({model.name}) · read-only
+            {flat.value !== null && (
+              <button
+                type="button"
+                className="key small"
+                style={{ marginLeft: "auto" }}
+                onClick={() => void navigator.clipboard?.writeText(flat.value ?? "")}
+              >
+                Copy
+              </button>
+            )}
+          </p>
+          <CodeView code={flat.value ?? (flat.error || "flattening…")} lang="mo" ariaLabel="Flat Modelica" />
+        </>
       ) : (
         <>
           <p className="code-about" role="status">

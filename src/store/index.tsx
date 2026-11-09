@@ -5,6 +5,7 @@
 import type { Shape } from "../viewport3d/shapes.ts";
 import { fmuSolver, loadSolver, type SolverChoice } from "../simulate/solver.ts";
 import { useUndo, type IconDef } from "@paperboat/shared";
+import type { Message } from "@paperboat/shared/components";
 import type { Edge, Node } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Connection, ExportMode, ExportProgress, ExportResult, Placement, StudioApi, StudioModel } from "../model/types.ts";
@@ -42,6 +43,10 @@ export type Actions = {
   canRedo: boolean;
   /** .mo text of the model, for the split view. */
   source(): Promise<string>;
+  /** checkModel: its balance and every message omc left, for the Console and Messages panel. */
+  checkModel(): Promise<{reply: string; equations: number; unknowns: number; messages: Message[]}>;
+  /** instantiateModel: the flat Modelica text, for the flat source view. */
+  flatModel(): Promise<string>;
   /** The generated backend without writing it: path and reason, and the files for the ODE path. */
   preview(): Promise<{ path: "ode" | "fmu"; reason: string; files: Record<string, string>; notices: string[] }>;
   /** A local check run: every variable over [0, stop]; each top-level input fed its stimulus (0 when not given). */
@@ -291,6 +296,19 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
         if (!m?.file) return Promise.reject(new Error("the model has no file yet"));
         // queued behind edits: generating reloads the file, so a half-saved edit must not be in flight
         return enqueue(() => omc.op<{ path: "ode" | "fmu"; reason: string; files?: Record<string, string>; notices?: string[] }>("generate", { source: m.file, model: m.name, dry: true })).then((r) => ({ path: r.path, reason: r.reason, files: r.files ?? {}, notices: r.notices ?? [] }));
+      },
+      checkModel() {
+        const m = current.current;
+        if (!m) return Promise.reject(new Error("no model"));
+        return enqueue(() => omc.op<{ reply: string; equations: number; unknowns: number; messages: Message[] }>("check_model", { model: m.name }));
+      },
+      flatModel() {
+        const m = current.current;
+        if (!m) return Promise.reject(new Error("no model"));
+        return enqueue(() => omc.op<{ text: string; messages?: Message[] }>("instantiate_model", { model: m.name })).then((r) => {
+          if (!r.text) throw new Error(r.messages?.[0]?.text ?? "omc could not flatten this model");
+          return r.text;
+        });
       },
       simulate(stop, inputs = {}, solver) {
         const m = current.current;

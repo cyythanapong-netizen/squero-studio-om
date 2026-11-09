@@ -6,7 +6,10 @@ export type OmcState = 'ready' | 'checking' | 'failed';
 /** `mode`: how omc runs, native | podman | docker (#2); "" before it starts. */
 export type OmcStatus = {state: OmcState; version: string; mode?: string};
 
-type Reply = {id?: number; ok?: boolean; result?: unknown; error?: string; op?: string; stage?: string; fraction?: number} & Partial<OmcStatus>;
+/** One message omc streamed to the Console: the same shape the server's message cards use. */
+export type OmcLog = {level: 'error' | 'warning' | 'info'; text: string; file?: string; line?: number; column?: number};
+
+type Reply = {id?: number; ok?: boolean; result?: unknown; error?: string; op?: string; stage?: string; fraction?: number; level?: OmcLog['level']; text?: string; file?: string; line?: number; column?: number} & Partial<OmcStatus>;
 type Waiter = {resolve: (result: unknown) => void; reject: (error: Error) => void; progress?: (stage: string, fraction: number) => void};
 
 /** The two calls the store makes; tests give it a fake. */
@@ -21,6 +24,8 @@ export class OmcClient {
   private readonly open: Promise<void>;
 
   private readonly onStatus: (status: OmcStatus) => void;
+  private logListener: ((message: OmcLog) => void) | undefined;
+  private logBuffer: OmcLog[] = [];
 
   constructor(url: string, onStatus: (status: OmcStatus) => void = () => {}) {
     this.onStatus = onStatus;
@@ -57,6 +62,13 @@ export class OmcClient {
     });
   }
 
+  /** omc's drained messages, streamed by the server as they happen. */
+  onLog(fn: (message: OmcLog) => void): void {
+    this.logListener = fn;
+    for (const message of this.logBuffer) fn(message);
+    this.logBuffer = [];
+  }
+
   close(): void {
     this.closing = true;
     this.ws.close();
@@ -71,6 +83,18 @@ export class OmcClient {
     }
     if (msg.op === 'status' && msg.state) {
       this.setStatus({state: msg.state, version: msg.version ?? '', mode: msg.mode ?? ''});
+      return;
+    }
+    if (msg.op === 'log' && msg.text !== undefined) {
+      const log: OmcLog = {
+        level: msg.level ?? 'info',
+        text: msg.text,
+        ...(msg.file ? {file: msg.file} : {}),
+        ...(msg.line !== undefined ? {line: msg.line} : {}),
+        ...(msg.column !== undefined ? {column: msg.column} : {}),
+      };
+      if (this.logListener) this.logListener(log);
+      else if (this.logBuffer.length < 500) this.logBuffer.push(log); // before the panel subscribes
       return;
     }
     const waiter = msg.id === undefined ? undefined : this.waiting.get(msg.id);

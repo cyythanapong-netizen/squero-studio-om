@@ -560,6 +560,9 @@ body.dragging-card .library {
 .code-row:hover {
   background: rgb(255 255 255 / 0.04);
 }
+.code-row.hit {
+  background: rgb(255 255 255 / 0.07);
+}
 .code-ln {
   flex: none;
   width: 34px;
@@ -608,11 +611,19 @@ body.dragging-card .library {
   color: #d19a66;
   font-style: italic;
 }
-.code-about { margin: 0; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); font: 400 var(--size-xs) var(--font-sans); color: var(--text-muted); }
+.code-about { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); font: 400 var(--size-xs) var(--font-sans); color: var(--text-muted); }
 .code-about b { color: var(--text); font: 600 var(--size-xs) var(--font-mono); }
 .files { display: flex; gap: 2px; padding: 0 var(--space-2); overflow-x: auto; border-bottom: 1px solid var(--line); }
 .files button { border: 0; background: none; border-radius: 0; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; }
 .files button.on { color: var(--text); font-weight: 500; box-shadow: inset 0 -2px 0 var(--line-ink); }
+.studio-console { width: min(660px, calc(100vw - 96px)); height: min(470px, calc(100vh - 120px)); }
+.studio-console .console-head .lbl { margin-left: 0; }
+.studio-console .console-head .spacer,
+.studio-console .console-foot .spacer { flex: 1; }
+.console-count { margin-left: 4px; color: var(--text-muted); font: 500 10px var(--font-mono); }
+.console-count.bad { color: var(--danger); }
+.console-foot { display: flex; align-items: center; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--line); font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
+
 .simulate .well { width: 72px; height: 28px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-md); padding: 0 var(--space-2); }
 .simulate .error { margin: 0; padding: var(--space-2) var(--space-3); color: var(--danger); font-size: var(--size-xs); white-space: pre-wrap; }
 .simulate .warning { margin: 0; padding: var(--space-1) var(--space-3); color: var(--danger); font-size: var(--size-xs); }

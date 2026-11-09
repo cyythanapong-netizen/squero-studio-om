@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>squero studio OM · #68 check model, flat model, messages</title>
+<style>
+  /* ---------------------------------------------------------------------------------
+     Design study for squero#68: check model, instantiate flat model, messages browser.
+
+     The messages browser is a tab of the floating Console (the app's one home for
+     warnings and errors); the flat model is a third source view beside .mo and the
+     generated C++. Both are read-only displays, in the tokens from
+     @paperboat/shared/src/tokens.css.
+     --------------------------------------------------------------------------------- */
+
+  @font-face { font-family: "Geist Sans"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Geist Sans"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-sans/files/geist-sans-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+  @font-face { font-family: "Geist Sans"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+  @font-face { font-family: "Geist Mono"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Geist Mono"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-mono/files/geist-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+
+  :root {
+    --grey-50: #f2f2ef; --grey-100: #eaeae6; --grey-200: #dcdcd8; --grey-300: #cfcfca;
+    --grey-500: #9d9d97; --grey-600: #55554f; --grey-900: #161616;
+    --black: #0d0d0d; --white: #ffffff; --screen-text: #f2f2ee; --screen-dim: #5d5d58;
+    --orange: #ff5a1f; --red: #d92d20;
+    --font-sans: "Geist Sans", system-ui, sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, monospace;
+    --size-2xs: 12px; --size-xs: 12.5px; --size-sm: 13px; --size-md: 15px; --size-xl: 30px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px;
+    --surface-ground: var(--grey-200); --surface-panel: var(--grey-100); --surface-raised: var(--grey-50);
+    --surface-screen: var(--black); --surface-well: #dcdcd7; --surface-sunken: #e1e1dd;
+    --surface-float: rgb(236 236 232 / 0.78);
+    --well-shadow: inset 0 1px 2px rgb(0 0 0 / 0.08);
+    --text: var(--grey-900); --text-muted: var(--grey-600);
+    --text-on-screen: var(--screen-text); --text-on-screen-muted: var(--screen-dim);
+    --line: var(--grey-300); --line-strong: var(--grey-500); --line-ink: var(--grey-900);
+    --dots: rgb(0 0 0 / 0.15);
+    --signal: var(--orange); --danger: var(--red);
+    --text-on-signal: var(--white);
+    --shadow-1: 0 8px 22px rgb(0 0 0 / 0.16); --shadow-2: 0 16px 40px rgb(0 0 0 / 0.18);
+    --radius-sm: 3px; --radius-md: 5px; --radius-lg: 6px; --radius-round: 999px;
+    --ease: cubic-bezier(.65, 0, .25, 1); --motion: 150ms var(--ease); --glide: 300ms var(--ease);
+    --bar-height: 56px; --panel-head-height: 36px; --gutter: 14px;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --surface-ground: #111111; --surface-panel: #1a1a1a; --surface-raised: #222222;
+    --surface-screen: #050505; --surface-well: #111111; --surface-sunken: #151515;
+    --surface-float: rgb(34 34 34 / 0.8);
+    --well-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5);
+    --text: #e9e9e4; --text-muted: #a3a39d;
+    --text-on-screen: #f2f2ee; --text-on-screen-muted: #5d5d58;
+    --line: #2e2e2e; --line-strong: #4a4a4a; --line-ink: #e9e9e4;
+    --dots: rgb(255 255 255 / 0.1);
+    --signal: #ff6a30; --danger: #ff5c4d;
+    --shadow-1: 0 8px 22px rgb(0 0 0 / 0.5); --shadow-2: 0 16px 40px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh; padding: 28px 20px 48px;
+    background: #b9b9b3; color: var(--text);
+    font: 400 var(--size-sm) / 1.45 var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :root[data-theme="dark"] body { background: #0b0b0b; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--line-ink); outline-offset: 2px; }
+
+  /* ---- the study's own board (outside the app frame) ------------------------------- */
+  .board { max-width: 1440px; margin: 0 auto; }
+  .board-head { display: flex; align-items: flex-end; gap: var(--space-4); margin-bottom: 12px; color: #454540; }
+  :root[data-theme="dark"] .board-head { color: #9c9c96; }
+  .board-head b { color: #161616; font-weight: 600; }
+  :root[data-theme="dark"] .board-head b { color: #e9e9e4; }
+  .board-head .note { font: 400 var(--size-2xs) var(--font-mono); opacity: .75; }
+  .board-head .spacer { flex: 1; }
+  .board-actions { display: inline-flex; gap: 6px; align-items: center; }
+  .board-actions .sep { width: 1px; height: 18px; background: #8f8f89; margin: 0 6px; }
+  .board-actions button {
+    height: 28px; padding: 0 10px; border: 1px solid #8f8f89; border-radius: var(--radius-md);
+    background: transparent; color: #454540; cursor: pointer;
+    font: 500 var(--size-2xs) var(--font-mono);
+  }
+  .board-actions button.on { border-color: #161616; color: #161616; background: #f2f2ef; }
+  :root[data-theme="dark"] .board-actions button { border-color: #4a4a4a; color: #a3a39d; }
+  :root[data-theme="dark"] .board-actions button.on { border-color: #e9e9e4; color: #e9e9e4; background: #222; }
+
+  .frame {
+    position: relative; width: 100%; height: 860px; overflow: hidden;
+    background: var(--surface-ground); border: 1px solid #8f8f89; border-radius: 10px;
+    box-shadow: 0 20px 60px rgb(0 0 0 / .18);
+  }
+  .studio {
+    height: 100%; display: grid; gap: var(--gutter); padding: var(--gutter);
+    grid-template-columns: 236px minmax(0, 1fr) 400px;
+    grid-template-rows: var(--bar-height) minmax(0, 1fr) auto;
+    grid-template-areas: "bar bar bar" "library stage side" "dock dock dock";
+    position: relative;
+  }
+
+  /* ---- bar ------------------------------------------------------------------------- */
+  .bar { grid-area: bar; display: flex; align-items: center; gap: var(--space-3); min-width: 0; position: relative; }
+  .wm { display: inline-flex; align-items: baseline; gap: 5px; font: 600 17px var(--font-sans); letter-spacing: -.01em; white-space: nowrap; }
+  .wm .muted { font-weight: 400; color: var(--text-muted); }
+  .wm .badge {
+    align-self: center; margin-left: 2px; padding: 1px 5px; border-radius: var(--radius-sm);
+    background: var(--text); color: var(--surface-panel);
+    font: 600 10px var(--font-mono); letter-spacing: .02em;
+  }
+  .wm .water { display: inline-flex; gap: 2px; margin-left: 3px; align-self: flex-end; padding-bottom: 2px; }
+  .wm .water i { width: 4px; height: 4px; background: var(--signal); display: block; }
+  .menus { display: inline-flex; align-items: center; gap: 2px; margin-left: var(--space-2); }
+  .menus button { border: 0; background: none; padding: 4px 8px; border-radius: var(--radius-sm); font: 400 var(--size-xs) var(--font-sans); color: var(--text-muted); cursor: pointer; }
+  .menus button:hover { color: var(--text); background: var(--surface-sunken); }
+  .menus button.open { color: var(--text); box-shadow: inset 0 0 0 1px var(--line-ink); border-radius: 2px; }
+  .proj {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font: 400 var(--size-xs) var(--font-mono); color: var(--text-muted);
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .proj .dirty { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); display: inline-block; }
+  .bar .spacer { flex: 1; }
+  .key {
+    height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-md);
+    font: 500 var(--size-xs) var(--font-sans); white-space: nowrap; cursor: pointer;
+  }
+  .key.small { height: 24px; padding: 0 9px; font-size: var(--size-2xs); }
+  .key.ink { border-color: var(--line-ink); font-weight: 600; }
+  .key.err { color: var(--danger); border-color: var(--danger); }
+  .key.icon-key { width: 28px; padding: 0; justify-content: center; }
+  .key.icon-key svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+  .key.icon-key svg .fill { fill: var(--text); opacity: .18; }
+  .pill {
+    height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px;
+    border: 1px solid var(--line); border-radius: var(--radius-round);
+    font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); }
+  .theme-key { font-family: var(--font-mono); }
+
+  /* ---- Model menu ------------------------------------------------------------------ */
+  .menu-pop {
+    position: absolute; z-index: 60; min-width: 250px; padding: 5px;
+    background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-1); display: none;
+  }
+  .menu-pop.open { display: block; }
+  .menu-pop .mi {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%;
+    border: 0; background: none; padding: 7px 9px; border-radius: var(--radius-sm);
+    text-align: left; font: 400 var(--size-xs) var(--font-sans); color: var(--text); cursor: pointer;
+  }
+  .menu-pop .mi:hover { background: var(--surface-sunken); }
+  .menu-pop .mi .chk { width: 4px; height: 4px; background: transparent; }
+  .menu-pop .mi.on .chk { background: var(--text); }
+  .menu-pop .mi kbd { margin-left: auto; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .menu-pop .mi .count { margin-left: auto; }
+  .menu-pop hr { border: 0; border-top: 1px solid var(--line); margin: 5px 4px; }
+
+  /* ---- library --------------------------------------------------------------------- */
+  .library {
+    grid-area: library; display: flex; flex-direction: column; min-height: 0;
+    background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: var(--space-2); min-height: var(--panel-head-height);
+    padding: 0 var(--space-3); border-bottom: 1px solid var(--line);
+    font: 500 var(--size-2xs) var(--font-mono); color: var(--text-muted); text-transform: lowercase;
+  }
+  .panel-head .count { margin-left: auto; font: 400 var(--size-2xs) var(--font-mono); opacity: .7; }
+  .lib-search { padding: var(--space-2); border-bottom: 1px solid var(--line); }
+  .well {
+    height: 26px; display: flex; align-items: center; padding: 0 8px;
+    background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-md);
+    font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted);
+  }
+  .tree { flex: 1; min-height: 0; overflow: auto; padding: 4px 0; }
+  .tree-row {
+    display: flex; align-items: center; gap: 3px; height: 25px; padding-right: 10px;
+    font: 400 var(--size-xs) var(--font-mono); color: var(--text-muted); white-space: nowrap;
+  }
+  .tree-row:hover { background: var(--surface-sunken); color: var(--text); }
+  .tree-row .caret { width: 14px; text-align: center; flex: none; opacity: .7; }
+  .tree-row .nm { overflow: hidden; text-overflow: ellipsis; }
+  .tree-row .n { margin-left: auto; font: 400 11px var(--font-mono); opacity: .55; }
+  .tree-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 2px 0 0 var(--line-ink); }
+  .tree-row.on .nm { font-weight: 600; }
+  .tree-row.live .nm::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; background: var(--signal); vertical-align: middle; }
+  .tree .i1 { padding-left: 12px; } .tree .i2 { padding-left: 26px; } .tree .i3 { padding-left: 40px; } .tree .i4 { padding-left: 54px; }
+
+  /* ---- stage ----------------------------------------------------------------------- */
+  .stage { grid-area: stage; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+  .stage-tabs { display: flex; align-items: center; gap: var(--space-3); min-height: 26px; }
+  .choice { display: inline-flex; align-items: center; gap: 10px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
+  .choice button { border: 0; background: none; padding: 1px 0; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+  .choice button:hover { color: var(--text); }
+  .choice button.on { color: var(--text); font-weight: 500; }
+  .choice button.on::before { content: "[ "; }
+  .choice button.on::after { content: " ]"; }
+  .choice .count { font: 500 10px var(--font-mono); color: var(--danger); margin-left: 3px; }
+  .stage-meta { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
+  .canvas {
+    position: relative; flex: 1; min-height: 0; overflow: hidden;
+    background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg);
+    background-image: radial-gradient(var(--dots) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  .canvas .wires { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .canvas .wires path { fill: none; stroke: var(--line-ink); stroke-width: 1.2; }
+  .canvas .wires path.sel { stroke-width: 2.4; }
+  .plate { position: absolute; min-width: 128px; background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-md); }
+  .plate .phead { display: flex; align-items: center; gap: 6px; padding: 3px 7px; border-bottom: 1px solid var(--line); font: 600 var(--size-2xs) var(--font-sans); }
+  .plate .phead .tag { margin-left: auto; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .plate .pbody { padding: 4px 7px 6px; font: 400 11px var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+  .plate .pbody b { font-weight: 500; color: var(--text); }
+  .plate.sel { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--line-ink); }
+  .port { position: absolute; width: 8px; height: 8px; background: var(--surface-raised); border: 1.2px solid var(--line-ink); border-radius: 1px; }
+  .port.l { left: -4px; top: 50%; margin-top: -4px; }
+  .port.r { right: -4px; top: 50%; margin-top: -4px; }
+  .legend { position: absolute; left: 12px; bottom: 12px; font: 400 11px var(--font-mono); color: var(--text-muted); background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 3px 7px; }
+  .minimap { position: absolute; right: 12px; bottom: 12px; width: 150px; height: 92px; background: var(--surface-sunken); border: 1px solid var(--line-strong); border-radius: var(--radius-md); overflow: hidden; }
+  .minimap .m { position: absolute; background: var(--line-strong); opacity: .7; }
+  .minimap .view { position: absolute; border: 1px solid var(--line-ink); background: rgb(0 0 0 / .04); }
+
+  /* ---- side ------------------------------------------------------------------------ */
+  .side { grid-area: side; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+  .side-head { display: flex; align-items: center; gap: var(--space-2); min-height: var(--panel-head-height); padding: 0 var(--space-3); border-bottom: 1px solid var(--line); }
+  .side-head .choice { gap: 12px; }
+  .side-head .spacer { flex: 1; }
+  .side-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .pane[hidden] { display: none; }
+
+  /* code panes */
+  .code-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  .code-head b { color: var(--text); font: 600 var(--size-xs) var(--font-mono); white-space: nowrap; }
+  .code-head .spacer { flex: 1; }
+  .code-head .code-sub { flex: 1 0 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .code { flex: 1; min-height: 0; overflow: auto; margin: 0; background: var(--surface-screen); color: var(--text-on-screen); font: 400 var(--size-2xs) / 1.5 var(--font-mono); padding: var(--space-2) 0; }
+  .code .row { display: flex; padding: 0 var(--space-3); white-space: pre; }
+  .code .ln { flex: none; width: 34px; margin-right: var(--space-3); text-align: right; color: var(--text-on-screen-muted); opacity: .6; user-select: none; }
+  .code .src { flex: 1; }
+  .tok-keyword { color: #c792ea; font-weight: 500; }
+  .tok-type { color: #4ec9b0; font-weight: 500; }
+  .tok-comment { color: var(--text-on-screen-muted); font-style: italic; }
+  .tok-string { color: #98c379; }
+  .tok-number { color: #e5c07b; }
+  .tok-operator { color: #abb2bf; }
+  .tok-annotation { color: #d19a66; font-style: italic; }
+  .pill2 { padding: 0 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: 400 10px var(--font-mono); color: var(--text-muted); }
+
+  /* ---- dock ------------------------------------------------------------------------ */
+  .dock { grid-area: dock; display: flex; align-items: center; gap: var(--space-3); min-height: 36px; padding: 4px 12px; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+  .balance { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; background: var(--surface-screen); color: var(--text-on-screen); border-radius: var(--radius-md); font: 500 var(--size-2xs) var(--font-mono); white-space: nowrap; }
+  .balance .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-on-screen); }
+  .undrawn { padding: 3px 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius-md); font: 500 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; cursor: help; }
+  .dock .spacer { flex: 1; }
+  .dock .key { height: 28px; padding: 0 12px; }
+
+  /* ---- Console (the floating window; messages is its second tab) -------------------- */
+  .console-window {
+    position: absolute; z-index: 50; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: min(660px, calc(100% - 96px)); height: min(470px, calc(100% - 120px));
+    display: none; flex-direction: column; overflow: hidden;
+    background: var(--surface-panel); border: 1.5px solid var(--line-ink); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-2);
+  }
+  .console-window.open { display: flex; }
+  .console-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); }
+  .console-head .spacer { flex: 1; }
+  .console-head .lbl { font: 400 11px var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+  .console-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: var(--space-3) var(--space-4) var(--space-4); }
+  .console-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .console-pane[hidden] { display: none; }
+
+  .logs { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: var(--space-2) var(--space-3) var(--space-2) 40px; background: var(--surface-screen); color: var(--text-on-screen); border-radius: var(--radius-md); font: 400 var(--size-xs) / 1.75 var(--font-mono); }
+  .logs li::marker { color: var(--text-on-screen-muted); }
+  .logs .error { color: var(--danger); }
+  .logs .warning { color: var(--signal); }
+  .logs .info { color: var(--text-on-screen); }
+
+  .msg-head { display: flex; align-items: center; gap: var(--space-3); }
+  .msg-title { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .msg-head h2 { margin: 0; font: 600 var(--size-xs) var(--font-sans); }
+  .msg-head .sub { font: 400 11px var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+  .msg-head .spacer { flex: 1; }
+  .msg-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  .msg { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: var(--space-2); padding: 8px 10px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); cursor: default; }
+  .msg:hover { border-color: var(--line-strong); }
+  .msg.sel { border-color: var(--line-ink); box-shadow: 0 0 0 1px var(--line-ink); }
+  .msg .lvl { font: 500 11px var(--font-mono); text-align: right; padding-top: 1px; }
+  .msg.error .lvl { color: var(--danger); }
+  .msg.warning .lvl { color: var(--signal); }
+  .msg.info .lvl { color: var(--text-muted); }
+  .msg .body { min-width: 0; }
+  .msg .text { margin: 0; font: 400 var(--size-2xs) / 1.45 var(--font-sans); color: var(--text); }
+  .msg .where { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; border: 0; background: none; padding: 0; cursor: pointer; font: 400 11px var(--font-mono); color: var(--text-muted); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 2px; }
+  .msg .where:hover { color: var(--text); }
+  .msg-foot { display: flex; align-items: center; gap: var(--space-2); padding-top: 2px; font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
+  .msg-foot .spacer { flex: 1; }
+</style>
+</head>
+<body>
+<div class="board">
+  <header class="board-head">
+    <div><b>squero studio OM</b> &nbsp;·&nbsp; #68 check model, flat model, messages browser</div>
+    <span class="note">design study · messages is a Console tab · flat is a source view</span>
+    <span class="spacer"></span>
+    <div class="board-actions">
+      <button type="button" id="show-messages" class="on">Messages</button>
+      <button type="button" id="show-console">Console</button>
+      <button type="button" id="show-flat">Flat model</button>
+      <span class="sep"></span>
+      <button type="button" id="theme">theme: light</button>
+    </div>
+  </header>
+
+  <div class="frame">
+    <div class="studio">
+      <!-- bar -->
+      <header class="bar">
+        <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+        <nav class="menus" aria-label="Menus">
+          <button type="button">File</button>
+          <button type="button">Edit</button>
+          <button type="button">View</button>
+          <button type="button" id="model-menu-btn" aria-haspopup="true" aria-expanded="false">Model</button>
+          <button type="button">Run</button>
+        </nav>
+        <span class="proj">DoublePendulum <i class="dirty" title="unsaved changes"></i></span>
+        <span class="spacer"></span>
+        <button type="button" class="key small err" id="console-key" title="Open the Console">4 errors</button>
+        <button type="button" class="key small icon-key" title="Source &amp; Simulate pane" aria-pressed="true">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M10 2.5v11"/><rect x="10" y="2.5" width="4.5" height="11" class="fill"/></svg>
+        </button>
+        <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+        <button type="button" class="key small theme-key">auto</button>
+      </header>
+
+      <!-- Model menu -->
+      <div class="menu-pop" id="model-menu" role="menu" aria-label="Model">
+        <button type="button" class="mi" role="menuitem" id="check-item">
+          <span class="chk"></span><span>Check Model</span><kbd>Ctrl+Shift+C</kbd>
+        </button>
+        <button type="button" class="mi" role="menuitem" id="flat-item">
+          <span class="chk"></span><span>Show Flat Model…</span><kbd>Ctrl+Shift+F</kbd>
+        </button>
+        <hr />
+        <button type="button" class="mi on" role="menuitem" id="messages-item">
+          <span class="chk"></span><span>Messages</span><span class="count">4</span>
+        </button>
+      </div>
+
+      <!-- library -->
+      <aside class="library" aria-label="Library">
+        <div class="panel-head">library <span class="count">Modelica 4.1.0</span></div>
+        <div class="lib-search"><div class="well">search a class…</div></div>
+        <div class="tree">
+          <div class="tree-row"><span class="caret">▾</span><span class="nm">Modelica</span><span class="n">1.8k</span></div>
+          <div class="tree-row i1"><span class="caret">▸</span><span class="nm">Blocks</span></div>
+          <div class="tree-row i1"><span class="caret">▸</span><span class="nm">Electrical</span></div>
+          <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Mechanics</span></div>
+          <div class="tree-row i2"><span class="caret">▾</span><span class="nm">MultiBody</span></div>
+          <div class="tree-row i3"><span class="caret">▸</span><span class="nm">Examples</span></div>
+          <div class="tree-row i3"><span class="caret">▸</span><span class="nm">Joints</span></div>
+          <div class="tree-row i3"><span class="caret">▸</span><span class="nm">Parts</span></div>
+          <div class="tree-row i3 on"><span class="caret">▾</span><span class="nm">DoublePendulum</span></div>
+          <div class="tree-row i4 live"><span class="caret"></span><span class="nm">world</span></div>
+          <div class="tree-row i4"><span class="caret"></span><span class="nm">revolute1</span></div>
+          <div class="tree-row i4"><span class="caret"></span><span class="nm">body1</span></div>
+          <div class="tree-row i4"><span class="caret"></span><span class="nm">revolute2</span></div>
+          <div class="tree-row i4"><span class="caret"></span><span class="nm">body2</span></div>
+        </div>
+      </aside>
+
+      <!-- stage -->
+      <main class="stage" aria-label="DoublePendulum">
+        <div class="stage-tabs">
+          <div class="choice" role="radiogroup" aria-label="View">
+            <button type="button" class="on" role="radio" aria-checked="true">diagram</button>
+            <button type="button" role="radio" aria-checked="false">3d</button>
+          </div>
+          <span class="stage-meta">Mechanics › MultiBody › DoublePendulum</span>
+        </div>
+        <div class="canvas">
+          <svg class="wires" aria-hidden="true"></svg>
+
+          <div class="plate" id="world" style="left:24px; top:250px; width:116px">
+            <div class="phead">world <span class="tag">model</span></div>
+            <div class="pbody"><b>g</b> = 9.81</div>
+            <span class="port r"></span>
+          </div>
+
+          <div class="plate" id="revolute1" style="left:170px; top:250px; width:116px">
+            <div class="phead">revolute1 <span class="tag">joint</span></div>
+            <div class="pbody"><b>n</b> = {0,0,1}</div>
+            <span class="port l"></span><span class="port r"></span>
+          </div>
+
+          <div class="plate" id="body1" style="left:316px; top:250px; width:116px">
+            <div class="phead">body1 <span class="tag">body</span></div>
+            <div class="pbody"><b>m</b> = 1 <b>L</b> = 1</div>
+            <span class="port l"></span><span class="port r"></span>
+          </div>
+
+          <div class="plate sel" id="revolute2" style="left:462px; top:370px; width:116px">
+            <div class="phead">revolute2 <span class="tag">joint</span></div>
+            <div class="pbody"><b>n</b> = {0,0,1}</div>
+            <span class="port l"></span><span class="port r"></span>
+          </div>
+
+          <div class="plate" id="body2" style="left:608px; top:370px; width:116px">
+            <div class="phead">body2 <span class="tag">body</span></div>
+            <div class="pbody"><b>m</b> = 1 <b>L</b> = 1</div>
+            <span class="port l"></span>
+          </div>
+
+          <span class="legend">14 equations · 14 unknowns</span>
+          <div class="minimap" aria-hidden="true">
+            <span class="m" style="left:16px; top:30px; width:34px; height:12px"></span>
+            <span class="m" style="left:62px; top:30px; width:30px; height:12px"></span>
+            <span class="m" style="left:104px; top:30px; width:30px; height:12px"></span>
+            <span class="m" style="left:62px; top:50px; width:30px; height:12px"></span>
+            <span class="m" style="left:104px; top:50px; width:30px; height:12px"></span>
+            <span class="view" style="left:10px; top:20px; width:104px; height:52px"></span>
+          </div>
+        </div>
+      </main>
+
+      <!-- side -->
+      <aside class="side" aria-label="Source">
+        <div class="side-head">
+          <div class="choice" role="tablist" aria-label="Source view">
+            <button type="button" id="tab-mo" role="tab" aria-selected="true" class="on">.mo</button>
+            <button type="button" id="tab-flat" role="tab" aria-selected="false">flat</button>
+            <button type="button" id="tab-cpp" role="tab" aria-selected="false">causal ODE c++</button>
+          </div>
+        </div>
+
+        <div class="side-body">
+          <section class="pane" id="pane-mo" role="tabpanel" aria-label="Modelica source">
+            <div class="code-head">
+              <b>DoublePendulum.mo</b>
+              <span class="spacer"></span>
+              <span class="pill2">.mo</span>
+              <div class="code-sub">read-only · list(DoublePendulum)</div>
+            </div>
+            <pre class="code"><span class="row"><span class="ln">1</span><span class="src"><span class="tok-keyword">model</span> <span class="tok-type">DoublePendulum</span></span></span><span class="row"><span class="ln">2</span><span class="src">  <span class="tok-keyword">extends</span> Modelica.Mechanics.MultiBody.Examples.Elementary.DoublePendulum;</span></span><span class="row"><span class="ln">3</span><span class="src"></span></span></span><span class="row"><span class="ln">4</span><span class="src">  <span class="tok-comment">// ...</span></span></span></pre>
+          </section>
+
+          <section class="pane" id="pane-flat" role="tabpanel" aria-label="Flat model" hidden>
+            <div class="code-head">
+              <b>flat model</b>
+              <span class="spacer"></span>
+              <button type="button" class="key small">Copy</button>
+              <div class="code-sub">instantiateModel(DoublePendulum) · read-only · 1,284 lines</div>
+            </div>
+            <pre class="code"><span class="row"><span class="ln">1</span><span class="src"><span class="tok-comment">// flat Modelica, generated by omc 1.27.1</span></span></span><span class="row"><span class="ln">2</span><span class="src"><span class="tok-keyword">class</span> <span class="tok-type">DoublePendulum</span></span></span><span class="row"><span class="ln">3</span><span class="src">  <span class="tok-keyword">parameter</span> Real world.gravity[3] = {0, -9.81, 0};</span></span><span class="row"><span class="ln">4</span><span class="src">  <span class="tok-keyword">parameter</span> Real body1.m = 1;</span></span><span class="row"><span class="ln">5</span><span class="src">  <span class="tok-keyword">parameter</span> Real body1.L = 1;</span></span><span class="row"><span class="ln">6</span><span class="src">  Real body1.frame_a[3];</span></span><span class="row"><span class="ln">7</span><span class="src">  Real body1.r[3];</span></span><span class="row"><span class="ln">8</span><span class="src">  Real body1.v[3];</span></span><span class="row"><span class="ln">9</span><span class="src">  Real body2.r[3];</span></span><span class="row"><span class="ln">10</span><span class="src">  <span class="tok-keyword">equation</span></span></span><span class="row"><span class="ln">11</span><span class="src">    body1.frame_a = {0, 0, 0};</span></span><span class="row"><span class="ln">12</span><span class="src">    body1.r = body1.frame_a + <span class="tok-number">0.5</span> * body1.L * {sin(body1.phi), -cos(body1.phi), 0};</span></span><span class="row"><span class="ln">13</span><span class="src">    der(body1.r) = body1.v;</span></span><span class="row"><span class="ln">14</span><span class="src">    body2.r = body1.r + <span class="tok-number">0.5</span> * body2.L * {sin(body2.phi), -cos(body2.phi), 0};</span></span><span class="row"><span class="ln">15</span><span class="src">    <span class="tok-comment">// ...</span></span></span><span class="row"><span class="ln">16</span><span class="src"><span class="tok-keyword">end</span> <span class="tok-type">DoublePendulum</span>;</span></span></pre>
+          </section>
+
+          <section class="pane" id="pane-cpp" role="tabpanel" aria-label="Generated C++" hidden>
+            <div class="code-head">
+              <b>domain/modelica.cpp</b>
+              <span class="spacer"></span>
+              <span class="pill2">dry run</span>
+              <div class="code-sub">generated from the same model · nothing written to disk</div>
+            </div>
+            <pre class="code"><span class="row"><span class="ln">1</span><span class="src"><span class="tok-comment">// generated by paperboat's Modelica backend</span></span></span><span class="row"><span class="ln">2</span><span class="src"><span class="tok-keyword">void</span> step(<span class="tok-type">State</span>&amp; s, <span class="tok-keyword">double</span> dt) {</span></span><span class="row"><span class="ln">3</span><span class="src">  <span class="tok-comment">// ...</span></span></span><span class="row"><span class="ln">4</span><span class="src">}</span></span></pre>
+          </section>
+        </div>
+      </aside>
+
+      <!-- dock -->
+      <footer class="dock">
+        <span class="balance"><i class="dot"></i> balanced · 14 / 14 equations / unknowns</span>
+        <span class="undrawn" title="3 protected parts are hidden. Edit the .mo in Text to see the declaration.">3 not drawn as declared</span>
+        <span class="spacer"></span>
+        <button type="button" class="key small">Download .ppk</button>
+        <button type="button" class="key small ink">Start backend</button>
+      </footer>
+
+      <!-- Console: the floating window; messages is its second tab -->
+      <section class="console-window open" id="console-window" role="dialog" aria-label="Console and messages">
+        <header class="console-head">
+          <div class="choice" role="tablist" aria-label="Console">
+            <button type="button" id="console-tab-logs" role="tab" aria-selected="false">console</button>
+            <button type="button" id="console-tab-messages" role="tab" aria-selected="true" class="on">messages <span class="count">4</span></button>
+          </div>
+          <span class="lbl">1 error · 2 warnings · 1 info</span>
+          <span class="spacer"></span>
+          <button type="button" class="key small">Copy all</button>
+          <button type="button" class="key small" id="console-close" title="Close (Esc)">Close</button>
+        </header>
+
+        <div class="console-body">
+          <!-- Console log lines -->
+          <section class="console-pane" id="console-logs" role="tabpanel" aria-label="Console" hidden>
+            <ol class="logs">
+              <li class="info">Opened DoublePendulum.mo</li>
+              <li class="info">omc 1.27.1 · ready (native)</li>
+              <li class="info">checkModel(DoublePendulum)</li>
+              <li class="error">Class Modelica.Mechanics.MultiBody.Joints.Revolute2 not found in scope DoublePendulum.</li>
+              <li class="warning">Parameter body2.m has no value and no start attribute, so it defaults to 1.</li>
+              <li class="info">Saved DoublePendulum.mo</li>
+            </ol>
+          </section>
+
+          <!-- Messages -->
+          <section class="console-pane" id="console-messages" role="tabpanel" aria-label="Messages">
+            <div class="msg-head">
+              <div class="msg-title">
+                <h2>messages</h2>
+                <span class="sub">checkModel(DoublePendulum)</span>
+              </div>
+              <span class="spacer"></span>
+              <div class="choice" role="radiogroup" aria-label="Filter messages">
+                <button type="button" class="on" data-filter="all">all</button>
+                <button type="button" data-filter="error">errors</button>
+                <button type="button" data-filter="warning">warnings</button>
+              </div>
+            </div>
+
+            <div class="msg-list" id="msg-list">
+              <article class="msg error sel" data-level="error">
+                <span class="lvl">error</span>
+                <div class="body">
+                  <p class="text">Class <b>Modelica.Mechanics.MultiBody.Joints.Revolute2</b> not found in scope <b>DoublePendulum</b>.</p>
+                  <button type="button" class="where">DoublePendulum.mo:18:5</button>
+                </div>
+              </article>
+
+              <article class="msg warning" data-level="warning">
+                <span class="lvl">warning</span>
+                <div class="body">
+                  <p class="text">Parameter <b>body2.m</b> has no value and no start attribute, so it defaults to 1.</p>
+                  <button type="button" class="where">DoublePendulum.mo:24:3</button>
+                </div>
+              </article>
+
+              <article class="msg warning" data-level="warning">
+                <span class="lvl">warning</span>
+                <div class="body">
+                  <p class="text">The connector <b>body1.frame_a</b> is not connected.</p>
+                  <button type="button" class="where">DoublePendulum.mo:31:3</button>
+                </div>
+              </article>
+
+              <article class="msg info" data-level="info">
+                <span class="lvl">info</span>
+                <div class="body">
+                  <p class="text">Check of DoublePendulum completed: 14 equation(s) and 14 variable(s).</p>
+                  <button type="button" class="where">DoublePendulum.mo:1:1</button>
+                </div>
+              </article>
+            </div>
+
+            <div class="msg-foot">
+              <span>Click an error to select the part; click a location to show the line.</span>
+              <span class="spacer"></span>
+              <button type="button" class="key small ink">Check model</button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+  const studio = document.querySelector('.studio');
+  const frame = document.querySelector('.frame');
+  const menu = document.getElementById('model-menu');
+  const menuBtn = document.getElementById('model-menu-btn');
+  const consoleWindow = document.getElementById('console-window');
+
+  const sourceTabs = {
+    mo: { tab: document.getElementById('tab-mo'), pane: document.getElementById('pane-mo') },
+    flat: { tab: document.getElementById('tab-flat'), pane: document.getElementById('pane-flat') },
+    cpp: { tab: document.getElementById('tab-cpp'), pane: document.getElementById('pane-cpp') },
+  };
+  const consoleTabs = {
+    logs: { tab: document.getElementById('console-tab-logs'), pane: document.getElementById('console-logs') },
+    messages: { tab: document.getElementById('console-tab-messages'), pane: document.getElementById('console-messages') },
+  };
+  const board = {
+    messages: document.getElementById('show-messages'),
+    console: document.getElementById('show-console'),
+    flat: document.getElementById('show-flat'),
+  };
+
+  function selectSource(name) {
+    for (const [key, { tab, pane }] of Object.entries(sourceTabs)) {
+      tab.classList.toggle('on', key === name);
+      tab.setAttribute('aria-selected', String(key === name));
+      pane.hidden = key !== name;
+    }
+  }
+
+  function selectConsoleTab(name) {
+    for (const [key, { tab, pane }] of Object.entries(consoleTabs)) {
+      tab.classList.toggle('on', key === name);
+      tab.setAttribute('aria-selected', String(key === name));
+      pane.hidden = key !== name;
+    }
+    board.messages.classList.toggle('on', name === 'messages' && consoleWindow.classList.contains('open'));
+    board.console.classList.toggle('on', name === 'logs' && consoleWindow.classList.contains('open'));
+  }
+
+  function openConsole(tab) {
+    consoleWindow.classList.add('open');
+    selectConsoleTab(tab);
+  }
+
+  function closeConsole() {
+    consoleWindow.classList.remove('open');
+    board.messages.classList.remove('on');
+    board.console.classList.remove('on');
+  }
+
+  Object.entries(sourceTabs).forEach(([name, { tab }]) => tab.addEventListener('click', () => selectSource(name)));
+  Object.entries(consoleTabs).forEach(([name, { tab }]) => tab.addEventListener('click', () => selectConsoleTab(name)));
+
+  board.messages.addEventListener('click', () => openConsole('messages'));
+  board.console.addEventListener('click', () => openConsole('logs'));
+  board.flat.addEventListener('click', () => {
+    closeConsole();
+    selectSource('flat');
+    board.flat.classList.add('on');
+    board.messages.classList.remove('on');
+    board.console.classList.remove('on');
+  });
+  document.getElementById('console-close').addEventListener('click', closeConsole);
+  document.getElementById('console-key').addEventListener('click', () => {
+    if (consoleWindow.classList.contains('open')) closeConsole();
+    else openConsole('logs');
+  });
+
+  // a source tab also clears the board's flat state
+  Object.entries(sourceTabs).forEach(([name, { tab }]) =>
+    tab.addEventListener('click', () => board.flat.classList.toggle('on', name === 'flat')),
+  );
+
+  function toggleMenu(open) {
+    const next = open ?? !menu.classList.contains('open');
+    if (next) {
+      const frameRect = studio.getBoundingClientRect();
+      const key = menuBtn.getBoundingClientRect();
+      menu.style.left = `${key.left - frameRect.left}px`;
+      menu.style.top = `${key.bottom - frameRect.top + 4}px`;
+    }
+    menu.classList.toggle('open', next);
+    menuBtn.classList.toggle('open', next);
+    menuBtn.setAttribute('aria-expanded', String(next));
+  }
+  menuBtn.addEventListener('click', (event) => { event.stopPropagation(); toggleMenu(); });
+  document.getElementById('messages-item').addEventListener('click', () => { openConsole('messages'); toggleMenu(false); });
+  document.getElementById('flat-item').addEventListener('click', () => {
+    closeConsole(); selectSource('flat'); board.flat.classList.add('on'); toggleMenu(false);
+  });
+  document.getElementById('check-item').addEventListener('click', () => { openConsole('messages'); toggleMenu(false); });
+  document.addEventListener('click', (event) => {
+    if (!menu.contains(event.target) && event.target !== menuBtn) toggleMenu(false);
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { toggleMenu(false); closeConsole(); }
+  });
+
+  // filter chips
+  const filterButtons = document.querySelectorAll('[data-filter]');
+  filterButtons.forEach((button) => button.addEventListener('click', () => {
+    filterButtons.forEach((b) => b.classList.toggle('on', b === button));
+    const filter = button.dataset.filter;
+    document.querySelectorAll('#msg-list .msg').forEach((row) => {
+      row.style.display = filter === 'all' || row.dataset.level === filter ? '' : 'none';
+    });
+  }));
+
+  // message row selection
+  document.querySelectorAll('.msg').forEach((row) => row.addEventListener('click', () => {
+    document.querySelectorAll('.msg').forEach((r) => r.classList.remove('sel'));
+    row.classList.add('sel');
+  }));
+
+  // wires are drawn from the plates, so they stay on the ports at any frame size
+  const canvas = document.querySelector('.canvas');
+  const wires = canvas.querySelector('.wires');
+  const wirePairs = [
+    ['world', 'revolute1', false],
+    ['revolute1', 'body1', false],
+    ['body1', 'revolute2', true],
+    ['revolute2', 'body2', false],
+  ];
+  function drawWires() {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    wires.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    wires.innerHTML = wirePairs.map(([a, b, curve]) => {
+      const A = document.getElementById(a), B = document.getElementById(b);
+      const x1 = A.offsetLeft + A.offsetWidth, y1 = A.offsetTop + A.offsetHeight / 2;
+      const x2 = B.offsetLeft, y2 = B.offsetTop + B.offsetHeight / 2;
+      const d = curve
+        ? `M ${x1} ${y1} C ${x1 + 18} ${y1}, ${x2 - 18} ${y2}, ${x2} ${y2}`
+        : `M ${x1} ${y1} L ${x2} ${y2}`;
+      return `<path${curve ? ' class="sel"' : ''} d="${d}" />`;
+    }).join('');
+  }
+  drawWires();
+  new ResizeObserver(drawWires).observe(canvas);
+
+  // theme
+  const themeButton = document.getElementById('theme');
+  themeButton.addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme !== 'dark';
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    themeButton.textContent = `theme: ${dark ? 'dark' : 'light'}`;
+  });
+
+  // a link to one state: #messages (default), #console, #flat, #menu, #dark
+  if (location.hash.includes('flat')) {
+    closeConsole(); selectSource('flat'); board.flat.classList.add('on');
+  }
+  if (location.hash.includes('console') && !location.hash.includes('messages')) openConsole('logs');
+  if (location.hash.includes('menu')) toggleMenu(true);
+  if (location.hash.includes('dark')) {
+    document.documentElement.dataset.theme = 'dark';
+    themeButton.textContent = 'theme: dark';
+  }
+</script>
+</body>
+</html>
