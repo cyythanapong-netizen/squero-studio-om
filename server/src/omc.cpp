@@ -445,8 +445,9 @@ std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& wo
     const char* home = std::getenv("HOME");
     const std::string h = home ? home : "/root";
     const std::string tmp = fs::temp_directory_path().string();
-    out = {rt.exe, "run", "--rm", "-i", "--network=host", "--security-opt", "label=disable", "-e", "HOME=" + h,
+    out = {rt.exe, "run", "--rm", "-i", "--init", "--network=host", "--security-opt", "label=disable", "-e", "HOME=" + h,
            "-e", "USER=" + std::string(std::getenv("USER") ? std::getenv("USER") : "omc"), "-v", tmp + ":" + tmp, "-v", h + ":" + h, "-w", workdir};
+    // --init: omc as PID 1 ignores SIGTERM, so the container outlived us
     // files omc writes are the user's: podman maps the user in, docker runs as them
     if (rt.mode == "podman") out.insert(out.begin() + 2, "--userns=keep-id");
     else out.insert(out.begin() + 2, {"--user", std::to_string(getuid()) + ":" + std::to_string(getgid())});
