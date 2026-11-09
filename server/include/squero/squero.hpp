@@ -15,6 +15,8 @@
 // {id, ok: true, result: {…}} | {id, ok: false, error}:
 //
 //   open      {}                                → {file, model}      the model the server was started on
+//   workspace {file}                            → {root, file, package, entries:[{name, path, kind, depth}]}
+//                                                  the model's folder as a tree of .mo classes and packages
 //   save      {model}                           → {file}             `save(model)`: the model's own .mo
 //   icon      {class}                           → {icon, connectors, notice}
 //                                                  the imported look of a class (`paperboat modelica icon`)
