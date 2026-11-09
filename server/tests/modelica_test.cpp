@@ -628,6 +628,26 @@ TEST_CASE("workspace lists the model folder's classes and packages", "[squero]")
   fs::remove_all(dir);
 }
 
+TEST_CASE("opening a class inside a package loads the package chain", "[squero][omc]") {
+  if (!have_omc()) SKIP("omc not installed");
+  const fs::path dir = fs::temp_directory_path() / "paperboat-squero-package-open";
+  fs::remove_all(dir);
+  fs::create_directories(dir / "Pkg" / "Sub");
+  std::ofstream(dir / "Pkg" / "package.mo") << "package Pkg\nend Pkg;\n";
+  std::ofstream(dir / "Pkg" / "package.order") << "Sub\n";
+  std::ofstream(dir / "Pkg" / "Sub" / "package.mo") << "within Pkg;\npackage Sub\nend Sub;\n";
+  std::ofstream(dir / "Pkg" / "Sub" / "package.order") << "B\n";
+  std::ofstream(dir / "Pkg" / "Sub" / "B.mo") << "within Pkg.Sub;\nmodel B\n  Real x(start = 1, fixed = true);\nequation\n  der(x) = -x;\nend B;\n";
+
+  mo::Omc omc;
+  const json opened = op(omc, {{"id", 1}, {"op", "open"}, {"file", (dir / "Pkg" / "Sub" / "B.mo").string()}});
+  INFO(opened.dump());
+  REQUIRE(opened["ok"] == true);
+  CHECK(opened["result"]["model"] == "Pkg.Sub.B");
+
+  fs::remove_all(dir);
+}
+
 TEST_CASE("check_model, messages and the flat model answer over handle", "[squero][omc]") {
   if (!have_omc()) SKIP("omc not installed");
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-messages";
