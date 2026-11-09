@@ -243,12 +243,12 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .studio.text-mode .dock { display: none; }
 
 /* ---- New Class sheet (#43) --------------------------------------------------------- */
-.new-class-overlay { position: fixed; inset: 0; z-index: 110; display: flex; align-items: flex-end; justify-content: center; background: rgb(0 0 0 / .22); }
+.new-class-overlay { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(0 0 0 / .22); }
 .new-class-sheet {
-  width: min(800px, calc(100vw - 48px)); max-height: calc(100vh - 64px);
+  width: min(800px, calc(100vw - 48px)); max-height: calc(100vh - 48px);
   display: flex; flex-direction: column;
-  background: var(--surface-panel); border: 1.5px solid var(--line-ink); border-bottom: 0;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-up);
+  background: var(--surface-panel); border: 1.5px solid var(--line-ink);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-2);
 }
 .new-class-sheet form { display: flex; flex-direction: column; min-height: 0; }
 .new-class-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
