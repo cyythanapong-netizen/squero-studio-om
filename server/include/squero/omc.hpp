@@ -25,6 +25,15 @@ struct OmcError : std::runtime_error {
 enum class OmcState { Ready, Checking, Failed };
 std::string_view name(OmcState state);  // "ready", "checking", "failed"
 
+/** One of omc's messages, split into the level, the prose and the source span omc gave. */
+struct OmcMessage {
+  std::string level;   // error | warning | info
+  std::string text;
+  std::string file;
+  int line = 0;
+  int column = 0;
+};
+
 class Omc {
  public:
   struct Options {
@@ -33,6 +42,7 @@ class Omc {
     int max_restarts = 3;                             // in a row, then failed
   };
   using StatusFn = std::function<void(OmcState, const std::string& version)>;
+  using LogFn = std::function<void(const OmcMessage&)>;
 
   Omc();
   explicit Omc(Options options);
@@ -46,13 +56,26 @@ class Omc {
   std::string call(std::string_view expr);
   std::string call(std::string_view expr, std::chrono::milliseconds timeout);
 
-  // `getErrorString()` unquoted: what omc said about the calls since the last one.
+  // `getErrorString()` unquoted: what omc said about the calls since the last one. Drains omc's
+  // buffer, so it is also what the log callback hears.
   std::string errors();
+
+  // Drains omc's messages and returns them split by level and source. The same list is kept for
+  // `last_messages()` and read by `getErrorString()` clients.
+  std::vector<OmcMessage> messages();
+  // The messages from the last drain, without asking omc again.
+  std::vector<OmcMessage> last_messages() const;
+  // `getErrorString()` as the last drain saw it; clears the cache (a client's read).
+  std::string take_errors();
+  // Forgets the last drain, so a new operation starts with a clean read.
+  void clear_messages();
 
   OmcState state() const;
   std::string version() const;  // "OpenModelica 1.27…" once started, else ""
   // Called (from the calling thread) on every state change.
   void on_status(StatusFn fn);
+  // Called for each drained message, in order, so a server can stream omc's log.
+  void on_log(LogFn fn);
 
   // The folder omc runs in (its build output and dumps land here).
   std::string workdir() const;

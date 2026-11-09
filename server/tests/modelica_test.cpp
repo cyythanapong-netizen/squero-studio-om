@@ -593,6 +593,70 @@ end Lag;
   fs::remove_all(dir);
 }
 
+TEST_CASE("check_model, messages and the flat model answer over handle", "[squero][omc]") {
+  if (!have_omc()) SKIP("omc not installed");
+  const fs::path dir = fs::temp_directory_path() / "paperboat-squero-messages";
+  fs::remove_all(dir);
+  fs::create_directories(dir);
+  const fs::path good = dir / "Good.mo";
+  std::ofstream(good) << R"(model Good
+  parameter Real k = 2;
+  Real x(start = 1, fixed = true);
+equation
+  der(x) = -k * x;
+end Good;
+)";
+  const fs::path bad = dir / "Bad.mo";
+  std::ofstream(bad) << R"(model Bad
+  Real x;
+equation
+  x = "not a Real";
+end Bad;
+)";
+
+  mo::Omc omc;
+  std::vector<mo::OmcMessage> logged;
+  omc.on_log([&](const mo::OmcMessage& message) { logged.push_back(message); });
+  const mo::Session session{nullptr, good};
+  REQUIRE(op(omc, {{"id", 1}, {"op", "open"}}, session)["ok"] == true);
+
+  logged.clear();
+  const json checked = op(omc, {{"id", 2}, {"op", "check_model"}, {"model", "Good"}});
+  INFO(checked.dump());
+  REQUIRE(checked["ok"] == true);
+  CHECK(checked["result"]["equations"] == 1);
+  CHECK(checked["result"]["unknowns"] == 1);
+  CHECK(checked["result"]["messages"].empty());
+
+  const json flat = op(omc, {{"id", 3}, {"op", "instantiate_model"}, {"model", "Good"}});
+  INFO(flat.dump());
+  REQUIRE(flat["ok"] == true);
+  CHECK(flat["result"]["text"].get<std::string>().find("class Good") != std::string::npos);
+  CHECK(flat["result"]["text"].get<std::string>().find("der(x)") != std::string::npos);
+
+  // A model omc rejects still answers, with its message in the result and on the log.
+  REQUIRE(op(omc, {{"id", 4}, {"op", "omc"}, {"expr", "loadFile(" + mo::quote(bad.string()) + ")"}})["ok"] == true);
+  logged.clear();
+  const json broken = op(omc, {{"id", 5}, {"op", "check_model"}, {"model", "Bad"}});
+  INFO(broken.dump());
+  REQUIRE(broken["ok"] == true);
+  CHECK(broken["result"]["equations"] == 0);
+  REQUIRE_FALSE(broken["result"]["messages"].empty());
+  CHECK(broken["result"]["messages"][0]["level"] == "error");
+  CHECK(broken["result"]["messages"][0]["file"].get<std::string>().find("Bad.mo") != std::string::npos);
+  CHECK(broken["result"]["messages"][0]["line"] == 4);
+  REQUIRE_FALSE(logged.empty());
+  CHECK(logged.front().level == "error");
+  CHECK(logged.front().file.find("Bad.mo") != std::string::npos);
+
+  // The client's read is the messages the last operation left, and it clears them.
+  const json again = op(omc, {{"id", 6}, {"op", "omc"}, {"expr", "getErrorString()"}});
+  CHECK(again["result"].get<std::string>().find("Bad.mo") != std::string::npos);
+  CHECK(op(omc, {{"id", 7}, {"op", "omc"}, {"expr", "getErrorString()"}})["result"] == "");
+
+  fs::remove_all(dir);
+}
+
 TEST_CASE("the allow-list has what the canvas reads and edits, and nothing that writes elsewhere", "[squero]") {
   CHECK(mo::allowed(R"(getComponentModifierNames(M, "R1"))"));
   CHECK(mo::allowed("getNthConnectionAnnotation(M, 1)"));

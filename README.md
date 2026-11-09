@@ -11,6 +11,10 @@ object, edited on the Station page; the Flow block carries only the inputs and o
 Simulating a `Modelica.Mechanics.MultiBody` model also fills the stage's **3d** view (next to
 **diagram**) with its shapes, played back against the run's time (try `bin/squero-om examples/multibody/DoublePendulum.mo`). Every edit goes through `omc`, so the `.mo` stays OMEdit-compatible.
 
+The **Model** menu runs `checkModel` and shows its messages as cards in the Console's **messages** tab;
+**Show Flat Model** opens `instantiateModel` beside `.mo` and the generated C++. The Console's **console**
+tab also streams omc's own log as it works.
+
 This repo contains both the React web application (`src/`) and the native C++ server & tools (`server/`).
 The server provides `squero/0`, the `omc` bridge, the `.mo` importer (`extends` resolver, `Icon(graphics)` and
 `iconTransformation` quantisers), the backend generator, and the `squero-om` binary.

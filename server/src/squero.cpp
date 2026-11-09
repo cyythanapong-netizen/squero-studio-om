@@ -10,6 +10,7 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <thread>
@@ -149,6 +150,45 @@ json op_save(Omc& omc, const json& in) {
     }
   }
   return {{"file", file}};
+}
+
+json messages_json(const std::vector<OmcMessage>& messages) {
+  json out = json::array();
+  for (const auto& message : messages) {
+    json one{{"level", message.level}, {"text", message.text}};
+    if (!message.file.empty()) one["file"] = message.file;
+    if (message.line > 0) one["line"] = message.line;
+    if (message.column > 0) one["column"] = message.column;
+    out.push_back(std::move(one));
+  }
+  return out;
+}
+
+// The balance from checkModel's prose: "Class M has 2 equation(s) and 2 variable(s)."
+std::pair<int, int> balance_of(const std::string& text) {
+  static const std::regex re(R"((\d+)\s+equation(?:s|\(s\))?\s+and\s+(\d+)\s+(?:variable|unknown)(?:s|\(s\))?)", std::regex::icase);
+  std::smatch match;
+  if (std::regex_search(text, match, re)) return {std::stoi(match[1]), std::stoi(match[2])};
+  return {0, 0};
+}
+
+json op_check_model(Omc& omc, const json& in) {
+  const std::string model = user_model(in);
+  const std::string reply = text_of(omc.call("checkModel(" + model + ")"));
+  const auto [equations, unknowns] = balance_of(reply);
+  return {{"reply", reply}, {"equations", equations}, {"unknowns", unknowns}, {"messages", messages_json(omc.messages())}};
+}
+
+json op_instantiate_model(Omc& omc, const json& in) {
+  const std::string model = user_model(in);
+  const std::string text = text_of(omc.call("instantiateModel(" + model + ")", std::chrono::minutes(2)));
+  return {{"model", model}, {"text", text}, {"messages", messages_json(omc.messages())}};
+}
+
+json op_get_messages(Omc& omc) {
+  std::vector<OmcMessage> messages = omc.last_messages();
+  if (messages.empty()) messages = omc.messages();
+  return {{"messages", messages_json(messages)}};
 }
 
 json op_icon(Omc& omc, const json& in) {
@@ -602,8 +642,15 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   }
   json out{{"id", in.value("id", json())}};
   const std::string op = in.value("op", "");
+  // A client asking for getErrorString wants the messages from the previous operation, which
+  // the log drain already read. Everything else starts a fresh read.
+  const bool errors_read = op == "omc" && in.contains("expr") && in["expr"].is_string() &&
+                           in["expr"].get<std::string>() == "getErrorString()";
+  if (!errors_read) omc.clear_messages();
   try {
-    if (op == "omc" && in.contains("expr") && in["expr"].is_string()) {
+    if (errors_read) {
+      out["result"] = omc.take_errors();
+    } else if (op == "omc" && in.contains("expr") && in["expr"].is_string()) {
       const std::string expr = in["expr"];
       if (!allowed(expr)) {
         out["ok"] = false;
@@ -615,6 +662,12 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_open(omc, in, session);
     } else if (op == "save") {
       out["result"] = op_save(omc, in);
+    } else if (op == "check_model") {
+      out["result"] = op_check_model(omc, in);
+    } else if (op == "instantiate_model") {
+      out["result"] = op_instantiate_model(omc, in);
+    } else if (op == "get_messages") {
+      out["result"] = op_get_messages(omc);
     } else if (op == "icon") {
       out["result"] = op_icon(omc, in);
     } else if (op == "set_icon") {
@@ -627,13 +680,22 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, save, icon, set_icon, generate, export, simulate";
+      out["error"] = "unknown op; squero/0 has omc, open, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
       return out.dump();
     }
     out["ok"] = true;
   } catch (const std::exception& e) {
     out["ok"] = false;
     out["error"] = e.what();
+  }
+  // Drain once per operation so the Console hears omc, and a later getErrorString can read it.
+  // If an op already read the messages (errors() or its own drain), keep that read.
+  if (!errors_read) {
+    try {
+      if (omc.last_messages().empty()) omc.messages();
+    } catch (...) {
+      // omc failed: the reply already says so
+    }
   }
   return out.dump();
 }
@@ -656,6 +718,16 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
 
   omc.on_status([&](OmcState state, const std::string& version) {
     const std::string text = status(state, version, omc.mode());
+    std::lock_guard lock(mutex);
+    for (auto* ws : std::set<ix::WebSocket*>(clients)) ws->sendText(text);
+  });
+  // omc's own messages, as they are drained: the Console's live log in every client.
+  omc.on_log([&](const OmcMessage& message) {
+    json one{{"op", "log"}, {"level", message.level}, {"text", message.text}};
+    if (!message.file.empty()) one["file"] = message.file;
+    if (message.line > 0) one["line"] = message.line;
+    if (message.column > 0) one["column"] = message.column;
+    const std::string text = one.dump();
     std::lock_guard lock(mutex);
     for (auto* ws : std::set<ix::WebSocket*>(clients)) ws->sendText(text);
   });
