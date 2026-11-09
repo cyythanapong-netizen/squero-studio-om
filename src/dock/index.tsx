@@ -12,7 +12,7 @@ import {
 } from "./dock.ts";
 import "./dock.css";
 
-export function StudioDock() {
+export function StudioDock({ canExport = true, why = "", beforeExport }: { canExport?: boolean; why?: string; beforeExport?: () => Promise<void> }) {
   const api = useStudio();
   const [balance, setBalance] = useState<BalanceResult>({
     kind: "balanced",
@@ -66,8 +66,9 @@ export function StudioDock() {
   };
 
   const handleExport = async (mode: ExportMode) => {
-    if (!isBalanced || busy) return;
+    if (!isBalanced || busy || !canExport) return;
     setBusy(true);
+    await beforeExport?.();
     setOutcome(null);
     const again = mode === "serve" ? running?.port : undefined; // a restart keeps its port
     if (again) await runBackendExport(api, "stop", () => {}, again);
@@ -196,8 +197,8 @@ export function StudioDock() {
           <button
             type="button"
             className="studio-dock-export-key"
-            disabled={!isBalanced || busy}
-            title={isBalanced ? "Download the backend as a .ppk package" : balance.words}
+            disabled={!isBalanced || busy || !canExport}
+            title={!canExport ? why : isBalanced ? "Download the backend as a .ppk package" : balance.words}
             onClick={() => void handleExport("ppk")}
           >
             Download .ppk
@@ -205,8 +206,8 @@ export function StudioDock() {
           <button
             type="button"
             className="studio-dock-export-key"
-            disabled={!isBalanced || busy}
-            title={isBalanced ? "Start the backend as ssom_<model> on a free port" : balance.words}
+            disabled={!isBalanced || busy || !canExport}
+            title={!canExport ? why : isBalanced ? "Start the backend as ssom_<model> on a free port" : balance.words}
             onClick={() => void handleExport("serve")}
           >
             {running ? "Restart" : "Start"} backend

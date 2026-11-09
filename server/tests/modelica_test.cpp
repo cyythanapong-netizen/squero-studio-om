@@ -706,11 +706,33 @@ TEST_CASE("packages and class files can be created, duplicated and deleted", "[s
   const std::string listed((std::istreambuf_iterator<char>(order)), std::istreambuf_iterator<char>());
   CHECK(listed == "A\nB\n");
 
+  // Read the file's own text, then move it to another package and rewrite its within.
+  const json read = op(omc, {{"op", "read_file"}, {"file", (dir / "Pkg" / "A.mo").string()}});
+  REQUIRE(read["ok"] == true);
+  CHECK_THAT(read["result"]["text"].get<std::string>(), Catch::Matchers::ContainsSubstring("model A"));
+  const json moved = op(omc, {{"op", "move_class"},
+                              {"file", (dir / "Pkg" / "A.mo").string()},
+                              {"targetDir", (dir / "Sub").string()},
+                              {"within", "Pkg.Sub"}});
+  INFO(moved.dump());
+  REQUIRE(moved["ok"] == true);
+  CHECK(moved["result"]["model"] == "Pkg.Sub.A");
+  CHECK_FALSE(fs::exists(dir / "Pkg" / "A.mo"));
+  std::ifstream moved_text(dir / "Sub" / "A.mo");
+  const std::string moved_src((std::istreambuf_iterator<char>(moved_text)), std::istreambuf_iterator<char>());
+  CHECK_THAT(moved_src, Catch::Matchers::ContainsSubstring("within Pkg.Sub;"));
+  std::ifstream target_order(dir / "Sub" / "package.order");
+  const std::string target_listed((std::istreambuf_iterator<char>(target_order)), std::istreambuf_iterator<char>());
+  CHECK(target_listed == "A\n");
+  std::ifstream source_order(dir / "Pkg" / "package.order");
+  const std::string source_listed((std::istreambuf_iterator<char>(source_order)), std::istreambuf_iterator<char>());
+  CHECK(source_listed == "B\n");
+
   CHECK(op(omc, {{"op", "delete_class"}, {"file", (dir / "Pkg" / "B.mo").string()}, {"name", "B"}})["ok"] == true);
   CHECK_FALSE(fs::exists(dir / "Pkg" / "B.mo"));
   std::ifstream after(dir / "Pkg" / "package.order");
   const std::string left((std::istreambuf_iterator<char>(after)), std::istreambuf_iterator<char>());
-  CHECK(left == "A\n");
+  CHECK(left == "");
 
   fs::remove_all(dir);
 }

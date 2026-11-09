@@ -65,6 +65,11 @@ export type Actions = {
   newPackage(parent: string, name: string, within: string): Promise<{ path: string; name: string }>;
   duplicateClass(spec: { file: string; name: string; newName: string; within: string }): Promise<{ file: string; model: string }>;
   deleteClass(spec: { file: string; name: string }): Promise<void>;
+  moveClass(spec: { file: string; targetDir: string; within: string }): Promise<{ file: string; model: string }>;
+  /** The .mo file itself, for the text editor (list() is the class body only). */
+  fileText(): Promise<string>;
+  /** Write the whole file, reload it through omc and re-read the canvas. */
+  saveText(text: string): Promise<void>;
   loadLibrary(lib: string): Promise<void>;
 };
 
@@ -382,6 +387,27 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       },
       deleteClass(spec) {
         return enqueue(() => omc.op<void>("delete_class", spec));
+      },
+      moveClass(spec) {
+        return enqueue(() => omc.op<{ file: string; model: string }>("move_class", spec));
+      },
+      fileText() {
+        const m = current.current;
+        if (!m?.file) return Promise.reject(new Error("the model has no file yet"));
+        return enqueue(() => omc.op<{ text: string }>("read_file", { file: m.file }).then((r) => r.text));
+      },
+      saveText(text) {
+        const m = current.current;
+        if (!m?.file) return Promise.reject(new Error("the model has no file yet"));
+        return enqueue(async () => {
+          await omc.op("save", { model: m.name, file: m.file, content: text });
+          const opened = await omc.op<{ file: string; model: string }>("open", { file: m.file });
+          const next = await readModel(omc, opened.model, opened.file, looks.current);
+          setModel(next);
+          setDirty(false);
+          setSelection([]);
+          say(`Saved ${opened.model}`);
+        });
       },
       async openFile(file: string, content?: string) {
         const target = file.trim();
