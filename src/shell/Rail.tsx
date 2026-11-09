@@ -7,9 +7,63 @@
 // quick path and the authoring path; they are the same shell.
 
 import { useState, type ReactNode } from "react";
-import { visibleEntries, workspaceName, type Workspace } from "./workspace.ts";
+import { visibleEntries, workspaceName, type Workspace, type WorkspaceEntry } from "./workspace.ts";
 
 export type RailTab = "files" | "library";
+
+/** A 13px glyph per class kind, so the tree says what a file is without opening it. */
+function KindGlyph({ kind }: { kind: WorkspaceEntry["classKind"] }) {
+  const common = { viewBox: "0 0 16 16", "aria-hidden": true } as const;
+  switch (kind) {
+    case "package":
+      return (
+        <svg {...common}>
+          <path d="M1.5 4.5h4.7l1.3 1.8h7v7.2h-13z" />
+        </svg>
+      );
+    case "model":
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="2.5" width="11" height="11" rx="1.2" />
+          <path d="M5.5 8h5" />
+        </svg>
+      );
+    case "block":
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="3.5" width="8" height="9" rx="1.2" />
+          <path d="M10.5 8H14M12 6.5 14 8l-2 1.5" />
+        </svg>
+      );
+    case "connector":
+      return (
+        <svg {...common}>
+          <circle cx="8" cy="8" r="3.6" />
+          <circle cx="8" cy="8" r="1" />
+        </svg>
+      );
+    case "record":
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="3" width="11" height="10" rx="1.2" />
+          <path d="M2.5 6.5h11M6.5 6.5V13" />
+        </svg>
+      );
+    case "function":
+      return (
+        <svg {...common}>
+          <path d="M9.5 3.5c-1.8 0-2.5 1-2.5 3v6M4.5 8h4M10 8h2.5" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...common}>
+          <path d="M4 2.5h6l2 2v9H4z" />
+          <path d="M10 2.5v2h2" />
+        </svg>
+      );
+  }
+}
 
 export function Rail({
   tab,
@@ -80,6 +134,9 @@ export function Rail({
                     onClick={() => (entry.kind === "package" ? toggle(entry.path) : onOpen(entry.path))}
                   >
                     <span className="caret">{entry.kind === "package" ? (open ? "▾" : "▸") : ""}</span>
+                    <span className="file-icon" title={entry.kind === "package" ? "package" : (entry.classKind ?? "class")}>
+                      <KindGlyph kind={entry.kind === "package" ? "package" : (entry.classKind ?? "class")} />
+                    </span>
                     <span className="nm">{entry.name}</span>
                     <span className="k">{entry.kind === "package" ? "package" : ""}</span>
                   </button>

@@ -208,6 +208,9 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .file-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 2px 0 0 var(--line-ink); }
 .file-row.on .nm { font-weight: 500; }
 .file-row .caret { width: 12px; flex: none; text-align: center; opacity: .7; }
+.file-row .file-icon { width: 14px; height: 14px; flex: none; display: inline-grid; place-items: center; color: var(--text-muted); }
+.file-row .file-icon svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
+.file-row:hover .file-icon, .file-row.on .file-icon { color: var(--text); }
 .file-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-row .k { font-size: 10px; opacity: .55; }
 .files-empty { margin: 0; padding: var(--space-3); font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
@@ -616,9 +619,9 @@ body.dragging-card .library {
   :root:not([data-theme="light"]) { --dom-signal: #8da2f0; --dom-electrical: #5b9bff; --dom-rotational: #9ca3af; --dom-translational: #4ade80; --dom-multibody: #a1a1aa; --dom-thermal: #f87171; --dom-fluid: #38bdf8; --dom-magnetic: #fb923c; }
 }
 .canvas .react-flow__handle.ip.k-input, .canvas .react-flow__handle.ip.k-output { --ink: var(--dom-signal); }
-.canvas .react-flow__handle.ip { border-color: var(--ink, var(--line-ink)); }
-.canvas .react-flow__handle.ip-filled, .canvas .react-flow__handle.ip-triangle { background: var(--ink, var(--line-ink)); }
-.canvas .react-flow__handle.ip-ring2 { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 3.5px var(--ink, var(--line-ink)); }
+.canvas .react-flow__handle.ip { border-color: var(--ip-color, var(--ink, var(--line-ink))); }
+.canvas .react-flow__handle.ip-filled, .canvas .react-flow__handle.ip-triangle { background: var(--ip-color, var(--ink, var(--line-ink))); }
+.canvas .react-flow__handle.ip-ring2 { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 3.5px var(--ip-color, var(--ink, var(--line-ink))); }
 .key.help-key { position: absolute; left: var(--space-3); bottom: var(--space-3); z-index: 6; width: 26px; height: 26px; min-width: 26px; padding: 0; display: inline-grid; place-items: center; border-radius: var(--radius-round); font: 500 var(--size-xs) var(--font-mono); line-height: 1; text-align: center; }
 .help-pop {
   position: absolute; left: var(--space-3); bottom: calc(var(--space-3) + 34px); z-index: 70; width: min(480px, calc(100% - 24px));

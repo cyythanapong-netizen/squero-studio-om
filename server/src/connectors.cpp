@@ -1,11 +1,14 @@
 #include "squero/import.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <charconv>
 #include <cmath>
+#include <cstdio>
 #include <map>
 #include <optional>
+#include <regex>
 #include <set>
 #include <string>
 #include <string_view>
@@ -674,6 +677,8 @@ std::vector<IconPort> quantise_ports(const std::vector<RawPort>& raw, ImportNoti
   return out;
 }
 
+std::string connector_color(Omc& omc, const std::string& cls);
+
 void resolve_connectors(Omc& omc, std::string_view class_name, std::vector<RawPort>& out_ports,
                         std::map<std::string, ConnectorDef>& out_connectors, ImportNotice& notice) {
   ResolverState st{omc};
@@ -775,6 +780,7 @@ void resolve_connectors(Omc& omc, std::string_view class_name, std::vector<RawPo
 
         BuiltinMatch bm = match_builtin_connector(full_type, sname, kind, potential, flow, stream);
         if (!bm.matched) ++notice.simplified;
+        if (!full_type.starts_with("Modelica.")) bm.def.color = connector_color(omc, full_type);
         if (bm.def.kind == "acausal") {
           bm.def.potential = std::move(potential);
           bm.def.flow = std::move(flow);
@@ -809,6 +815,28 @@ void resolve_connectors(Omc& omc, std::string_view class_name, std::vector<RawPo
   }
 }
 
+// A user-defined connector's own fill, so its port keeps the design the library gave it.
+// getIconAnnotation is positional (line colour, then fill); a hand-written file may name them.
+// Either way the first rgb triple is the line and the second the fill; one triple is a text colour.
+std::string color_of(std::string_view anno) {
+  static const std::regex rgb(R"(\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\})");
+  const std::string text(anno);
+  std::vector<std::array<int, 3>> colors;
+  for (std::sregex_iterator it(text.begin(), text.end(), rgb), end; it != end; ++it)
+    colors.push_back({std::stoi((*it)[1]), std::stoi((*it)[2]), std::stoi((*it)[3])});
+  if (colors.empty()) return "";
+  const auto& c = colors.back();
+  char hex[8];
+  std::snprintf(hex, sizeof hex, "#%02x%02x%02x", c[0], c[1], c[2]);
+  return hex;
+}
+
+std::string connector_color(Omc& omc, const std::string& cls) {
+  std::string color = color_of(omc.call("getIconAnnotation(" + cls + ")"));
+  if (color.empty()) color = color_of(omc.call("getDiagramAnnotation(" + cls + ")"));
+  return color;
+}
+
 nlohmann::json to_json(const ConnectorDef& def) {
   nlohmann::json j = {{"kind", def.kind}, {"handle", def.handle}, {"size", def.size}};
   if (std::abs(def.weight - std::round(def.weight)) < 1e-9) {
@@ -818,6 +846,7 @@ nlohmann::json to_json(const ConnectorDef& def) {
   }
   if (!def.alt.empty()) j["alt"] = def.alt;
   if (!def.dash.empty() && def.dash != "solid") j["dash"] = def.dash;
+  if (!def.color.empty()) j["color"] = def.color;
 
   auto vars_json = [](const std::vector<VarUnit>& list) {
     nlohmann::json arr = nlohmann::json::array();

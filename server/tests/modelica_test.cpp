@@ -601,6 +601,8 @@ TEST_CASE("workspace lists the model folder's classes and packages", "[squero]")
   std::ofstream(dir / "Pkg" / "A.mo") << "model A\nend A;\n";
   std::ofstream(dir / "Pkg" / "Sub" / "package.mo") << "package Sub\nend Sub;\n";
   std::ofstream(dir / "Pkg" / "Sub" / "B.mo") << "model B\nend B;\n";
+  std::ofstream(dir / "Pkg" / "Port.mo") << "within Pkg;\nconnector Port\n  Real p;\nend Port;\n";
+  std::ofstream(dir / "Pkg" / "F.mo") << "within Pkg;\nfunction F\n  input Real u;\n  output Real y;\nalgorithm\n  y := u;\nend F;\n";
   std::ofstream(dir / "Quick.mo") << "model Quick\nend Quick;\n";
   std::ofstream(dir / "notes.txt") << "not Modelica\n";
 
@@ -623,7 +625,12 @@ TEST_CASE("workspace lists the model folder's classes and packages", "[squero]")
   CHECK(nested["result"]["package"] == true);
   std::vector<std::string> seen;
   for (const auto& entry : nested["result"]["entries"]) seen.push_back(entry["kind"].get<std::string>() + ":" + entry["name"].get<std::string>() + ":" + std::to_string(entry["depth"].get<int>()));
-  CHECK(seen == std::vector<std::string>{"package:Pkg:0", "class:A:1", "package:Sub:1", "class:B:2", "class:Quick:0"});
+  CHECK(seen == std::vector<std::string>{"package:Pkg:0", "class:A:1", "class:F:1", "class:Port:1", "package:Sub:1", "class:B:2", "class:Quick:0"});
+  for (const auto& entry : nested["result"]["entries"]) {
+    if (entry["name"] == "A") CHECK(entry["classKind"] == "model");
+    if (entry["name"] == "Port") CHECK(entry["classKind"] == "connector");
+    if (entry["name"] == "F") CHECK(entry["classKind"] == "function");
+  }
 
   fs::remove_all(dir);
 }

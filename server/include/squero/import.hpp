@@ -42,6 +42,7 @@ struct ConnectorDef {
   int size = 8;                   // 8 | 10 | 12
   double weight = 1.2;            // 1.2 | 1.8 | 2.0
   std::string dash = {};          // "" | "solid" | "dashed"
+  std::string color = {};         // the connector's own fill, e.g. "#99c1f1"; empty when it has none
   std::vector<VarUnit> potential{};
   std::vector<VarUnit> flow{};
   std::vector<VarUnit> stream{};
