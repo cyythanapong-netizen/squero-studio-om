@@ -691,7 +691,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             </main>
             <aside className={`side focus-${focus}`} inert={!side}>
                 <Split model={model} actions={actions} view={view} onView={setView} />
-                <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
+                <Simulate actions={actions} model={model} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
               </aside>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} canExport={canExport} />

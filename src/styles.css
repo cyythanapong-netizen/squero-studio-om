@@ -832,10 +832,12 @@ body.dragging-card .library {
 .scope-tab button[role="tab"] { border: 0; background: none; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); padding: 2px 6px; }
 .scope-tab.on button[role="tab"] { color: var(--text); font-weight: 600; box-shadow: inset 0 -2px 0 var(--line-ink); }
 .scope-grid { display: grid; padding: 0 var(--space-3) 72px; position: relative; }
-.scope { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); z-index: 1; }
-.scope > header { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border-bottom: 1px solid var(--line); cursor: grab; }
-.scope > header .lbl { margin-right: auto; font: 500 var(--size-2xs) var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.scope .plot { flex: 1; min-height: 0; padding: 4px 4px 0; }
+.scope-cell { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); z-index: 1; }
+.scope-cell > .instrument.scope { display: flex; flex-direction: column; flex: 1; min-height: 0; border: 0; border-radius: 0; background: transparent; }
+.scope-cell > .instrument.scope .screen { flex: 1; min-height: 0; }
+.scope-cell > header { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border-bottom: 1px solid var(--line); cursor: grab; }
+.scope-cell > header .lbl { margin-right: auto; font: 500 var(--size-2xs) var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scope-cell .plot { flex: 1; min-height: 0; padding: 4px 4px 0; }
 .scope-empty { margin: auto; font-size: var(--size-2xs); color: var(--text-muted); }
 .scope-sizes { display: inline-flex; }
 .scope-size { border: 0; background: none; padding: 0 3px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
