@@ -2,8 +2,8 @@
 // stubs declare: the popover on a component click, the sheet on Alt+V, the dock always.
 
 import { ReactFlowProvider } from "@xyflow/react";
-import { Switch } from "@paperboat/shared/components";
-import { useShortcuts, type Command } from "@paperboat/shared";
+import { CommandSearch, Switch } from "@paperboat/shared/components";
+import { SEARCH_CHORD, useShortcuts, type Command } from "@paperboat/shared";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Canvas } from "./canvas/Canvas.tsx";
 import { runBackendExport } from "./dock/dock.ts";
@@ -79,6 +79,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false); // the command search (Ctrl+K)
   const [logs, setLogs] = useState<Log[]>([]);
   const [consoleShown, setConsoleShown] = useState(false);
   const [consoleTab, setConsoleTab] = useState<ConsoleTab>("console");
@@ -310,6 +311,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       },
 
       // View menu
+      { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl+K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
       { id: "solver", label: "Solver settings…", menu: "run", group: "solver", run: () => (setSide(true), window.dispatchEvent(new Event("squero:solver"))) },
       { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
       { id: "mo", label: ".mo", menu: "view", group: "source", checked: view === "mo", run: () => (setView("mo"), setSide(true)) },
@@ -428,6 +430,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             onClose={() => setStatusModalOpen(false)}
           />
         )}
+
+        {searchOpen && <CommandSearch commands={commands} onClose={() => setSearchOpen(false)} />}
 
         {consoleShown && (
           <StudioConsole
