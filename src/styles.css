@@ -21,6 +21,7 @@ h2 { margin: 0; }
 
 /* A label: small, grey, sentence case. Names things; never says what is selected. */
 .lbl, .muted { font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
+.mono { font-family: var(--font-mono); }
 
 /* Keys: flat and outlined. Every button is one. */
 button {

@@ -378,7 +378,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                   (shapeRun?.shapes?.length ? (
                     <Viewport3D run={shapeRun} theme={shown} />
                   ) : (
-                    <p className="stage-empty">Run a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</p>
+                    <p className="stage-empty"><span>Run a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</span></p>
                   ))}
               </div>
             </main>
