@@ -200,7 +200,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .file-row {
   display: flex; align-items: center; gap: 4px;
   width: 100%; height: 25px; padding: 0 var(--space-2) 0 8px;
-  border: 0; background: none; color: var(--text-muted); text-align: left;
+  border: 0; border-radius: 0; background: none; color: var(--text-muted); text-align: left;
   font: 400 var(--size-xs) var(--font-mono); cursor: pointer;
 }
 .file-row:hover { background: var(--surface-sunken); color: var(--text); }
@@ -241,6 +241,42 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .stage-text .code-head { flex: none; }
 .stage-text .code-view { flex: 1; min-height: 0; }
 .studio.text-mode .dock { display: none; }
+
+/* ---- New Class sheet (#43) --------------------------------------------------------- */
+.new-class-overlay { position: fixed; inset: 0; z-index: 110; display: flex; align-items: flex-end; justify-content: center; background: rgb(0 0 0 / .22); }
+.new-class-sheet {
+  width: min(800px, calc(100vw - 48px)); max-height: calc(100vh - 64px);
+  display: flex; flex-direction: column;
+  background: var(--surface-panel); border: 1.5px solid var(--line-ink); border-bottom: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-up);
+}
+.new-class-sheet form { display: flex; flex-direction: column; min-height: 0; }
+.new-class-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.new-class-head h2 { margin: 0; font: 600 var(--size-sm) var(--font-sans); }
+.new-class-head .sub { font: 400 11px var(--font-mono); color: var(--text-muted); }
+.new-class-head .spacer { flex: 1; }
+.new-class-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; padding: 16px; overflow: auto; }
+.new-class-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+.new-class-field > label { font: 500 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
+.new-class-field input, .new-class-field select {
+  height: 30px; padding: 0 9px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow);
+  border-radius: var(--radius-md); color: var(--text); font: 400 var(--size-xs) var(--font-mono);
+}
+.new-class-kinds { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.new-class-kind { padding: 8px 9px; text-align: left; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); cursor: pointer; }
+.new-class-kind.on { border-color: var(--line-ink); box-shadow: 0 0 0 1px var(--line-ink); }
+.new-class-kind b { display: block; margin-bottom: 2px; font: 600 var(--size-2xs) var(--font-sans); color: var(--text); }
+.new-class-kind span { display: block; font: 400 10.5px / 1.35 var(--font-sans); color: var(--text-muted); }
+.new-class-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11px var(--font-mono); color: var(--text-muted); }
+.new-class-error { margin: 10px 0 0; padding: 6px 9px; border: 1px solid var(--danger); border-radius: var(--radius-sm); color: var(--danger); font: 400 var(--size-2xs) var(--font-sans); }
+.new-class-skeleton {
+  margin: 0; padding: 10px 12px; max-height: 300px; overflow: auto;
+  background: var(--surface-screen); color: var(--text-on-screen);
+  border-radius: var(--radius-md); font: 400 10.5px / 1.62 var(--font-mono); white-space: pre-wrap;
+}
+.new-class-foot { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-top: 1px solid var(--line); }
+.new-class-foot .note { font: 400 11px var(--font-mono); color: var(--text-muted); }
+.new-class-foot .spacer { flex: 1; }
 
 /* ---- Library & Component Browser (squero#12) --------------------------------------- */
 .library {

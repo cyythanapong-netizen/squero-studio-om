@@ -18,7 +18,9 @@ model's `.mo`, and the Console's **console** tab streams omc's own log as it wor
 The left rail switches between **files** — the model's folder as packages and classes, `package.order`
 included — and **library**, the MSL browser. Opening a `.mo` adds a tab above the stage. A model outside a
 package opens on **library**, so assembling something quick from the library needs no package at all; a
-class inside a package opens on **files**, with its package loaded first.
+class inside a package opens on **files**, with its package loaded first. The rail's **+** (or File ▸ New
+Class…) opens the New Class sheet: name, kind, package, an optional base class and a live skeleton. It
+writes the `.mo` and appends `package.order` when the class lands in a package.
 
 This repo contains both the React web application (`src/`) and the native C++ server & tools (`server/`).
 The server provides `squero/0`, the `omc` bridge, the `.mo` importer (`extends` resolver, `Icon(graphics)` and

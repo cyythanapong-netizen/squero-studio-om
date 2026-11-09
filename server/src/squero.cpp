@@ -199,6 +199,81 @@ json op_workspace(const json& in) {
           {"entries", entries}};
 }
 
+// A Modelica identifier, or a dotted qualified name (Pkg.Sub).
+bool identifier(std::string_view text) {
+  if (text.empty() || !(std::isalpha(static_cast<unsigned char>(text.front())) || text.front() == '_')) return false;
+  return std::all_of(text.begin() + 1, text.end(), [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; });
+}
+
+bool qualified_name(std::string_view text) {
+  if (text.empty()) return true;
+  std::size_t at = 0;
+  while (at <= text.size()) {
+    const std::size_t dot = text.find('.', at);
+    if (!identifier(text.substr(at, dot == std::string_view::npos ? text.size() - at : dot - at))) return false;
+    if (dot == std::string_view::npos) break;
+    at = dot + 1;
+  }
+  return true;
+}
+
+// Write a new class beside its package and keep package.order in step. Nothing is loaded here;
+// the client opens the file next, so the same path as File > Open reads it back.
+json op_create_class(const json& in) {
+  const std::string name = in.value("name", "");
+  const std::string kind = in.value("kind", "model");
+  const std::string within = in.value("within", "");
+  const std::string base = in.value("base", "");
+  const std::string target = in.value("file", "");
+  if (!identifier(name)) throw std::runtime_error("a class name starts with a letter or _ and holds letters, digits and _");
+  if (kind != "model" && kind != "block" && kind != "connector" && kind != "record" && kind != "function")
+    throw std::runtime_error("kind is model, block, connector, record or function");
+  if (!qualified_name(within)) throw std::runtime_error("not a package name: " + within);
+  if (!base.empty() && !qualified_name(base)) throw std::runtime_error("not a base class: " + base);
+  if (target.empty()) throw std::runtime_error("create_class needs a file");
+  const fs::path file = fs::absolute(target);
+  if (fs::exists(file)) throw std::runtime_error(file.string() + " already exists");
+  if (!fs::is_directory(file.parent_path())) throw std::runtime_error("no folder " + file.parent_path().string());
+
+  std::string text;
+  if (!within.empty()) text += "within " + within + ";\n\n";
+  text += kind + " " + name + "\n  \"A new " + kind + ".\"\n";
+  if (!base.empty()) text += "  extends " + base + ";\n";
+  if (kind == "model") text += "  Real x;\nequation\n  der(x) = -x;\n";
+  else if (kind == "block") text += "  Modelica.Blocks.Interfaces.RealInput u;\n  Modelica.Blocks.Interfaces.RealOutput y;\nequation\n  y = u;\n";
+  else if (kind == "connector") text += "  Real v;\n  flow Real i;\n";
+  else if (kind == "record") text += "  Real x;\n";
+  else text += "  input Real u;\n  output Real y;\nalgorithm\n  y := u;\n";
+  text += "end " + name + ";\n";
+  std::ofstream(file) << text;
+
+  // package.order, when the file landed in a package: keep what is there and add the name.
+  const fs::path dir = file.parent_path();
+  if (fs::exists(dir / "package.mo")) {
+    const fs::path order_file = dir / "package.order";
+    std::vector<std::string> order;
+    if (fs::exists(order_file)) {
+      std::ifstream order_in(order_file);
+      std::string line;
+      while (std::getline(order_in, line)) {
+        const std::size_t first = line.find_first_not_of(" \t\r");
+        const std::size_t last = line.find_last_not_of(" \t\r");
+        if (first != std::string::npos) order.push_back(line.substr(first, last - first + 1));
+      }
+    } else {
+      for (const auto& entry : fs::directory_iterator(dir)) {
+        if (entry.path().extension() == ".mo" && entry.path().stem() != "package") order.push_back(entry.path().stem().string());
+      }
+      std::sort(order.begin(), order.end());
+    }
+    if (std::find(order.begin(), order.end(), name) == order.end()) order.push_back(name);
+    std::ofstream order_out(order_file);
+    for (const auto& one : order) order_out << one << '\n';
+  }
+
+  return {{"file", file.string()}, {"model", within.empty() ? name : within + "." + name}};
+}
+
 json op_save(Omc& omc, const json& in) {
   const std::string model = user_model(in);
   std::string file = in.value("file", "");
@@ -729,6 +804,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_open(omc, in, session);
     } else if (op == "workspace") {
       out["result"] = op_workspace(in);
+    } else if (op == "create_class") {
+      out["result"] = op_create_class(in);
     } else if (op == "save") {
       out["result"] = op_save(omc, in);
     } else if (op == "check_model") {
@@ -749,7 +826,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, workspace, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
+      out["error"] = "unknown op; squero/0 has omc, open, workspace, create_class, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
       return out.dump();
     }
     out["ok"] = true;

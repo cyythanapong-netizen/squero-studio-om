@@ -49,7 +49,7 @@ export function Rail({
           library
         </button>
         {tab === "files" && (
-          <button type="button" className="key small rail-add" title="Open a .mo file" onClick={onNew}>
+          <button type="button" className="key small rail-add" title="New class in this workspace" onClick={onNew}>
             +
           </button>
         )}
@@ -87,7 +87,7 @@ export function Rail({
               })}
             </div>
           ) : (
-            <p className="files-empty">No .mo files here yet. Open one with +.</p>
+            <p className="files-empty">No .mo files here yet. Create a class with +.</p>
           )}
           <p className="files-foot">
             {classes} {classes === 1 ? "class" : "classes"}
