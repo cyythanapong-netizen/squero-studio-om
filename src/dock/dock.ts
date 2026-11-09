@@ -16,6 +16,8 @@ export type BalanceResult =
   | { kind: "error"; equations: null; unknowns: null; ratio: string; words: string };
 
 const CHECK_RE = /(\d+)\s+equations?(?:\(s\))?\s+and\s+(\d+)\s+(?:variables?|unknowns?)(?:\(s\))?/i;
+/** A fixed state adds an initial equation the counts above do not include. checkModel is the judge. */
+const PASSED_RE = /completed successfully/i;
 
 export function parseBalance(reply: string | Error): BalanceResult {
   if (reply instanceof Error) {
@@ -48,6 +50,17 @@ export function parseBalance(reply: string | Error): BalanceResult {
       unknowns,
       ratio,
       words: `balanced · ${equations} / ${unknowns} equations / unknowns`,
+    };
+  }
+  // A model with a fixed state can report one more equation than unknowns (the initial equation)
+  // and still pass; the counts alone would call that over-determined.
+  if (PASSED_RE.test(text)) {
+    return {
+      kind: "balanced",
+      equations,
+      unknowns,
+      ratio,
+      words: `balanced · ${equations} / ${unknowns} equations / unknowns · checkModel passed`,
     };
   }
   if (equations < unknowns) {
