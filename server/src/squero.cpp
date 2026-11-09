@@ -166,6 +166,26 @@ json op_open(Omc& omc, const json& in, const Session& session) {
 // The folder the open model lives in, for the Files rail: every package (a folder with a
 // package.mo) down to its classes, or, for a model outside a package, the .mo files beside it.
 // A single model in a plain folder is a workspace of one, which is the quick path.
+// The kind a .mo declares, for the rail's glyph: skip comments, `within` and a leading
+// partial/expandable/operator/pure, then take the class keyword.
+std::string class_kind(const fs::path& file) {
+  std::ifstream in(file);
+  std::string line;
+  while (std::getline(in, line)) {
+    const std::size_t first = line.find_first_not_of(" \t\r");
+    if (first == std::string::npos) continue;
+    line.erase(0, first);
+    if (line.starts_with("within") || line.starts_with("//") || line.starts_with("/*") || line.starts_with("*")) continue;
+    std::istringstream words(line);
+    std::string word;
+    words >> word;
+    while (word == "partial" || word == "expandable" || word == "operator" || word == "pure" || word == "impure") words >> word;
+    if (word == "model" || word == "block" || word == "connector" || word == "record" || word == "function" || word == "package") return word;
+    return "class";
+  }
+  return "class";
+}
+
 json op_workspace(const json& in) {
   const std::string target = in.value("file", "");
   if (target.empty()) throw std::runtime_error("workspace needs a file");
@@ -188,7 +208,7 @@ json op_workspace(const json& in) {
         entries.push_back({{"name", name}, {"path", path.string()}, {"kind", "package"}, {"depth", depth}});
         walk(path, depth + 1);
       } else if (path.extension() == ".mo" && name != "package.mo") {
-        entries.push_back({{"name", path.stem().string()}, {"path", path.string()}, {"kind", "class"}, {"depth", depth}});
+        entries.push_back({{"name", path.stem().string()}, {"path", path.string()}, {"kind", "class"}, {"classKind", class_kind(path)}, {"depth", depth}});
       }
     }
   };

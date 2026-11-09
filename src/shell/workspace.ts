@@ -1,10 +1,15 @@
 // The Files rail's data: the server's workspace listing, and the small rules the rail and the
 // document tabs need. Pure, so the tree logic is testable without a DOM.
 
+/** The class keyword the .mo declares, for the rail's glyph. */
+export type ClassKind = "model" | "block" | "connector" | "record" | "function" | "package" | "class";
+
 export type WorkspaceEntry = {
   name: string;
   path: string;
   kind: "package" | "class";
+  /** What a class file declares; absent on a package row. */
+  classKind?: ClassKind;
   /** 0 for the top package or a loose class, +1 per package level. */
   depth: number;
 };
