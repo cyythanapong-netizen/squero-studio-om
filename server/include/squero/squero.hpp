@@ -17,6 +17,9 @@
 //   open      {}                                → {file, model}      the model the server was started on
 //   workspace {file}                            → {root, file, package, entries:[{name, path, kind, depth}]}
 //                                                  the model's folder as a tree of .mo classes and packages
+//   create_class {file, name, kind, within?, base?}
+//                                              → {file, model}      write a class file; append package.order
+//                                                  when it lands in a package
 //   save      {model}                           → {file}             `save(model)`: the model's own .mo
 //   icon      {class}                           → {icon, connectors, notice}
 //                                                  the imported look of a class (`paperboat modelica icon`)

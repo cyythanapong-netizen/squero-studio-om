@@ -25,6 +25,8 @@ import { StudioConsole, type ConsoleTab } from "./shell/StudioConsole.tsx";
 import { DocTabs } from "./shell/DocTabs.tsx";
 import { Rail, type RailTab } from "./shell/Rail.tsx";
 import { TextStage } from "./shell/TextStage.tsx";
+import { NewClassSheet } from "./shell/NewClassSheet.tsx";
+import type { NewClassSpec } from "./shell/newClass.ts";
 import { closeDoc, neighbour, openDoc, type Doc, type Workspace } from "./shell/workspace.ts";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
@@ -82,6 +84,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [docs, setDocs] = useState<Doc[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [rail, setRail] = useState<RailTab>("files");
+  const [newClassOpen, setNewClassOpen] = useState(false);
   const railTouched = useRef(false);
   const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
   const [theme, setTheme, shown] = useThemeChoice();
@@ -187,6 +190,15 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     if (next) await openDocument(next.file);
   };
 
+  /** Write the class, then open it as a document; the Files rail picks it up from the new model. */
+  const createNewClass = async (spec: NewClassSpec) => {
+    if (actions.dirty) await actions.save();
+    const made = await actions.createClass(spec);
+    await actions.openFile(made.file);
+    setNewClassOpen(false);
+    say(`Created ${made.model}`);
+  };
+
   const handleExportBackend = async () => {
     if (!api) return;
     const outcome = await runBackendExport(api, "ppk", () => {});
@@ -274,6 +286,15 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               await actions.newModel(name);
             },
           }),
+      },
+      {
+        id: "file.new-class",
+        label: "New Class…",
+        menu: "file",
+        group: "model",
+        shortcut: "Ctrl+Shift+N",
+        chord: { key: "n", ctrl: true, shift: true },
+        run: () => setNewClassOpen(true),
       },
       {
         id: "file.open",
@@ -435,7 +456,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               workspace={workspace}
               active={model.file}
               onOpen={(file) => void openDocument(file)}
-              onNew={() => fileInputRef.current?.click()}
+              onNew={() => setNewClassOpen(true)}
             >
               <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
             </Rail>
@@ -478,6 +499,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               </aside>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} />
+            {newClassOpen && <NewClassSheet workspace={workspace} model={model} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}
             <div className="dock-slot">
               <StudioDock />
             </div>

@@ -57,6 +57,8 @@ export type Actions = {
   saveAs(file: string): Promise<void>;
   newModel(name: string): Promise<void>;
   openFile(file: string, content?: string): Promise<void>;
+  /** Writes a new class file (and package.order); opening it is the caller's next step. */
+  createClass(spec: { file: string; name: string; kind: string; within: string; base?: string }): Promise<{ file: string; model: string }>;
   loadLibrary(lib: string): Promise<void>;
 };
 
@@ -356,6 +358,9 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
           setSelection([]);
           say(`Created model ${opened.model}`);
         });
+      },
+      createClass(spec) {
+        return enqueue(() => omc.op<{ file: string; model: string }>("create_class", spec));
       },
       async openFile(file: string, content?: string) {
         const target = file.trim();

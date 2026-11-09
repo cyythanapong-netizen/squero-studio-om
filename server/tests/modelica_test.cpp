@@ -628,6 +628,50 @@ TEST_CASE("workspace lists the model folder's classes and packages", "[squero]")
   fs::remove_all(dir);
 }
 
+TEST_CASE("create_class writes a class and keeps package.order in step", "[squero]") {
+  const fs::path dir = fs::temp_directory_path() / "paperboat-squero-new-class";
+  fs::remove_all(dir);
+  fs::create_directories(dir / "Pkg");
+  std::ofstream(dir / "Pkg" / "package.mo") << "package Pkg\nend Pkg;\n";
+  std::ofstream(dir / "Pkg" / "package.order") << "A\n";
+  std::ofstream(dir / "Pkg" / "A.mo") << "within Pkg;\nmodel A\nend A;\n";
+
+  mo::Omc omc;  // never started: create_class writes files
+  const json made = op(omc, {{"op", "create_class"},
+                             {"file", (dir / "Pkg" / "B.mo").string()},
+                             {"name", "B"},
+                             {"kind", "block"},
+                             {"within", "Pkg"},
+                             {"base", "Modelica.Blocks.Icons.Block"}});
+  INFO(made.dump());
+  REQUIRE(made["ok"] == true);
+  CHECK(made["result"]["model"] == "Pkg.B");
+  std::ifstream body(dir / "Pkg" / "B.mo");
+  const std::string text((std::istreambuf_iterator<char>(body)), std::istreambuf_iterator<char>());
+  CHECK_THAT(text, Catch::Matchers::ContainsSubstring("within Pkg;"));
+  CHECK_THAT(text, Catch::Matchers::ContainsSubstring("block B"));
+  CHECK_THAT(text, Catch::Matchers::ContainsSubstring("extends Modelica.Blocks.Icons.Block;"));
+  std::ifstream order(dir / "Pkg" / "package.order");
+  const std::string listed((std::istreambuf_iterator<char>(order)), std::istreambuf_iterator<char>());
+  CHECK(listed == "A\nB\n");
+
+  // A name that is taken, a bad name, and a bad kind are refused without touching the disk.
+  CHECK(op(omc, {{"op", "create_class"}, {"file", (dir / "Pkg" / "A.mo").string()}, {"name", "A"}, {"kind", "model"}, {"within", "Pkg"}})["ok"] == false);
+  CHECK(op(omc, {{"op", "create_class"}, {"file", (dir / "Pkg" / "1B.mo").string()}, {"name", "1B"}, {"kind", "model"}})["ok"] == false);
+  CHECK(op(omc, {{"op", "create_class"}, {"file", (dir / "Pkg" / "C.mo").string()}, {"name", "C"}, {"kind", "package"}})["ok"] == false);
+
+  // A quick class at the root has no within and no package.order.
+  const json quick = op(omc, {{"op", "create_class"}, {"file", (dir / "Q.mo").string()}, {"name", "Q"}, {"kind", "function"}});
+  REQUIRE(quick["ok"] == true);
+  CHECK(quick["result"]["model"] == "Q");
+  std::ifstream quick_body(dir / "Q.mo");
+  const std::string quick_text((std::istreambuf_iterator<char>(quick_body)), std::istreambuf_iterator<char>());
+  CHECK_THAT(quick_text, Catch::Matchers::StartsWith("function Q"));
+  CHECK_FALSE(fs::exists(dir / "package.order"));
+
+  fs::remove_all(dir);
+}
+
 TEST_CASE("opening a class inside a package loads the package chain", "[squero][omc]") {
   if (!have_omc()) SKIP("omc not installed");
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-package-open";
