@@ -72,6 +72,22 @@ export function parseBalance(reply: string | Error): BalanceResult {
   };
 }
 
+/** What the canvas can't show as written, in the dock's words; null when nothing is missing. */
+export function undrawnNote(undrawn: StudioModel["undrawn"]): { label: string; title: string } | null {
+  if (!undrawn || undrawn.total < 1) return null;
+  const parts: string[] = [];
+  if (undrawn.hidden) parts.push(`${undrawn.hidden} protected part${undrawn.hidden === 1 ? " is" : "s are"} hidden`);
+  if (undrawn.arrays) parts.push(`${undrawn.arrays} array${undrawn.arrays === 1 ? " is" : "s are"} drawn as one block`);
+  if (undrawn.conditionals)
+    parts.push(
+      `${undrawn.conditionals} conditional part${undrawn.conditionals === 1 ? " is" : "s are"} drawn without its condition`,
+    );
+  return {
+    label: `${undrawn.total} not drawn as declared`,
+    title: `${parts.join("; ")}. Edit the .mo in Text to see the declaration.`,
+  };
+}
+
 /** omc's error, in the words the footer shows: the common ones say what to do. */
 export function explainOmcError(why: string): string {
   const wire = /connectors in connect\(([^,]+),\s*([^)]+)\) are not type compatible/.exec(why);

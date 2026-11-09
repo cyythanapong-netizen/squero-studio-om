@@ -76,6 +76,19 @@
   background: var(--danger);
 }
 
+.studio-dock-undrawn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  background: var(--surface-raised);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font: 500 var(--size-2xs) var(--font-mono);
+  white-space: nowrap;
+  cursor: help;
+}
+
 .studio-dock-dangling {
   display: inline-flex;
   align-items: center;

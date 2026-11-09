@@ -7,6 +7,7 @@ import {
   fixDanglingPort,
   parseBalance,
   runBackendExport,
+  undrawnNote,
 } from "../src/dock/dock.ts";
 import type { ExportProgress } from "../src/model/types.ts";
 import { createDefaultModel, createFakeStudio, DEFAULT_CONNECTORS } from "./fake.ts";
@@ -49,6 +50,21 @@ test("dock: balance parse handles balanced, under-determined, over-determined, a
   const errStr = parseBalance("Error: Class MissingModel not found in scope.");
   assert.equal(errStr.kind, "error");
   assert.match(errStr.words, /MissingModel not found/);
+});
+
+test("dock: undrawn declarations are worded, and nothing missing means no note", () => {
+  assert.equal(undrawnNote(undefined), null);
+  assert.equal(undrawnNote({ total: 0, hidden: 0, arrays: 0, conditionals: 0 }), null);
+
+  const one = undrawnNote({ total: 1, hidden: 1, arrays: 0, conditionals: 0 });
+  assert.equal(one?.label, "1 not drawn as declared");
+  assert.match(one?.title ?? "", /1 protected part is hidden/);
+
+  const all = undrawnNote({ total: 4, hidden: 2, arrays: 1, conditionals: 1 });
+  assert.equal(all?.label, "4 not drawn as declared");
+  assert.match(all?.title ?? "", /2 protected parts are hidden/);
+  assert.match(all?.title ?? "", /1 array is drawn as one block/);
+  assert.match(all?.title ?? "", /1 conditional part is drawn without its condition/);
 });
 
 test("dock: dangling flow connector detection and fix choice per domain", async () => {

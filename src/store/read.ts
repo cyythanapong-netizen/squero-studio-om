@@ -1,7 +1,7 @@
 // Reading the model back from omc after every edit: the .mo stays the truth, the canvas is a
 // view of what omc says. Pure over an `OmcCalls`, so a test feeds it canned answers.
 
-import type { ComponentInst, Connection, EntryPoint, Placement, StudioModel } from "../model/types.ts";
+import type { ComponentInst, Connection, EntryPoint, Placement, StudioModel, Undrawn } from "../model/types.ts";
 import type { OmcCalls } from "../omc/omc.ts";
 import { atom, list, parseCall, parseValue, type Val } from "../omc/parse.ts";
 import { GRID, snap, toPx } from "./exprs.ts";
@@ -85,17 +85,32 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
   }
 
   const typeClass = new Map<string, boolean>();
+  const undrawn: Undrawn = { total: 0, hidden: 0, arrays: 0, conditionals: 0 };
   let index = 0;
   for (let i = 0; i < comps.length; i++) {
     const c = list(comps[i]);
     const cls = atom(c[0]);
     const id = atom(c[1]);
-    if (!cls || !id || atom(c[3]) === "protected") continue;
+    if (!cls || !id) continue;
     // top-level parameters and plain variables are not parts: Real, or a `type` such as
     // Modelica.Units.SI.Inductance, or anything declared parameter/constant
     if (PRIMITIVE.has(cls) || atom(c[8]) === "parameter" || atom(c[8]) === "constant") continue;
     if (!typeClass.has(cls)) typeClass.set(cls, atom(parseValue(await omc.call(`getClassRestriction(${cls})`))) === "type");
     if (typeClass.get(cls)) continue;
+    // a protected part is hidden by design; counted so the dock can say nothing vanished
+    if (atom(c[3]) === "protected") {
+      undrawn.hidden++;
+      undrawn.total++;
+      continue;
+    }
+    // an array (`R[3]`) or a conditional (`G if useG`) is drawn as one plain plate
+    const dims = list(c[11]).map(atom).filter(Boolean);
+    const condition = atom(parseValue(await omc.call(`getNthComponentCondition(${name}, ${i + 1})`).catch(() => "")));
+    if (dims.length || condition) {
+      undrawn.total++;
+      if (dims.length) undrawn.arrays++;
+      if (condition) undrawn.conditionals++;
+    }
     const names = list(parseValue(await omc.call(`getComponentModifierNames(${name}, ${quoted(id)})`)));
     const params: Record<string, string> = {};
     for (const m of names) {
@@ -119,7 +134,7 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
   const decl = new Map(comps.map((c) => [atom(list(c)[1]), { cls: atom(list(c)[0]), private: atom(list(c)[3]) === "protected" }]));
   const params = await readParams(omc, name, decl);
   const own = await omc.op<{ icon?: StudioModel["icon"]; connectors?: StudioModel["connectors"] }>("icon", { class: name }).catch(() => ({}) as { icon?: StudioModel["icon"] });
-  return { name, ...(file ? { file } : {}), components, connections: wires, params, entries, ...(own.icon ? { icon: own.icon } : {}), connectors };
+  return { name, ...(file ? { file } : {}), components, connections: wires, params, entries, ...(own.icon ? { icon: own.icon } : {}), connectors, ...(undrawn.total ? { undrawn } : {}) };
 }
 
 async function readParams(omc: OmcCalls, model: string, decl: Map<string, { cls: string; private: boolean }>): Promise<StudioModel["params"]> {
