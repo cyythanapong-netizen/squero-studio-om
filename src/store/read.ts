@@ -1,7 +1,7 @@
 // Reading the model back from omc after every edit: the .mo stays the truth, the canvas is a
 // view of what omc says. Pure over an `OmcCalls`, so a test feeds it canned answers.
 
-import type { ComponentInst, Connection, EntryPoint, Placement, StudioModel, Undrawn } from "../model/types.ts";
+import type { ComponentInst, Connection, EntryPoint, ModelVar, Placement, StudioModel, Undrawn } from "../model/types.ts";
 import type { OmcCalls } from "../omc/omc.ts";
 import { atom, list, parseCall, parseValue, type Val } from "../omc/parse.ts";
 import { GRID, snap, toPx } from "./exprs.ts";
@@ -86,17 +86,34 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
 
   const typeClass = new Map<string, boolean>();
   const undrawn: Undrawn = { total: 0, hidden: 0, arrays: 0, conditionals: 0 };
+  const vars: ModelVar[] = [];
   let index = 0;
   for (let i = 0; i < comps.length; i++) {
     const c = list(comps[i]);
     const cls = atom(c[0]);
     const id = atom(c[1]);
     if (!cls || !id) continue;
+    const variability = atom(c[8]);
+    const addVar = () =>
+      vars.push({
+        name: id,
+        type: shortName(cls),
+        variability,
+        causality: atom(c[10]),
+        visibility: atom(c[3]) === "protected" ? "protected" : "public",
+        ...(atom(c[2]) ? { comment: atom(c[2]) } : {}),
+      });
     // top-level parameters and plain variables are not parts: Real, or a `type` such as
     // Modelica.Units.SI.Inductance, or anything declared parameter/constant
-    if (PRIMITIVE.has(cls) || atom(c[8]) === "parameter" || atom(c[8]) === "constant") continue;
+    if (PRIMITIVE.has(cls) || variability === "parameter" || variability === "constant") {
+      addVar();
+      continue;
+    }
     if (!typeClass.has(cls)) typeClass.set(cls, atom(parseValue(await omc.call(`getClassRestriction(${cls})`))) === "type");
-    if (typeClass.get(cls)) continue;
+    if (typeClass.get(cls)) {
+      addVar();
+      continue;
+    }
     // a protected part is hidden by design; counted so the dock can say nothing vanished
     if (atom(c[3]) === "protected") {
       undrawn.hidden++;
@@ -133,8 +150,21 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
 
   const decl = new Map(comps.map((c) => [atom(list(c)[1]), { cls: atom(list(c)[0]), private: atom(list(c)[3]) === "protected" }]));
   const params = await readParams(omc, name, decl);
+  const values = new Map(params.map((p) => [p.id, String(p.default)]));
+  for (const v of vars) if (values.has(v.name)) v.value = values.get(v.name);
   const own = await omc.op<{ icon?: StudioModel["icon"]; connectors?: StudioModel["connectors"] }>("icon", { class: name }).catch(() => ({}) as { icon?: StudioModel["icon"] });
-  return { name, ...(file ? { file } : {}), components, connections: wires, params, entries, ...(own.icon ? { icon: own.icon } : {}), connectors, ...(undrawn.total ? { undrawn } : {}) };
+  return {
+    name,
+    ...(file ? { file } : {}),
+    components,
+    connections: wires,
+    params,
+    ...(vars.length ? { vars } : {}),
+    entries,
+    ...(own.icon ? { icon: own.icon } : {}),
+    connectors,
+    ...(undrawn.total ? { undrawn } : {}),
+  };
 }
 
 async function readParams(omc: OmcCalls, model: string, decl: Map<string, { cls: string; private: boolean }>): Promise<StudioModel["params"]> {

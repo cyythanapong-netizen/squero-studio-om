@@ -14,6 +14,7 @@ import { OmcClient, type OmcStatus } from "./omc/omc.ts";
 import { type Log, type Message } from "@paperboat/shared/components";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
+import { IconView } from "./icon/IconView.tsx";
 import { LibraryModal, PromptModal, StatusModal } from "./shell/Dialogs.tsx";
 import { TopBar } from "./shell/TopBar.tsx";
 import { useTheme, type Theme } from "@paperboat/shared/components";
@@ -79,7 +80,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [view, setView] = useState<View>("flat");
   const [focus, setFocus] = useState<Focus>("split");
   // the stage's view of the model (#62): the diagram, the last MultiBody run in 3D, or the .mo
-  const [stageView, setStageView] = useState<"diagram" | "3d" | "text">("diagram");
+  const [stageView, setStageView] = useState<"diagram" | "icon" | "3d" | "text">("diagram");
   // the workspace and its open documents (#43): the rail lists the folder, the tabs switch files
   const [docs, setDocs] = useState<Doc[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -118,6 +119,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const classes = useClassIndex(omc);
 
   const model = api?.model;
+  const currentEntry = workspace?.entries.find((entry) => entry.path === model?.file);
+  const canExport = currentEntry ? currentEntry.classKind === "model" || currentEntry.classKind === "block" : false;
   useEffect(() => {
     if (popover && model && !model.components.some((c) => c.name === popover)) setPopover(null);
   }, [popover, model]);
@@ -404,6 +407,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "solver", label: "Solver settings…", menu: "run", group: "solver", run: () => (setSide(true), window.dispatchEvent(new Event("squero:solver"))) },
       { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
       { id: "stage-diagram", label: "Diagram", menu: "view", group: "stage", checked: stageView === "diagram", run: () => setStageView("diagram") },
+      { id: "stage-icon", label: "Icon", menu: "view", group: "stage", checked: stageView === "icon", run: () => setStageView("icon") },
       { id: "stage-3d", label: "3D", menu: "view", group: "stage", checked: stageView === "3d", run: () => setStageView("3d") },
       { id: "stage-text", label: "Text", menu: "view", group: "stage", checked: stageView === "text", run: () => setStageView("text") },
       { id: "flat", label: "flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(true)) },
@@ -419,7 +423,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
   return (
     <StudioContext.Provider value={api}>
-      <div className={`studio${side ? " with-side" : ""}${stageView === "text" ? " text-mode" : ""}`}>
+      <div className={`studio${side ? " with-side" : ""}${stageView === "text" || stageView === "icon" ? " no-dock" : ""}`}>
         <TopBar
           status={status}
           model={model?.name}
@@ -470,12 +474,13 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 onClose={(doc) => void closeDocument(doc)}
                 onOpen={() => fileInputRef.current?.click()}
               />
-              <Switch<"diagram" | "3d" | "text">
+              <Switch<"diagram" | "icon" | "3d" | "text">
                 label="View"
                 value={stageView}
                 onChange={setStageView}
                 options={[
                   { value: "diagram", label: "diagram", hint: "The model's parts and wires" },
+                  { value: "icon", label: "icon", hint: "Draw the model's icon and place its connectors" },
                   { value: "3d", label: "3d", hint: "The last run's MultiBody shapes in 3D" },
                   { value: "text", label: "text", hint: "The model's .mo, read-only for now" },
                 ]}
@@ -491,6 +496,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                     <p className="stage-empty"><span>Run a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</span></p>
                   ))}
                 {stageView === "text" && <TextStage model={model} actions={actions} line={sourceLine} />}
+                {stageView === "icon" && <IconView />}
               </div>
             </main>
             <aside className={`side focus-${focus}`} inert={!side}>
@@ -498,7 +504,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
               </aside>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
-            <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} />
+            <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} canExport={canExport} />
             {newClassOpen && <NewClassSheet workspace={workspace} model={model} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}
             <div className="dock-slot">
               <StudioDock />

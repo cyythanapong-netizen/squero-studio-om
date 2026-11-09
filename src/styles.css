@@ -243,7 +243,41 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .stage-text { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
 .stage-text .code-head { flex: none; }
 .stage-text .code-view { flex: 1; min-height: 0; }
-.studio.text-mode .dock { display: none; }
+.studio.no-dock .dock { display: none; }
+
+
+/* ---- Icon view (#43): draw the look and place connectors on the stage --------------------- */
+.icon-view { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; container-type: inline-size; }
+.icon-view-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.icon-tools { display: flex; flex-wrap: wrap; gap: 4px; }
+.icon-bar-sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
+.icon-count { font: 400 11px var(--font-mono); color: var(--text-muted); }
+.icon-view-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 8px; padding: 8px; }
+.icon-canvas { position: relative; min-height: 0; display: grid; place-items: center; background: var(--surface-sunken); border: 1px solid var(--line-strong); border-radius: var(--radius-md); overflow: hidden; }
+.icon-stage { width: min(72vh, 100%); aspect-ratio: 1; background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); cursor: crosshair; touch-action: none; user-select: none; }
+.icon-canvas.select .icon-stage { cursor: default; }
+.icon-stage .studio-look-grid-dot { fill: var(--dots); }
+.icon-stage .studio-look-sel-box { fill: none; stroke: var(--line-ink); stroke-width: 0.8; stroke-dasharray: 2 2; pointer-events: none; }
+.icon-handle { fill: var(--surface-panel); stroke: var(--line-ink); stroke-width: 0.5; cursor: nwse-resize; }
+.icon-port { fill: var(--surface-raised); stroke: var(--signal); stroke-width: 0.8; cursor: pointer; }
+.icon-port.on { fill: var(--signal); }
+.icon-hint { position: absolute; left: 10px; bottom: 8px; font: 400 10.5px var(--font-mono); color: var(--text-muted); pointer-events: none; }
+.icon-inspector { min-height: 0; overflow: auto; border-left: 1px solid var(--line); padding-left: 8px; }
+@container (max-width: 640px) {
+  .icon-view-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(240px, 1fr) auto; }
+  .icon-inspector { border-left: 0; border-top: 1px solid var(--line); padding-left: 0; padding-top: 6px; max-height: 42%; }
+}
+.icon-section { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.icon-section h3 { margin: 0 0 5px; font: 500 11px var(--font-mono); color: var(--text-muted); text-transform: lowercase; }
+.icon-geometry { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.icon-geometry label { display: flex; align-items: center; gap: 4px; font: 400 10.5px var(--font-mono); color: var(--text-muted); }
+.icon-geometry input { width: 100%; }
+.icon-layers { display: flex; flex-direction: column; gap: 1px; }
+.icon-layer { display: flex; align-items: center; gap: 6px; border: 1px solid transparent; background: none; padding: 2px 4px; text-align: left; font: 400 11px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.icon-layer.on { border-color: var(--line-ink); color: var(--text); }
+.icon-layer-kind { color: var(--text); }
+.icon-layer-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-port-pick { border: 0; background: none; padding: 0; font: 400 11px var(--font-mono); color: var(--signal); cursor: pointer; }
 
 /* ---- New Class sheet (#43) --------------------------------------------------------- */
 .new-class-overlay { position: fixed; inset: 0; z-index: 110; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(0 0 0 / .22); }

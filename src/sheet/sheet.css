@@ -571,3 +571,32 @@
   border-radius: var(--radius-md);
   cursor: pointer;
 }
+
+/* ---- Variables tree (#43): OMEdit's browser, and Paperboat's passthrough list ---------------- */
+.var-tree { display: flex; flex-direction: column; gap: 6px; }
+.var-tree-head { display: flex; align-items: center; gap: 6px; }
+.var-filter { flex: 1; min-width: 0; height: 28px; padding: 0 8px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text); }
+.var-tree-body { max-height: 330px; overflow: auto; display: flex; flex-direction: column; gap: 1px; }
+.var-group { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 3px 2px; font: 500 var(--size-2xs) var(--font-mono); color: var(--text); text-align: left; cursor: pointer; }
+.var-group .lbl { margin-left: auto; }
+.var-component { display: flex; flex-direction: column; }
+.var-component-head { display: flex; align-items: center; gap: 6px; border: 0; background: none; padding: 2px 2px 2px 18px; font: 400 11px var(--font-mono); color: var(--text-muted); text-align: left; cursor: pointer; }
+.var-row { display: flex; align-items: center; gap: 5px; min-height: 24px; padding: 1px 2px 1px 18px; font: 400 11px var(--font-mono); color: var(--text-muted); }
+.var-row.protected { opacity: .75; }
+.component-row { padding-left: 34px; }
+.var-kind { width: 14px; flex: none; text-align: center; font-weight: 600; color: var(--text); }
+.var-kind-parameter { color: var(--signal); }
+.var-kind-input, .var-kind-output { color: var(--dom-signal, var(--signal)); }
+.var-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.var-name-input { flex: 1 1 auto; min-width: 50px; border: 0; background: transparent; padding: 1px 2px; font: inherit; color: var(--text); }
+.var-type { flex: none; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .7; }
+.var-tag { flex: none; padding: 0 3px; border: 1px solid var(--line); border-radius: 3px; font-size: 9.5px; color: var(--text-muted); }
+.var-tag.parameter { color: var(--signal); border-color: var(--signal); }
+.var-tag.protected { color: var(--text-muted); }
+.var-value { flex: none; min-width: 46px; text-align: right; color: var(--text); }
+.var-value-input { width: 68px; height: 22px; padding: 0 4px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: 3px; font: 400 11px var(--font-mono); color: var(--text); text-align: right; }
+.var-pass { flex: none; height: 20px; padding: 0 5px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface-raised); font: 500 9.5px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.var-pass.on { border-color: var(--line-ink); color: var(--text); }
+.var-pass-na { flex: none; width: 60px; text-align: center; color: var(--text-muted); }
+.var-remove { flex: none; border: 0; background: none; color: var(--text-muted); cursor: pointer; font-size: 13px; }
+.var-empty { margin: 2px 0 4px 18px; font: 400 10.5px var(--font-sans); color: var(--text-muted); }
