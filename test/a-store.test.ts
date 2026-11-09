@@ -214,6 +214,7 @@ function fake(): OmcCalls {
     [/^getConnectionCount\(/, "1"],
     [/^getNthConnection\(M, 1\)/, '{"R1.p", "G.p", ""}'],
     [/^getNthConnectionAnnotation\(/, "false"],
+    [/^getNthComponentCondition\(/, '""'],
     [/^getComponentModifierNames\(M, "R1"\)/, '{"R"}'],
     [/^getComponentModifierNames\(/, "{}"],
     [/^getComponentModifierValue\(M, R1\.R\)/, '"10"'],
@@ -251,6 +252,41 @@ test("reading a model: parts with place, modifiers and ports, wires, top-level p
     { id: "h", type: "number", default: 3, modelica: "Real", private: true },
   ]);
   assert.ok(m.connectors.PositivePin);
+  assert.equal(m.undrawn, undefined); // everything the canvas drew is declared as written
+});
+
+test("undrawn: protected parts, arrays and conditionals are counted, each part once", async () => {
+  const answers: [RegExp, string][] = [
+    [
+      /^getComponents\(/,
+      "{{A.Resistor, R1, \"\", \"public\", false, false, false, false, \"unspecified\", \"none\", \"unspecified\", {3}}, " +
+        "{A.Ground, G, \"\", \"public\", false, false, false, false, \"unspecified\", \"none\", \"unspecified\", {}}, " +
+        "{A.Ground, Gp, \"\", \"protected\", false, false, false, false, \"unspecified\", \"none\", \"unspecified\", {}}, " +
+        "{Real, k, \"\", \"public\", false, false, false, false, \"parameter\", \"none\", \"unspecified\", {}}}",
+    ],
+    [/^getComponentAnnotations\(/, "{{}, {}, {}, {}}"],
+    [/^getConnectionCount\(/, "0"],
+    [/^getComponentModifierNames\(/, "{}"],
+    [/^getClassRestriction\(/, '"model"'],
+    [/^getParameterNames\(/, "{}"],
+    [/^getNthComponentCondition\(X, 1\)/, '"if useR"'],
+    [/^getNthComponentCondition\(X, 2\)/, '""'],
+  ];
+  const omc = {
+    async call(expr: string) {
+      const hit = answers.find(([re]) => re.test(expr));
+      if (!hit) throw new Error(`unexpected omc call: ${expr}`);
+      return hit[1];
+    },
+    async op<T>(name: string, args: Record<string, unknown> = {}) {
+      assert.equal(name, "icon");
+      return { icon: String(args.class).endsWith("Ground") ? Ground : Resistor, connectors } as T;
+    },
+  } as OmcCalls;
+  const m = await readModel(omc, "X", undefined, new Map());
+  assert.deepEqual(m.components.map((c) => c.name), ["R1", "G"]);
+  // R1 is both an array and conditional: one part, counted once in the total
+  assert.deepEqual(m.undrawn, { total: 2, hidden: 1, arrays: 1, conditionals: 1 });
 });
 
 test("the top bar's chip says the omc version and state", () => {

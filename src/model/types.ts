@@ -27,6 +27,10 @@ export type Param = ParamDef & { private?: boolean; modelica?: string };
 /** A top-level causal entry point (+ Input on a port, + Probe on a variable). */
 export type EntryPoint = { name: string; kind: "input" | "output"; target: string; unit?: string };
 
+/** Declarations the canvas doesn't draw as written: `protected` parts are hidden, arrays are drawn
+ * as one block, and a conditional part is drawn without its condition. */
+export type Undrawn = { total: number; hidden: number; arrays: number; conditionals: number };
+
 export type StudioModel = {
   name: string; // qualified class name being edited
   file?: string; // the .mo on disk
@@ -36,6 +40,7 @@ export type StudioModel = {
   entries: EntryPoint[];
   icon?: IconDef; // the model's own look (Look tab), the generated linked block's view.icon
   connectors: Connectors;
+  undrawn?: Undrawn; // counted from what omc says; absent when everything is drawn as written
 };
 
 export type ExportProgress = { stage: "check" | "flatten" | "generate" | "build"; fraction: number };

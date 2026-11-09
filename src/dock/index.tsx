@@ -5,6 +5,7 @@ import {
   findDanglingFlowPorts,
   fixDanglingPort,
   runBackendExport,
+  undrawnNote,
   type BalanceResult,
   type DanglingPort,
   type ExportOutcome,
@@ -54,6 +55,7 @@ export function StudioDock() {
   }, [omc, modelName, modelSignature]);
 
   const dangling = findDanglingFlowPorts(api.model);
+  const undrawn = undrawnNote(api.model.undrawn);
   const isBalanced = balance.kind === "balanced";
 
   const handleFix = async (item: DanglingPort) => {
@@ -160,6 +162,16 @@ export function StudioDock() {
           <span className="studio-dock-dot" aria-hidden="true" />
           <span title={balance.words}>{balance.words}</span>
         </output>
+
+        {undrawn && (
+          <output
+            className="studio-dock-undrawn"
+            aria-label="Constructs not drawn as declared"
+            title={undrawn.title}
+          >
+            {undrawn.label}
+          </output>
+        )}
 
         {dangling.length > 0 && (
           <div className="studio-dock-dangling" aria-label="Dangling flow connectors">
