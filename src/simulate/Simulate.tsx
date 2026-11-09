@@ -24,9 +24,8 @@ import {
 } from "@paperboat/shared";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { createPortal } from "react-dom";
-import uPlot from "uplot";
-import "uplot/dist/uPlot.min.css";
 import { Dock, NumberField, SolverSettings } from "@paperboat/shared/components";
+import { Scope, type ScopeChannel, type ScopeSettings } from "@paperboat/shared/scope";
 import { DEFAULTS, loadSolver, OPTIONS, saveSolver, SOLVERS, summary, type SolverChoice } from "./solver.ts";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions, Stimulus } from "../store/index.tsx";
@@ -90,38 +89,6 @@ function Stimuli({ inputs, value, onChange }: { inputs: string[]; value: Record<
   );
 }
 
-const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888";
-
-function Plot({ run, picks, theme }: { run: Run; picks: string[]; theme: string }) {
-  const host = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = host.current;
-    if (!el) return;
-    const grid = { stroke: token("--line"), width: 1 };
-    const axis = { stroke: token("--text-muted"), grid, ticks: grid, font: `11px ${token("--font-mono")}` };
-    const size = () => ({ width: el.clientWidth || 300, height: Math.max(60, el.clientHeight - 4) });
-    const plot = new uPlot(
-      {
-        ...size(),
-        legend: { show: false },
-        cursor: { drag: { x: true, y: false } },
-        scales: { x: { time: false } },
-        axes: [axis, axis],
-        series: [{}, ...picks.map((name, i) => ({ label: name, stroke: token(`--trace-${(i % 8) + 1}`), width: 1.5, dash: i >= 4 ? [4, 3] : undefined }))],
-      },
-      [run.t, ...picks.map((n) => run.series[n] ?? [])] as uPlot.AlignedData,
-      el,
-    );
-    const resize = new ResizeObserver(() => plot.setSize(size()));
-    resize.observe(el);
-    return () => {
-      resize.disconnect();
-      plot.destroy();
-    };
-  }, [run, picks, theme]);
-  return <div className="plot" ref={host} role="img" aria-label={`Plot of ${picks.join(", ")}`} />;
-}
-
 /** The channel picker: a dropdown with a filter, each variable a checkbox in its trace colour. */
 function Channels({ names, picks, onChange }: { names: string[]; picks: string[]; onChange: (picks: string[]) => void }) {
   const [filter, setFilter] = useState("");
@@ -157,13 +124,11 @@ type Phase = { state: "idle" } | { state: "running"; since: number } | { state: 
 export function Simulate({
   actions,
   model,
-  theme,
   onRunningChange,
   onRun,
 }: {
   actions: Actions;
   model: StudioModel;
-  theme: string;
   onRunningChange?: (running: boolean) => void;
   onRun?: (run: Run) => void;
 }) {
@@ -182,6 +147,7 @@ export function Simulate({
   const inputs = model.entries.filter((e) => e.kind === "input").map((e) => e.name);
   const warnings = outputWarnings(model);
   const [run, setRun] = useState<Run | null>(null);
+  const [runVersion, setRunVersion] = useState(0);
   const [phase, setPhase] = useState<Phase>({ state: "idle" });
   const [now, setNow] = useState(0);
   const [error, setError] = useState("");
@@ -226,6 +192,7 @@ export function Simulate({
       const result = await actions.simulate(t, Object.fromEntries(Object.entries(stimuli).filter(([n]) => inputs.includes(n))), solver);
       if (mine !== ticket.current) return;
       setRun(result);
+      setRunVersion((v) => v + 1);
       onRun?.(result);
       setPhase({ state: "done", ms: Date.now() - since });
       // a first run fills the first empty scope, so there is something to look at
@@ -346,8 +313,14 @@ export function Simulate({
           .filter((p) => p.tab === page)
           .map((p) => {
             const picks = picksOf(p).filter((n) => !run || run.names.includes(n));
+            const channels: ScopeChannel[] = picks.map((name) => ({
+              id: name,
+              label: name,
+              buf: { times: run?.t ?? [], values: (run?.series[name] ?? []).map((v) => v ?? Number.NaN) },
+            }));
+            const settings = (p.settings ?? {}) as ScopeSettings;
             return (
-              <article key={p.block} className="scope" style={area(p)} aria-label={p.block}>
+              <article key={p.block} className="scope-cell" style={area(p)} aria-label={p.block}>
                 <header draggable onDragStart={(e) => e.dataTransfer.setData(SCOPE_DRAG, p.block)} title="Drag to move">
                   <span className="lbl">{p.block}</span>
                   <Channels names={run?.names ?? []} picks={picks} onChange={(next) => setPicks(p.block, next)} />
@@ -369,7 +342,16 @@ export function Simulate({
                     ×
                   </button>
                 </header>
-                {run && picks.length ? <Plot run={run} picks={picks} theme={theme} /> : <p className="scope-empty">{run ? "Pick channels ▾" : "Simulate to see signals"}</p>}
+                <Scope
+                  name={p.block}
+                  channels={channels}
+                  version={runVersion}
+                  live={false}
+                  settings={settings}
+                  onSettings={(next) => edit(setSettings(a, p.block, { ...settings, ...next }))}
+                  small={p.size !== "large"}
+                  placeholder={run ? "Pick channels ▾" : "Simulate to see signals"}
+                />
               </article>
             );
           })}
