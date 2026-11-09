@@ -106,14 +106,27 @@ void ensure_library(Omc& omc, const std::string& cls) {
 // `within Pkg.Sub` fails when Pkg is not there. The outermost package.mo loads the whole package,
 // subpackages included when package.order names them; loading a subpackage's package.mo directly
 // would be read as a new top-level package ("expected within ;").
-void load_packages(Omc& omc, const fs::path& file) {
+void load_packages(Omc& omc, const fs::path& file, bool force = false) {
   fs::path top;
   for (fs::path dir = file.parent_path(); fs::exists(dir / "package.mo"); dir = dir.parent_path()) {
     top = dir / "package.mo";
     if (dir.parent_path() == dir) break;
   }
-  if (!top.empty() && omc.call("loadFile(" + quote(fs::absolute(top).string()) + ")") != "true")
+  if (top.empty()) return;
+  static std::mutex mutex;
+  static std::set<std::string> loaded;
+  const std::string key = fs::absolute(top).string();
+  {
+    std::lock_guard lock(mutex);
+    if (!force && loaded.contains(key)) return;
+    if (force) loaded.erase(key);
+  }
+  if (omc.call("loadFile(" + quote(key) + ")") != "true")
     throw std::runtime_error("cannot load package " + top.parent_path().string() + ": " + omc.errors());
+  {
+    std::lock_guard lock(mutex);
+    loaded.insert(key);
+  }
 }
 
 // The class in `file`: search the tree of loaded user classes, not just the top level, because a
@@ -135,8 +148,12 @@ bool find_class(Omc& omc, const std::string& cls, const fs::path& want, std::str
 std::string load_file(Omc& omc, const fs::path& file) {
   ensure_library(omc, "Modelica");
   load_packages(omc, fs::absolute(file));
-  if (omc.call("loadFile(" + quote(fs::absolute(file).string()) + ")") != "true")
-    throw std::runtime_error("cannot load " + file.string() + ": " + omc.errors());
+  if (omc.call("loadFile(" + quote(fs::absolute(file).string()) + ")") != "true") {
+    // omc may have restarted since the package was first loaded; reload it once, then the class.
+    load_packages(omc, fs::absolute(file), /*force=*/true);
+    if (omc.call("loadFile(" + quote(fs::absolute(file).string()) + ")") != "true")
+      throw std::runtime_error("cannot load " + file.string() + ": " + omc.errors());
+  }
   std::error_code ec;
   const fs::path want = fs::weakly_canonical(file, ec);
   std::string found;
@@ -292,6 +309,85 @@ json op_create_class(const json& in) {
   }
 
   return {{"file", file.string()}, {"model", within.empty() ? name : within + "." + name}};
+}
+
+// The name in a package's package.order, added or removed without touching the rest.
+void order_add(const fs::path& dir, const std::string& name) {
+  const fs::path order_file = dir / "package.order";
+  std::vector<std::string> lines;
+  if (fs::exists(order_file)) {
+    std::ifstream in(order_file);
+    for (std::string line; std::getline(in, line);) {
+      const std::size_t first = line.find_first_not_of(" \t\r");
+      if (first != std::string::npos) lines.push_back(line.substr(first, line.find_last_not_of(" \t\r") - first + 1));
+    }
+  }
+  if (std::find(lines.begin(), lines.end(), name) == lines.end()) lines.push_back(name);
+  std::ofstream out(order_file);
+  for (const auto& line : lines) out << line << '\n';
+}
+
+void order_remove(const fs::path& dir, const std::string& name) {
+  const fs::path order_file = dir / "package.order";
+  if (!fs::exists(order_file)) return;
+  std::ifstream in(order_file);
+  std::vector<std::string> lines;
+  for (std::string line; std::getline(in, line);) {
+    const std::size_t first = line.find_first_not_of(" \t\r");
+    if (first == std::string::npos) continue;
+    const std::string one = line.substr(first, line.find_last_not_of(" \t\r") - first + 1);
+    if (one != name) lines.push_back(one);
+  }
+  std::ofstream out(order_file);
+  for (const auto& line : lines) out << line << '\n';
+}
+
+json op_new_package(const json& in) {
+  const std::string name = in.value("name", "");
+  const std::string parent = in.value("parent", "");
+  const std::string within = in.value("within", "");
+  if (!identifier(name)) throw std::runtime_error("a package name starts with a letter or _ and holds letters, digits and _");
+  if (!qualified_name(within)) throw std::runtime_error("not a package name: " + within);
+  if (parent.empty()) throw std::runtime_error("new_package needs a parent folder");
+  const fs::path dir = fs::absolute(parent) / name;
+  if (fs::exists(dir)) throw std::runtime_error(dir.string() + " already exists");
+  fs::create_directories(dir);
+  std::ofstream(dir / "package.mo") << (within.empty() ? "" : "within " + within + ";\n\n") << "package " << name
+                                   << "\n  \"A new package.\"\nend " << name << ";\n";
+  std::ofstream(dir / "package.order");
+  return {{"path", dir.string()}, {"name", name}};
+}
+
+json op_duplicate_class(const json& in) {
+  const std::string file_name = in.value("file", "");
+  const std::string name = in.value("name", "");
+  const std::string new_name = in.value("newName", "");
+  const std::string within = in.value("within", "");
+  if (!identifier(name) || !identifier(new_name)) throw std::runtime_error("both names must be Modelica identifiers");
+  if (name == new_name) throw std::runtime_error("the duplicate needs a different name");
+  if (file_name.empty()) throw std::runtime_error("duplicate_class needs a file");
+  const fs::path file = fs::absolute(file_name);
+  if (!fs::is_regular_file(file)) throw std::runtime_error("no file " + file.string());
+  const fs::path target = file.parent_path() / (new_name + ".mo");
+  if (fs::exists(target)) throw std::runtime_error(target.string() + " already exists");
+  std::ifstream source(file);
+  const std::string text((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+  const std::regex word("\\b" + name + "\\b");
+  std::ofstream(target) << std::regex_replace(text, word, new_name);
+  if (fs::exists(file.parent_path() / "package.mo")) order_add(file.parent_path(), new_name);
+  return {{"file", target.string()}, {"model", within.empty() ? new_name : within + "." + new_name}};
+}
+
+json op_delete_class(const json& in) {
+  const std::string file_name = in.value("file", "");
+  const std::string name = in.value("name", "");
+  if (file_name.empty()) throw std::runtime_error("delete_class needs a file");
+  const fs::path file = fs::absolute(file_name);
+  if (file.extension() != ".mo") throw std::runtime_error("only .mo files can be deleted");
+  if (!fs::exists(file)) throw std::runtime_error("no file " + file.string());
+  fs::remove(file);
+  if (!name.empty() && fs::exists(file.parent_path() / "package.mo")) order_remove(file.parent_path(), name);
+  return json::object();
 }
 
 json op_save(Omc& omc, const json& in) {
@@ -826,6 +922,12 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_workspace(in);
     } else if (op == "create_class") {
       out["result"] = op_create_class(in);
+    } else if (op == "new_package") {
+      out["result"] = op_new_package(in);
+    } else if (op == "duplicate_class") {
+      out["result"] = op_duplicate_class(in);
+    } else if (op == "delete_class") {
+      out["result"] = op_delete_class(in);
     } else if (op == "save") {
       out["result"] = op_save(omc, in);
     } else if (op == "check_model") {
@@ -846,7 +948,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, workspace, create_class, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
+      out["error"] = "unknown op; squero/0 has omc, open, workspace, create_class, new_package, duplicate_class, delete_class, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
       return out.dump();
     }
     out["ok"] = true;

@@ -4,10 +4,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { CompactBlock, NumberField, Switch } from "@paperboat/shared/components";
+import { CompactBlock, NumberField } from "@paperboat/shared/components";
 import type { IconPort } from "@paperboat/shared";
 import { useStudio } from "../model/types.ts";
-import { buildPaperboatBlockDef, SIDE_OPTIONS, snapTo5, syncPortsWithEntries } from "./look.ts";
+import { buildPaperboatBlockDef, snapTo5, syncPortsWithEntries } from "./look.ts";
+import { SideSelect } from "./SideSelect.tsx";
 
 function portsOf(model: ReturnType<typeof useStudio>["model"]): IconPort[] {
   const ids = new Set(model.entries.map((e) => e.name));
@@ -59,7 +60,7 @@ export function PaperboatBlock() {
               <div key={port.id} className="paperboat-block-port">
                 <span className="paperboat-block-name">{port.id}</span>
                 <span className="var-tag">{entry?.kind ?? "pin"}</span>
-                <Switch<IconPort["side"]> label="" value={port.side} onChange={(side) => update(port.id, side, port.at)} options={SIDE_OPTIONS} />
+                <SideSelect label={`${port.id} side`} value={port.side} onChange={(side) => update(port.id, side, port.at)} />
                 <NumberField className="studio-look-at-input" aria-label={`${port.id} at`} value={port.at} onChange={(at) => update(port.id, port.side, at)} />
               </div>
             );

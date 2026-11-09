@@ -20,6 +20,10 @@
 //   create_class {file, name, kind, within?, base?}
 //                                              → {file, model}      write a class file; append package.order
 //                                                  when it lands in a package
+//   new_package {parent, name, within?}        → {path, name}      make a package folder with package.mo/order
+//   duplicate_class {file, name, newName, within?}
+//                                              → {file, model}      copy a class file under a new name
+//   delete_class {file, name}                  → {}                 remove the file and its package.order entry
 //   save      {model}                           → {file}             `save(model)`: the model's own .mo
 //   icon      {class}                           → {icon, connectors, notice}
 //                                                  the imported look of a class (`paperboat modelica icon`)

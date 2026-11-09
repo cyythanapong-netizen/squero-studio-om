@@ -69,7 +69,7 @@ std::string icon_annotation(const json& icon) {
     const std::string t = g.value("t", "");
     const std::string stroke = color(g.value("stroke", "ink"));
     const std::string weight = pick(g, "weight", {{"thin", "0.1"}, {"normal", "0.25"}, {"wire", "0.5"}}, "normal");
-    const std::string pattern = pick(g, "dash", {{"solid", "LinePattern.Solid"}, {"axis", "LinePattern.Dash"}}, "solid");
+    const std::string pattern = pick(g, "dash", {{"solid", "LinePattern.Solid"}, {"axis", "LinePattern.Dash"}, {"dash", "LinePattern.Dash"}, {"dot", "LinePattern.Dot"}, {"dashdot", "LinePattern.DashDot"}}, "solid");
     const std::string fill = pick(g, "fill",
                                   {{"none", "FillPattern.None"}, {"ink", "FillPattern.Solid"},
                                    {"raised", "FillPattern.Solid"}, {"sunken", "FillPattern.Solid"},

@@ -55,10 +55,16 @@ export type Actions = {
   dirty: boolean;
   save(file?: string): Promise<void>;
   saveAs(file: string): Promise<void>;
-  newModel(name: string): Promise<void>;
+  /** A fresh model; `file` places it in the current workspace instead of the server's cwd. */
+  newModel(name: string, file?: string): Promise<void>;
   openFile(file: string, content?: string): Promise<void>;
+  /** Show a model already read this session, without another omc round trip. */
+  restore(shown: StudioModel): void;
   /** Writes a new class file (and package.order); opening it is the caller's next step. */
   createClass(spec: { file: string; name: string; kind: string; within: string; base?: string }): Promise<{ file: string; model: string }>;
+  newPackage(parent: string, name: string, within: string): Promise<{ path: string; name: string }>;
+  duplicateClass(spec: { file: string; name: string; newName: string; within: string }): Promise<{ file: string; model: string }>;
+  deleteClass(spec: { file: string; name: string }): Promise<void>;
   loadLibrary(lib: string): Promise<void>;
 };
 
@@ -345,12 +351,18 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
           say(`Saved ${m.name} to ${target}`);
         });
       },
-      async newModel(name: string) {
+      restore(shown) {
+        setModel(shown);
+        setDirty(false);
+        setSelection([]);
+        say(`Opened ${shown.name}`);
+      },
+      async newModel(name: string, file?: string) {
         const raw = name.trim();
         if (!raw) return;
-        const file = raw.endsWith(".mo") ? raw : `${raw}.mo`;
+        const target = file?.trim() || (raw.endsWith(".mo") ? raw : `${raw}.mo`);
         await enqueue(async () => {
-          const opened = await omc.op<{ file: string; model: string }>("open", { file });
+          const opened = await omc.op<{ file: string; model: string }>("open", { file: target });
           setStage(`reading ${opened.model}: its parts, icons and wires`);
         const m = await readModel(omc, opened.model, opened.file, looks.current);
           setModel(m);
@@ -361,6 +373,15 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       },
       createClass(spec) {
         return enqueue(() => omc.op<{ file: string; model: string }>("create_class", spec));
+      },
+      newPackage(parent, name, within) {
+        return enqueue(() => omc.op<{ path: string; name: string }>("new_package", { parent, name, within }));
+      },
+      duplicateClass(spec) {
+        return enqueue(() => omc.op<{ file: string; model: string }>("duplicate_class", spec));
+      },
+      deleteClass(spec) {
+        return enqueue(() => omc.op<void>("delete_class", spec));
       },
       async openFile(file: string, content?: string) {
         const target = file.trim();

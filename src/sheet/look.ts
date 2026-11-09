@@ -46,6 +46,9 @@ export const FILL_OPTIONS: { value: Fill; label: string }[] = [
 
 export const DASH_OPTIONS: { value: Dash; label: string }[] = [
   { value: "solid", label: "solid" },
+  { value: "dash", label: "dash" },
+  { value: "dot", label: "dot" },
+  { value: "dashdot", label: "dash-dot" },
   { value: "axis", label: "axis" },
 ];
 

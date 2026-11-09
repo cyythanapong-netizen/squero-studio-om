@@ -607,7 +607,7 @@
 .paperboat-block-preview .plate-cap { display: none; }
 .paperboat-block-preview .compact-block { min-width: 120px; }
 .paperboat-block-ports { display: flex; flex-direction: column; gap: 2px; }
-.paperboat-block-port { display: flex; align-items: center; gap: 6px; min-height: 24px; font: 400 11px var(--font-mono); color: var(--text); }
+.paperboat-block-port { display: flex; align-items: center; gap: 6px; min-height: 24px; min-width: 0; font: 400 11px var(--font-mono); color: var(--text); }
 .paperboat-block-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .paperboat-block-foot { display: flex; align-items: center; gap: 8px; }
 .paperboat-block-foot .studio-prop-unit { margin-right: auto; }
