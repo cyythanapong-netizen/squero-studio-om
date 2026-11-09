@@ -174,10 +174,10 @@ void check_contract_tokens(const json& doc) {
   CHECK((h == 1 || h == 2));
   CHECK_FALSE((w == 2 && h == 2));
 
-  static const std::set<std::string> kStrokes = {"ink", "muted"};  // importer never emits "signal"
+  static const std::set<std::string> kStrokes = {"ink", "muted", "electrical", "translational", "thermal", "fluid", "magnetic", "rotational"};  // never "signal"
   static const std::set<std::string> kWeights = {"thin", "normal", "wire"};
   static const std::set<std::string> kDashes = {"solid", "axis"};
-  static const std::set<std::string> kFills = {"none", "ink", "raised", "sunken"};
+  static const std::set<std::string> kFills = {"none", "ink", "raised", "sunken", "electrical", "translational", "thermal", "fluid", "magnetic", "rotational"};
   static const std::set<std::string> kCorners = {"0", "sm", "md"};
   static const std::set<std::string> kFonts = {"sans", "mono"};
   static const std::set<double> kSizes = {12.0, 12.5, 13.0, 15.0, 30.0};

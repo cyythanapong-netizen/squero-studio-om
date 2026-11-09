@@ -250,6 +250,8 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .icon-view { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; container-type: inline-size; }
 .icon-view-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .icon-tools { display: flex; flex-wrap: wrap; gap: 4px; }
+.icon-tools .studio-look-key { width: 28px; padding: 0; display: inline-grid; place-items: center; }
+.icon-tools .studio-look-key svg { width: 14px; height: 14px; display: block; }
 .icon-bar-sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
 .icon-count { font: 400 11px var(--font-mono); color: var(--text-muted); }
 .icon-view-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 8px; padding: 8px; }
@@ -269,6 +271,15 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 }
 .icon-section { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .icon-section h3 { margin: 0 0 5px; font: 500 11px var(--font-mono); color: var(--text-muted); text-transform: lowercase; }
+.icon-colours { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-height: 20px; }
+.icon-colours .lbl { padding-top: 2px; }
+.icon-swatches { display: flex; flex-wrap: wrap; gap: 3px; justify-content: flex-end; max-width: 190px; }
+.icon-swatch { width: 14px; height: 14px; padding: 0; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface-raised); cursor: pointer; }
+.icon-swatch.on { box-shadow: 0 0 0 2px var(--surface-panel), 0 0 0 3px var(--line-ink); }
+.icon-swatch.none { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--line-strong) 3px 4px); }
+.icon-add-connector { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.icon-add-connector input { flex: 1 1 92px; min-width: 0; height: 24px; padding: 0 5px; border: 0; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: 3px; font: 400 10.5px var(--font-mono); color: var(--text); }
+.icon-add-connector .studio-look-key { flex: none; height: 24px; }
 .icon-geometry { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
 .icon-geometry label { display: flex; align-items: center; gap: 4px; font: 400 10.5px var(--font-mono); color: var(--text-muted); }
 .icon-geometry input { width: 100%; }

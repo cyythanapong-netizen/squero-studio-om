@@ -32,6 +32,7 @@
             25
           ]
         ],
+        "stroke": "electrical",
         "t": "line"
       },
       {
@@ -45,6 +46,7 @@
             35
           ]
         ],
+        "stroke": "electrical",
         "t": "line"
       },
       {
@@ -58,6 +60,7 @@
             45
           ]
         ],
+        "stroke": "electrical",
         "t": "line"
       },
       {
@@ -71,6 +74,7 @@
             25
           ]
         ],
+        "stroke": "electrical",
         "t": "line"
       }
     ],

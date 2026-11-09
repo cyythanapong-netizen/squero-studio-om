@@ -152,7 +152,36 @@ Rgb parse_rgb(const OmValue& v) {
           .valid = true};
 }
 
-// Never returns "signal" (reserved for live run state).
+// The design-system colours a Modelica icon may keep: the same six domain roles the canvas uses.
+struct NamedColour {
+  const char* token;
+  int r;
+  int g;
+  int b;
+};
+constexpr NamedColour kColours[] = {
+    {"electrical", 37, 99, 235},   {"translational", 21, 128, 61}, {"thermal", 185, 28, 28},
+    {"fluid", 2, 132, 199},        {"magnetic", 194, 65, 12},      {"rotational", 107, 114, 128},
+};
+
+std::string nearest_colour(const Rgb& c) {
+  int best = -1;
+  const char* token = "ink";
+  for (const auto& colour : kColours) {
+    const int dr = c.r - colour.r;
+    const int dg = c.g - colour.g;
+    const int db = c.b - colour.b;
+    const int d = dr * dr + dg * dg + db * db;
+    if (best < 0 || d < best) {
+      best = d;
+      token = colour.token;
+    }
+  }
+  return token;
+}
+
+// Never returns "signal" (reserved for live run state). A saturated colour keeps its domain role;
+// greys still quantise to ink or muted.
 std::string quantise_stroke(const Rgb& c) {
   if (!c.valid) return "ink";
   const double lum = 0.299 * static_cast<double>(c.r) + 0.587 * static_cast<double>(c.g) +
@@ -160,6 +189,7 @@ std::string quantise_stroke(const Rgb& c) {
   const int max_c = std::max({c.r, c.g, c.b});
   const int min_c = std::min({c.r, c.g, c.b});
   const int chroma = max_c - min_c;
+  if (chroma > 40) return nearest_colour(c);
   if ((chroma <= 30 && lum >= 100.0) || lum >= 180.0) return "muted";
   return "ink";
 }
@@ -169,6 +199,9 @@ std::string quantise_fill(const Rgb& c, std::string_view pattern, ImportNotice& 
   if (p.empty() || p == "None" || p.ends_with(".None")) return "none";
   if (p != "Solid" && !p.ends_with(".Solid")) ++notice.simplified;
   if (!c.valid) return "raised";
+  const int max_c = std::max({c.r, c.g, c.b});
+  const int min_c = std::min({c.r, c.g, c.b});
+  if (max_c - min_c > 40) return nearest_colour(c);
   const double lum = 0.299 * static_cast<double>(c.r) + 0.587 * static_cast<double>(c.g) +
                      0.114 * static_cast<double>(c.b);
   if (lum < 85.0) return "ink";

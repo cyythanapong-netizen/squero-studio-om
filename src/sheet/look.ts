@@ -365,6 +365,7 @@ export function syncPortsWithEntries(icon: IconDef | undefined, entries: EntryPo
 
   const defaultAt = (idx: number, count: number) => snapTo5(((idx + 1) / (count + 1)) * 100);
 
+  const entryIds = new Set(entries.map((e) => e.name));
   const syncedPorts: IconPort[] = entries.map((entry) => {
     const prev = existingPorts.find((p) => p.id === entry.name);
     const isInput = entry.kind === "input";
@@ -380,9 +381,12 @@ export function syncPortsWithEntries(icon: IconDef | undefined, entries: EntryPo
       ...(isInput ? {} : { variant: "filled" as const }),
     };
   });
+  // A connector component's own pin is not an entry: keep it, so a model's physical ports survive a
+  // round trip through the icon editor.
+  const extras = existingPorts.filter((p) => !entryIds.has(p.id));
 
   const base: IconDef = icon ?? { w: 1, h: 1, g: [] };
-  return sanitizeIconDef({ ...base, ports: syncedPorts });
+  return sanitizeIconDef({ ...base, ports: [...syncedPorts, ...extras] });
 }
 
 export function setPortPlacement(
@@ -411,6 +415,42 @@ export function sanitizeIconDef(icon: IconDef, entries?: EntryPoint[]): IconDef 
   }
   const candidate: IconDef = { w, h, g, ...(ports ? { ports } : {}) };
   return iconValid(candidate) ? candidate : { w: 1, h: 1, g: [] };
+}
+
+/** The Paperboat block: a plain plate, the short name, and its input/output pins. Not the Modelica
+ *  icon; that lives in the Icon view. */
+export function paperboatIcon(model: StudioModel, overridePorts?: IconPort[]): IconDef {
+  const short = model.name.split(".").pop() ?? model.name;
+  const entryIds = new Set(model.entries.map((e) => e.name));
+  const ports = (
+    overridePorts ??
+    syncPortsWithEntries(model.icon, model.entries).ports ??
+    []
+  ).filter((p) => entryIds.has(p.id));
+  return {
+    w: 1,
+    h: 1,
+    g: [
+      { t: "rect", x: 5, y: 10, w: 90, h: 80, corner: "sm", fill: "raised", stroke: "ink" },
+      { t: "text", x: 50, y: 50, s: short, font: "sans", size: 15, stroke: "ink" },
+    ],
+    ...(ports.length ? { ports } : {}),
+  };
+}
+
+export function buildPaperboatBlockDef(model: StudioModel, overridePorts?: IconPort[]): BlockDef {
+  const shortName = model.name.split(".").pop() ?? model.name;
+  return {
+    type: shortName.toLowerCase(),
+    label: shortName,
+    kind: "function",
+    linked: true,
+    feedthrough: false,
+    inputs: model.entries.filter((e) => e.kind === "input").map((e) => ({ id: e.name, type: "signal", ...(e.unit ? { unit: e.unit } : {}) })),
+    outputs: model.entries.filter((e) => e.kind === "output").map((e) => ({ id: e.name, type: "signal", ...(e.unit ? { unit: e.unit } : {}) })),
+    params: [],
+    view: { compact: true, icon: paperboatIcon(model, overridePorts) },
+  };
 }
 
 export function buildLinkedBlockDef(model: StudioModel, overrideIcon?: IconDef): BlockDef {
