@@ -28,7 +28,6 @@ import {
   buildLinkedBlockDef,
   CORNER_OPTIONS,
   DASH_OPTIONS,
-  FILL_OPTIONS,
   FONT_OPTIONS,
   PLATE_SIZES,
   plateSizeKey,
@@ -42,7 +41,6 @@ import {
   SIDE_OPTIONS,
   SIZE_OPTIONS,
   snapTo5,
-  STROKE_OPTIONS,
   syncPortsWithEntries,
   updatePrimTokens,
   WEIGHT_OPTIONS,
@@ -71,6 +69,79 @@ type Drag =
 const GRID_STEPS = Array.from({ length: 21 }, (_, i) => i * 5);
 const HANDLES: ("nw" | "ne" | "sw" | "se")[] = ["nw", "ne", "sw", "se"];
 
+/** The tool buttons are icons, not words: the canvas is the subject. */
+function ToolIcon({ tool }: { tool: Tool }) {
+  const common = { viewBox: "0 0 16 16", "aria-hidden": true, fill: "none", stroke: "currentColor", strokeWidth: 1.35, strokeLinecap: "round", strokeLinejoin: "round" } as const;
+  switch (tool) {
+    case "select":
+      return <svg {...common}><path d="M3.5 2.5 8 13l1.4-4.2L13.5 7z" /></svg>;
+    case "line":
+      return <svg {...common}><path d="M3 13 13 3" /></svg>;
+    case "rect":
+      return <svg {...common}><rect x="2.5" y="3.5" width="11" height="9" rx="1" /></svg>;
+    case "ellipse":
+      return <svg {...common}><ellipse cx="8" cy="8" rx="5.5" ry="4.5" /></svg>;
+    case "poly":
+      return <svg {...common}><path d="M8 2.5 14 13.5H2z" /></svg>;
+    case "arc":
+      return <svg {...common}><path d="M2.5 11a5.5 5.5 0 0 1 11 0" /><path d="M2.5 13h11" opacity=".45" /></svg>;
+    case "text":
+      return <svg {...common}><path d="M3 3h10M8 3v10M5.5 13h5" /></svg>;
+    case "pin":
+      return <svg {...common}><circle cx="5" cy="5" r="2.2" /><path d="m6.6 6.6 6 6M10.5 9.5l-1 2.5 2.5-1" /></svg>;
+  }
+}
+
+const COLOUR_LABELS: Record<string, string> = {
+  ink: "ink",
+  muted: "muted",
+  signal: "signal",
+  electrical: "blue",
+  translational: "green",
+  thermal: "red",
+  fluid: "cyan",
+  magnetic: "orange",
+  rotational: "grey",
+  none: "none",
+  raised: "raised",
+  sunken: "sunken",
+};
+const STROKE_SWATCHES = Object.entries(STROKE).map(([token, color]) => ({ token, color, label: COLOUR_LABELS[token] ?? token }));
+const FILL_SWATCHES = Object.entries(FILL).map(([token, color]) => ({ token, color, label: COLOUR_LABELS[token] ?? token }));
+
+function ColorRow({
+  label,
+  value,
+  swatches,
+  onChange,
+}: {
+  label: "stroke" | "fill";
+  value: string;
+  swatches: { token: string; color: string; label: string }[];
+  onChange: (token: string) => void;
+}) {
+  return (
+    <div className="icon-colours" role="radiogroup" aria-label={label}>
+      <span className="lbl">{label}</span>
+      <span className="icon-swatches">
+        {swatches.map((swatch) => (
+          <button
+            key={swatch.token}
+            type="button"
+            role="radio"
+            aria-checked={swatch.token === value}
+            aria-label={`${label}: ${swatch.label}`}
+            title={`${label}: ${swatch.label}`}
+            className={`icon-swatch${swatch.token === "none" ? " none" : ""}${swatch.token === value ? " on" : ""}`}
+            style={swatch.token === "none" ? undefined : { background: swatch.color }}
+            onClick={() => onChange(swatch.token)}
+          />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 export function IconView() {
   const api = useStudio();
   const [draft, setDraft] = useState<IconDef>(() => syncPortsWithEntries(api.model.icon, api.model.entries));
@@ -83,13 +154,17 @@ export function IconView() {
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [connName, setConnName] = useState("");
+  const [connClass, setConnClass] = useState("Modelica.Blocks.Interfaces.RealInput");
+  const [connBusy, setConnBusy] = useState(false);
   const drag = useRef<Drag | null>(null);
   const previewRef = useRef<Prim | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
-    setDraft(syncPortsWithEntries(api.model.icon, api.model.entries));
-    setSelected(-1);
+    const next = syncPortsWithEntries(api.model.icon, api.model.entries);
+    setDraft(next);
+    setSelected((prev) => (next.g.length ? Math.min(Math.max(prev, 0), next.g.length - 1) : -1));
     setDirty(false);
     setSaved(false);
   }, [api.model.icon, api.model.entries]);
@@ -250,6 +325,31 @@ export function IconView() {
     change((icon) => ({ ...icon, g: icon.g.map((p, i) => (i === selected ? updatePrimTokens(p, patch) : p)) }));
   };
 
+  const addConnector = async () => {
+    const name = connName.trim() || `port${ports.length + 1}`;
+    const cls = connClass.trim();
+    if (!/^[A-Za-z_]\w*$/.test(name)) {
+      setError("a connector name starts with a letter or _ and holds letters, digits and _");
+      return;
+    }
+    if (!/^[A-Za-z_][\w.]*$/.test(cls)) {
+      setError("a connector class is a qualified Modelica name");
+      return;
+    }
+    setError("");
+    setConnBusy(true);
+    try {
+      await api.addComponent(cls, name, { x: 200, y: 160, rotation: 0 });
+      setSelectedPort(name);
+      setTool("pin");
+      setConnName("");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setConnBusy(false);
+    }
+  };
+
   const save = async () => {
     setError("");
     const clean = sanitizeIconDef(draft, api.model.entries);
@@ -314,12 +414,13 @@ export function IconView() {
               key={t.tool}
               type="button"
               className={`studio-look-key${tool === t.tool ? " on" : ""}`}
-              title={t.hint}
+              title={`${t.label} — ${t.hint}`}
+              aria-label={t.label}
               aria-pressed={tool === t.tool}
               disabled={t.tool === "pin" && ports.length === 0}
               onClick={() => setTool(t.tool)}
             >
-              {t.label}
+              <ToolIcon tool={t.tool} />
             </button>
           ))}
         </div>
@@ -416,9 +517,9 @@ export function IconView() {
             <h3>shape</h3>
             {selectedPrim ? (
               <div className="studio-look-choices">
-                <Switch<Stroke> label="Stroke" value={selectedPrim.stroke ?? "ink"} onChange={(stroke) => patchSelected({ stroke })} options={STROKE_OPTIONS} />
+                <ColorRow label="stroke" value={selectedPrim.stroke ?? "ink"} swatches={STROKE_SWATCHES} onChange={(stroke) => patchSelected({ stroke: stroke as Stroke })} />
                 <Switch<Weight> label="Weight" value={selectedPrim.weight ?? "normal"} onChange={(weight) => patchSelected({ weight })} options={WEIGHT_OPTIONS} />
-                <Switch<Fill> label="Fill" value={selectedPrim.fill ?? "none"} onChange={(fill) => patchSelected({ fill })} options={FILL_OPTIONS} />
+                <ColorRow label="fill" value={selectedPrim.fill ?? "none"} swatches={FILL_SWATCHES} onChange={(fill) => patchSelected({ fill: fill as Fill })} />
                 <Switch<Dash> label="Dash" value={selectedPrim.dash ?? "solid"} onChange={(dash) => patchSelected({ dash })} options={DASH_OPTIONS} />
                 {selectedPrim.t === "rect" && (
                   <Switch<Corner> label="Corner" value={selectedPrim.corner ?? "0"} onChange={(corner) => patchSelected({ corner })} options={CORNER_OPTIONS} />
@@ -481,7 +582,7 @@ export function IconView() {
           <section className="icon-section">
             <h3>connectors</h3>
             {ports.length === 0 ? (
-              <p className="studio-handoff-note">No entry points yet. Add an input or output in Variables.</p>
+              <p className="studio-handoff-note">No connectors yet. Add one below, or an input/output in Variables.</p>
             ) : (
               ports.map((port) => (
                 <div key={port.id} className={`studio-look-port-row${selectedPort === port.id ? " on" : ""}`}>
@@ -498,6 +599,13 @@ export function IconView() {
                 </div>
               ))
             )}
+            <div className="icon-add-connector">
+              <input value={connName} placeholder="name" aria-label="New connector name" onChange={(e) => setConnName(e.target.value)} />
+              <input value={connClass} placeholder="class" aria-label="New connector class" onChange={(e) => setConnClass(e.target.value)} />
+              <button type="button" className="studio-look-key" disabled={connBusy} onClick={() => void addConnector()} title="Add the connector to the model, then place its pin">
+                {connBusy ? "…" : "+"}
+              </button>
+            </div>
           </section>
 
           <section className="icon-section">

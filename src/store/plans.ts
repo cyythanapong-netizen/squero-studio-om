@@ -81,7 +81,7 @@ export function iconPortExprs(model: StudioModel, icon: IconDef): string[] {
   const halfH = 100 * (icon.h ?? 1);
   const out: string[] = [];
   for (const port of icon.ports ?? []) {
-    const part = model.components.find((c) => c.name === port.id && model.entries.some((e) => e.name === port.id));
+    const part = model.components.find((c) => c.name === port.id);
     if (!part) continue;
     const along = port.at / 100;
     const at: [number, number] =

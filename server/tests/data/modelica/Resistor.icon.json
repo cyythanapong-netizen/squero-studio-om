@@ -63,6 +63,7 @@
       {
         "fill": "raised",
         "h": 30,
+        "stroke": "electrical",
         "t": "rect",
         "w": 70,
         "x": 15,
@@ -79,6 +80,7 @@
             50
           ]
         ],
+        "stroke": "electrical",
         "t": "line"
       },
       {
@@ -92,6 +94,7 @@
             50
           ]
         ],
+        "stroke": "electrical",
         "t": "line"
       },
       {

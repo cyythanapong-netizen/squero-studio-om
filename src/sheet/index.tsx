@@ -3,12 +3,10 @@
 // drawing lives on the canvas (View ▸ Icon), not here.
 
 import { useEffect, useState } from "react";
-import { ReactFlowProvider } from "@xyflow/react";
 import { Switch } from "@paperboat/shared/components";
-import { CompactBlock } from "@paperboat/shared/components";
 import { useStudio } from "../model/types.ts";
 import { defaultExportFolder } from "../dock/dock.ts";
-import { buildLinkedBlockDef } from "./look.ts";
+import { PaperboatBlock } from "./PaperboatBlock.tsx";
 import { VariablesTree } from "./VariablesTree.tsx";
 import "./sheet.css";
 
@@ -39,7 +37,6 @@ export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSh
   const outputs = api.model.entries.filter((e) => e.kind === "output");
   const shortModel = api.model.name.split(".").pop() ?? api.model.name;
   const folderHint = `${defaultExportFolder(shortModel)}/`;
-  const linkedBlockDef = buildLinkedBlockDef(api.model);
 
   useEffect(() => {
     if (!canExport && tab === "paperboat") setTab("interface");
@@ -134,24 +131,12 @@ export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSh
               </p>
             </section>
 
-            <section className="studio-sheet-section" aria-label="Linked block preview">
-              <div className="studio-sheet-subhead">Linked block preview</div>
-              <div className="studio-linked-preview">
-                <ReactFlowProvider>
-                  <CompactBlock
-                    id={shortModel}
-                    def={linkedBlockDef}
-                    params={{}}
-                    selected={false}
-                    onExpand={() => {}}
-                    popover={null}
-                    connectors={api.model.connectors}
-                  />
-                </ReactFlowProvider>
-                <p className="studio-handoff-note">
-                  Paperboat opens <code>{folderHint}</code> via File › Backend…
-                </p>
-              </div>
+            <section className="studio-sheet-section" aria-label="Paperboat block">
+              <div className="studio-sheet-subhead">Paperboat block</div>
+              <PaperboatBlock />
+              <p className="studio-handoff-note">
+                Paperboat opens <code>{folderHint}</code> via File › Backend… The Modelica icon is drawn in <b>View ▸ Icon</b>.
+              </p>
             </section>
           </>
         )}

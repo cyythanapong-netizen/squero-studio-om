@@ -600,3 +600,14 @@
 .var-pass-na { flex: none; width: 60px; text-align: center; color: var(--text-muted); }
 .var-remove { flex: none; border: 0; background: none; color: var(--text-muted); cursor: pointer; font-size: 13px; }
 .var-empty { margin: 2px 0 4px 18px; font: 400 10.5px var(--font-sans); color: var(--text-muted); }
+
+/* ---- Paperboat block editor (#43): one plate, its name and pins ---------------------------- */
+.paperboat-block { display: flex; flex-direction: column; gap: 8px; padding: var(--space-2); background: var(--surface-sunken); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.paperboat-block-preview { display: flex; justify-content: center; min-height: 96px; align-items: center; }
+.paperboat-block-preview .plate-cap { display: none; }
+.paperboat-block-preview .compact-block { min-width: 120px; }
+.paperboat-block-ports { display: flex; flex-direction: column; gap: 2px; }
+.paperboat-block-port { display: flex; align-items: center; gap: 6px; min-height: 24px; font: 400 11px var(--font-mono); color: var(--text); }
+.paperboat-block-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.paperboat-block-foot { display: flex; align-items: center; gap: 8px; }
+.paperboat-block-foot .studio-prop-unit { margin-right: auto; }

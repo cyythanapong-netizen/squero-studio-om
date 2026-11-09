@@ -33,6 +33,7 @@ import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
 
 type Focus = "code" | "split" | "scopes";
+type Stage = "diagram" | "icon" | "3d" | "text";
 
 function serverUrl(): string {
   const given = new URLSearchParams(location.search).get("server");
@@ -80,7 +81,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [view, setView] = useState<View>("flat");
   const [focus, setFocus] = useState<Focus>("split");
   // the stage's view of the model (#62): the diagram, the last MultiBody run in 3D, or the .mo
-  const [stageView, setStageView] = useState<"diagram" | "icon" | "3d" | "text">("diagram");
+  const [stageView, setStageView] = useState<Stage>("diagram");
   // the workspace and its open documents (#43): the rail lists the folder, the tabs switch files
   const [docs, setDocs] = useState<Doc[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -121,6 +122,23 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const model = api?.model;
   const currentEntry = workspace?.entries.find((entry) => entry.path === model?.file);
   const canExport = currentEntry ? currentEntry.classKind === "model" || currentEntry.classKind === "block" : false;
+  const classKind = currentEntry?.classKind;
+  // A class only offers the views it can use: no diagram for a connector/record/function, no icon for a
+  // record/function, no 3D unless the model has MultiBody parts or a run.
+  const hasMultiBody = Boolean(shapeRun?.shapes?.length) || Boolean(model?.components.some((c) => c.class.startsWith("Modelica.Mechanics.MultiBody")));
+  const stageOptions = useMemo(() => {
+    const kind = classKind ?? "model";
+    const out: { value: Stage; label: string; hint: string }[] = [];
+    if (kind === "model" || kind === "block") out.push({ value: "diagram", label: "diagram", hint: "The model's parts and wires" });
+    if (kind === "model" || kind === "block" || kind === "connector") out.push({ value: "icon", label: "icon", hint: "Draw the icon and place connectors" });
+    if (kind === "model" && hasMultiBody) out.push({ value: "3d", label: "3d", hint: "The last MultiBody run in 3D" });
+    out.push({ value: "text", label: "text", hint: "The model's .mo" });
+    return out;
+  }, [classKind, hasMultiBody]);
+
+  useEffect(() => {
+    if (!stageOptions.some((o) => o.value === stageView)) setStageView(stageOptions[0]?.value ?? "text");
+  }, [stageOptions, stageView]);
   useEffect(() => {
     if (popover && model && !model.components.some((c) => c.name === popover)) setPopover(null);
   }, [popover, model]);
@@ -406,10 +424,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl+K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
       { id: "solver", label: "Solver settings…", menu: "run", group: "solver", run: () => (setSide(true), window.dispatchEvent(new Event("squero:solver"))) },
       { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
-      { id: "stage-diagram", label: "Diagram", menu: "view", group: "stage", checked: stageView === "diagram", run: () => setStageView("diagram") },
-      { id: "stage-icon", label: "Icon", menu: "view", group: "stage", checked: stageView === "icon", run: () => setStageView("icon") },
-      { id: "stage-3d", label: "3D", menu: "view", group: "stage", checked: stageView === "3d", run: () => setStageView("3d") },
-      { id: "stage-text", label: "Text", menu: "view", group: "stage", checked: stageView === "text", run: () => setStageView("text") },
+      ...stageOptions.map((option): Command => ({ id: `stage-${option.value}`, label: option.label, menu: "view", group: "stage", checked: stageView === option.value, run: () => setStageView(option.value) })),
       { id: "flat", label: "flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(true)) },
       { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },
       ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Code and scopes" : f === "code" ? "Focus code" : "Focus scopes", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(true)) })),
@@ -417,7 +432,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
       ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
     ],
-    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, stageView, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole],
+    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole],
   );
   useShortcuts(commands);
 
@@ -474,17 +489,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 onClose={(doc) => void closeDocument(doc)}
                 onOpen={() => fileInputRef.current?.click()}
               />
-              <Switch<"diagram" | "icon" | "3d" | "text">
-                label="View"
-                value={stageView}
-                onChange={setStageView}
-                options={[
-                  { value: "diagram", label: "diagram", hint: "The model's parts and wires" },
-                  { value: "icon", label: "icon", hint: "Draw the model's icon and place its connectors" },
-                  { value: "3d", label: "3d", hint: "The last run's MultiBody shapes in 3D" },
-                  { value: "text", label: "text", hint: "The model's .mo, read-only for now" },
-                ]}
-              />
+              <Switch<Stage> label="View" value={stageView} onChange={setStageView} options={stageOptions} />
               <div className="stage-view">
                 <div className="stage-pane" hidden={stageView !== "diagram"}>
                   <Canvas api={api} actions={actions} classes={classes} onOpen={setPopover} />

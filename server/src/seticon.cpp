@@ -44,6 +44,12 @@ std::string color(const std::string& stroke) {
   if (stroke == "ink") return "{0, 0, 0}";
   if (stroke == "muted") return "{160, 160, 160}";
   if (stroke == "signal") return "{0, 0, 0}";  // live-state colour never goes into a model
+  if (stroke == "electrical") return "{37, 99, 235}";
+  if (stroke == "translational") return "{21, 128, 61}";
+  if (stroke == "thermal") return "{185, 28, 28}";
+  if (stroke == "fluid") return "{2, 132, 199}";
+  if (stroke == "magnetic") return "{194, 65, 12}";
+  if (stroke == "rotational") return "{107, 114, 128}";
   throw OmcError("icon: unknown stroke \"" + stroke + "\"");
 }
 
@@ -66,10 +72,16 @@ std::string icon_annotation(const json& icon) {
     const std::string pattern = pick(g, "dash", {{"solid", "LinePattern.Solid"}, {"axis", "LinePattern.Dash"}}, "solid");
     const std::string fill = pick(g, "fill",
                                   {{"none", "FillPattern.None"}, {"ink", "FillPattern.Solid"},
-                                   {"raised", "FillPattern.Solid"}, {"sunken", "FillPattern.Solid"}},
+                                   {"raised", "FillPattern.Solid"}, {"sunken", "FillPattern.Solid"},
+                                   {"electrical", "FillPattern.Solid"}, {"translational", "FillPattern.Solid"},
+                                   {"thermal", "FillPattern.Solid"}, {"fluid", "FillPattern.Solid"},
+                                   {"magnetic", "FillPattern.Solid"}, {"rotational", "FillPattern.Solid"}},
                                   "none");
     const std::string fill_color = pick(g, "fill", {{"none", "{255, 255, 255}"}, {"ink", "{0, 0, 0}"},
-                                                    {"raised", "{255, 255, 255}"}, {"sunken", "{192, 192, 192}"}},
+                                                    {"raised", "{255, 255, 255}"}, {"sunken", "{192, 192, 192}"},
+                                                    {"electrical", "{37, 99, 235}"}, {"translational", "{21, 128, 61}"},
+                                                    {"thermal", "{185, 28, 28}"}, {"fluid", "{2, 132, 199}"},
+                                                    {"magnetic", "{194, 65, 12}"}, {"rotational", "{107, 114, 128}"}},
                                         "none");
     const std::string style = "lineColor=" + stroke + ", fillColor=" + fill_color + ", pattern=" + pattern +
                               ", fillPattern=" + fill + ", lineThickness=" + weight;
