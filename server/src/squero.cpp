@@ -390,6 +390,44 @@ json op_delete_class(const json& in) {
   return json::object();
 }
 
+json op_read_file(const json& in) {
+  const std::string file_name = in.value("file", "");
+  if (file_name.empty()) throw std::runtime_error("read_file needs a file");
+  const fs::path file = fs::absolute(file_name);
+  if (file.extension() != ".mo") throw std::runtime_error("only .mo files can be read");
+  std::ifstream source(file);
+  if (!source) throw std::runtime_error("no file " + file.string());
+  return {{"text", std::string((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>())}};
+}
+
+// Move a class file into another package, rewriting its `within` and both package.order files.
+json op_move_class(const json& in) {
+  const std::string file_name = in.value("file", "");
+  const std::string target_dir_name = in.value("targetDir", "");
+  const std::string within = in.value("within", "");
+  if (file_name.empty() || target_dir_name.empty()) throw std::runtime_error("move_class needs a file and a target folder");
+  const fs::path file = fs::absolute(file_name);
+  const fs::path target_dir = fs::absolute(target_dir_name);
+  if (file.extension() != ".mo" || !fs::is_regular_file(file)) throw std::runtime_error("no .mo file " + file.string());
+  if (!fs::is_directory(target_dir)) throw std::runtime_error("no folder " + target_dir.string());
+  const fs::path target = target_dir / file.filename();
+  if (target == file) return {{"file", file.string()}, {"model", within.empty() ? file.stem().string() : within + "." + file.stem().string()}};
+  if (fs::exists(target)) throw std::runtime_error(target.string() + " already exists");
+  std::ifstream source(file);
+  std::string text((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+  static const std::regex within_line(R"(^\s*within\s+[^;]+;\s*\n?)");
+  text = std::regex_replace(text, within_line, "", std::regex_constants::format_first_only);
+  // Drop a blank line left at the very top by the within line.
+  while (!text.empty() && text.front() == '\n') text.erase(0, 1);
+  if (!within.empty()) text = "within " + within + ";\n\n" + text;
+  std::ofstream(target) << text;
+  fs::remove(file);
+  const std::string name = file.stem().string();
+  if (fs::exists(file.parent_path() / "package.mo")) order_remove(file.parent_path(), name);
+  if (fs::exists(target_dir / "package.mo")) order_add(target_dir, name);
+  return {{"file", target.string()}, {"model", within.empty() ? name : within + "." + name}};
+}
+
 json op_save(Omc& omc, const json& in) {
   const std::string model = user_model(in);
   std::string file = in.value("file", "");
@@ -640,7 +678,11 @@ json op_export(Omc& omc, const json& in, const Session& session) {
   if (mode == "status") return serve_status(in.value("port", 0));
   if (mode == "stop") return serve_stop(in.value("port", 0));
   if (mode != "ppk" && mode != "serve") throw std::runtime_error("export mode is ppk, serve, status or stop");
-  std::string stem = in.value("model", "model");
+  const std::string model = user_model(in);
+  const std::string restriction = text_of(omc.call("getClassRestriction(" + model + ")"));
+  if (restriction != "model" && restriction != "block")
+    throw std::runtime_error("only a model or a block can be exported to a Paperboat backend");
+  std::string stem = model;
   stem = stem.substr(stem.rfind('.') == std::string::npos ? 0 : stem.rfind('.') + 1);
   for (auto& c : stem) if (!std::isalnum(static_cast<unsigned char>(c))) c = '_';
   const fs::path dir = fs::temp_directory_path() / ("ssom_" + stem);
@@ -928,6 +970,10 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_duplicate_class(in);
     } else if (op == "delete_class") {
       out["result"] = op_delete_class(in);
+    } else if (op == "move_class") {
+      out["result"] = op_move_class(in);
+    } else if (op == "read_file") {
+      out["result"] = op_read_file(in);
     } else if (op == "save") {
       out["result"] = op_save(omc, in);
     } else if (op == "check_model") {
@@ -948,7 +994,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, workspace, create_class, new_package, duplicate_class, delete_class, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
+      out["error"] = "unknown op; squero/0 has omc, open, workspace, create_class, new_package, duplicate_class, delete_class, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
       return out.dump();
     }
     out["ok"] = true;

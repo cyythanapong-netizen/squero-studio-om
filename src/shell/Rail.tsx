@@ -76,6 +76,7 @@ export function Rail({
   onDuplicate,
   onDelete,
   onCopyPath,
+  onMove,
   children,
 }: {
   tab: RailTab;
@@ -88,10 +89,13 @@ export function Rail({
   onDuplicate: (entry: WorkspaceEntry) => void;
   onDelete: (entry: WorkspaceEntry) => void;
   onCopyPath: (entry: WorkspaceEntry) => void;
+  onMove: (source: WorkspaceEntry, target?: WorkspaceEntry) => void;
   children: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [menu, setMenu] = useState<{ entry?: WorkspaceEntry; x: number; y: number } | null>(null);
+  const [drop, setDrop] = useState<string | null>(null);
+  const DND = "application/x-squero-class";
   const rows = workspace ? visibleEntries(workspace.entries, collapsed) : [];
   const close = () => setMenu(null);
 
@@ -135,7 +139,22 @@ export function Rail({
       </div>
       <div className="rail-body">
         <div className="files-panel" hidden={tab !== "files"}>
-          <div className="files-head">
+          <div
+            className="files-head"
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes(DND)) {
+                e.preventDefault();
+                setDrop("root");
+              }
+            }}
+            onDragLeave={() => setDrop(null)}
+            onDrop={(e) => {
+              const path = e.dataTransfer.getData(DND);
+              const source = workspace?.entries.find((one) => one.path === path);
+              setDrop(null);
+              if (source) onMove(source);
+            }}
+          >
             <span className="nm" title={workspace?.root}>
               {workspaceName(workspace)}
             </span>
@@ -153,9 +172,28 @@ export function Rail({
                     role="treeitem"
                     aria-expanded={entry.kind === "package" ? open : undefined}
                     aria-selected={entry.kind === "class" ? here : undefined}
-                    className={`file-row${here ? " on" : ""}`}
+                    className={`file-row${here ? " on" : ""}${drop === entry.path ? " drop-target" : ""}`}
                     style={{ paddingLeft: 8 + entry.depth * 14 }}
                     title={entry.path}
+                    draggable={entry.kind === "class"}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(DND, entry.path);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(e) => {
+                      if (entry.kind !== "package" || !e.dataTransfer.types.includes(DND)) return;
+                      e.preventDefault();
+                      setDrop(entry.path);
+                    }}
+                    onDragLeave={() => setDrop((current) => (current === entry.path ? null : current))}
+                    onDrop={(e) => {
+                      if (entry.kind !== "package") return;
+                      e.preventDefault();
+                      const path = e.dataTransfer.getData(DND);
+                      const source = workspace?.entries.find((one) => one.path === path);
+                      setDrop(null);
+                      if (source) onMove(source, entry);
+                    }}
                     onClick={() => (entry.kind === "package" ? toggle(entry.path) : onOpen(entry.path))}
                     onContextMenu={(e) => {
                       e.preventDefault();

@@ -25,7 +25,7 @@ import { Split, type View } from "./split/Split.tsx";
 import { StudioConsole, type ConsoleTab } from "./shell/StudioConsole.tsx";
 import { DocTabs } from "./shell/DocTabs.tsx";
 import { Rail, type RailTab } from "./shell/Rail.tsx";
-import { TextStage } from "./shell/TextStage.tsx";
+import { TextStage, type TextEditorHandle } from "./shell/TextStage.tsx";
 import { NewClassSheet } from "./shell/NewClassSheet.tsx";
 import type { NewClassSpec } from "./shell/newClass.ts";
 import { closeDoc, neighbour, openDoc, type Doc, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
@@ -107,6 +107,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [checking, setChecking] = useState(false);
   const [sourceLine, setSourceLine] = useState(0);
+  const [textDirty, setTextDirty] = useState(false);
+  const editorHandle = useRef<TextEditorHandle | null>(null);
   const errors = logs.filter((l) => l.level === "error").length;
   const say = (text: string, level: Log["level"] = "info") => setLogs((l) => [...l, { level, text }]);
   // omc's own messages stream into the Console while it works; the server pushes them.
@@ -129,6 +131,12 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const currentEntry = workspace?.entries.find((entry) => entry.path === model?.file);
   const canExport = currentEntry ? currentEntry.classKind === "model" || currentEntry.classKind === "block" : false;
   const classKind = currentEntry?.classKind;
+  // A backend needs an interface: an input/output pin or a public parameter becomes the block's
+  // port / Station property. Without one the export makes nothing Paperboat can connect.
+  const publicParams = model?.params.filter((p) => !p.private).length ?? 0;
+  const hasInterface = (model?.entries.length ?? 0) > 0 || publicParams > 0;
+  const exportReady = canExport && hasInterface;
+  const exportWhy = !canExport ? "only a model or a block can be exported to Paperboat" : !hasInterface ? "add a public parameter or an input/output first" : "";
   // A class only offers the views it can use: no diagram for a connector/record/function, no icon for a
   // record/function, no 3D unless the model has MultiBody parts or a run.
   const hasMultiBody = Boolean(shapeRun?.shapes?.length) || Boolean(model?.components.some((c) => c.class.startsWith("Modelica.Mechanics.MultiBody")));
@@ -213,11 +221,19 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     setRail(tab);
   };
 
+  const saveCurrent = async () => {
+    const editor = editorHandle.current;
+    if (editor?.dirty) return editor.save();
+    return actions.save();
+  };
+
   /** Switch documents: save the current one first, so a tab is never a stale buffer. */
   const openDocument = async (file: string, content?: string) => {
     if (file === model?.file) return;
     try {
-      if (actions.dirty) await actions.save();
+      const editor = editorHandle.current;
+      if (editor?.dirty) await editor.save();
+      else if (actions.dirty) await actions.save();
       const cached = content === undefined ? modelCache.current.get(file) : undefined;
       if (cached) actions.restore(cached);
       else await actions.openFile(file, content);
@@ -237,7 +253,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
   /** Write the class, then open it as a document; the Files rail picks it up from the new model. */
   const createNewClass = async (spec: NewClassSpec) => {
-    if (actions.dirty) await actions.save();
+    if (editorHandle.current?.dirty) await editorHandle.current.save();
+    else if (actions.dirty) await actions.save();
     const made = await actions.createClass(spec);
     await actions.openFile(made.file);
     setNewClassOpen(false);
@@ -280,6 +297,24 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         }
       },
     });
+  };
+
+  const moveEntry = async (source: WorkspaceEntry, target?: WorkspaceEntry) => {
+    if (source.kind !== "class") return;
+    const targetDir = parentOf(target);
+    if (!targetDir) return;
+    const within = target ? withinOf(target) : "";
+    try {
+      const made = await actions.moveClass({ file: source.path, targetDir, within });
+      modelCache.current.delete(source.path);
+      modelCache.current.delete(made.file);
+      setDocs((list) => list.map((doc) => (doc.file === source.path ? { file: made.file, name: made.model } : doc)));
+      await openDocument(made.file);
+      refreshWorkspace();
+      say(`Moved ${source.name} to ${within || "the workspace root"}`);
+    } catch (err) {
+      fail(err as Error);
+    }
   };
 
   const duplicate = (entry: WorkspaceEntry) => {
@@ -336,6 +371,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
   const handleExportBackend = async () => {
     if (!api) return;
+    if (!exportReady) {
+      say(exportWhy, "error");
+      return;
+    }
+    await saveCurrent();
     const outcome = await runBackendExport(api, "ppk", () => {});
     if (outcome.ok) {
       say(`Exported ${outcome.line}`);
@@ -419,7 +459,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             value: "NewModel.mo",
             confirmLabel: "Create",
             onConfirm: async (name) => {
-              if (actions.dirty) await actions.save();
+              if (editorHandle.current?.dirty) await editorHandle.current.save();
+              else if (actions.dirty) await actions.save();
               const target = workspace?.root ? `${workspace.root}/${name.endsWith(".mo") ? name : `${name}.mo`}` : undefined;
               await actions.newModel(name, target);
             },
@@ -472,7 +513,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         shortcut: "Ctrl+S",
         chord: { key: "s", ctrl: true },
         enabled: Boolean(model),
-        run: () => void actions.save().catch(fail),
+        run: () => void saveCurrent().catch(fail),
       },
       {
         id: "file.save-as",
@@ -505,6 +546,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         group: "export",
         shortcut: "Ctrl+E",
         chord: { key: "e", ctrl: true },
+        enabled: exportReady,
+        why: exportWhy || undefined,
         run: () => void handleExportBackend(),
       },
 
@@ -556,7 +599,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
       ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
     ],
-    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole],
+    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy],
   );
   useShortcuts(commands);
 
@@ -603,6 +646,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               onNewPackage={newPackage}
               onDuplicate={duplicate}
               onDelete={removeClass}
+              onMove={(source, target) => void moveEntry(source, target)}
               onCopyPath={(entry) => {
                 void navigator.clipboard?.writeText(entry.path);
                 say(`Copied ${entry.path}`);
@@ -614,7 +658,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               <DocTabs
                 docs={docs}
                 active={model.file}
-                dirty={actions.dirty}
+                dirty={actions.dirty || textDirty}
                 meta={workspace?.root}
                 onSelect={(doc) => void openDocument(doc.file)}
                 onClose={(doc) => void closeDocument(doc)}
@@ -631,7 +675,17 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                   ) : (
                     <p className="stage-empty"><span>Run a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</span></p>
                   ))}
-                {stageView === "text" && <TextStage model={model} actions={actions} line={sourceLine} />}
+                <div className="stage-pane" hidden={stageView !== "text"}>
+                  <TextStage
+                    model={model}
+                    actions={actions}
+                    line={sourceLine}
+                    onEditor={(handle) => {
+                      editorHandle.current = handle;
+                      setTextDirty(handle?.dirty ?? false);
+                    }}
+                  />
+                </div>
                 {stageView === "icon" && <IconView />}
               </div>
             </main>
@@ -643,7 +697,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} canExport={canExport} />
             {newClassOpen && <NewClassSheet workspace={workspace} model={model} defaultWithin={newClassWithin} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}
             <div className="dock-slot">
-              <StudioDock />
+              <StudioDock canExport={exportReady} why={exportWhy} beforeExport={saveCurrent} />
             </div>
           </>
         ) : (

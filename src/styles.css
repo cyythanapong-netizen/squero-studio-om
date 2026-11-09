@@ -207,6 +207,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .file-row:focus-visible { outline-offset: -2px; }
 .file-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 2px 0 0 var(--line-ink); }
 .file-row.on .nm { font-weight: 500; }
+.file-row.drop-target { background: var(--surface-sunken); box-shadow: inset 0 0 0 1px var(--line-ink); }
 .file-row .caret { width: 12px; flex: none; text-align: center; opacity: .7; }
 .file-row .file-icon { width: 14px; height: 14px; flex: none; display: inline-grid; place-items: center; color: var(--text-muted); }
 .file-row .file-icon svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
@@ -254,6 +255,14 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .stage-text { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
 .stage-text .code-head { flex: none; }
 .stage-text .code-view { flex: 1; min-height: 0; }
+.code-editor {
+  flex: 1; min-height: 0; width: 100%; resize: none; border: 0; outline: none;
+  background: var(--surface-screen); color: var(--text-on-screen);
+  font: 400 var(--size-2xs) / 1.65 var(--font-mono); padding: 8px 12px; tab-size: 2;
+  white-space: pre; overflow: auto;
+}
+.code-editor::selection { background: rgb(255 255 255 / .2); }
+.code-error { margin: 0; border-radius: 0; }
 .studio.no-dock .dock { display: none; }
 
 
