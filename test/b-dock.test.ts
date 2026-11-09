@@ -40,6 +40,13 @@ test("dock: balance parse handles balanced, under-determined, over-determined, a
   assert.equal(over.diff, 2);
   assert.match(over.words, /16 \/ 14.*more/);
 
+  // A fixed state adds an initial equation the counts leave out: checkModel is the judge.
+  const initialised = parseBalance("Check of Basics.Loop completed successfully.\nClass Basics.Loop has 10 equation(s) and 9 variable(s).\n7 of these are trivial equation(s).");
+  assert.equal(initialised.kind, "balanced");
+  assert.equal(initialised.equations, 10);
+  assert.equal(initialised.unknowns, 9);
+  assert.match(initialised.words, /10 \/ 9.*checkModel passed/);
+
   // OMC Error rejection
   api.setCheckModelReply(new Error("omc session timed out"));
   const errReject = await checkModelBalance(api);
