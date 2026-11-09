@@ -2,6 +2,7 @@
 
 #include "squero/squero.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -101,17 +102,47 @@ void ensure_library(Omc& omc, const std::string& cls) {
   if (top == "Modelica") omc.call("loadModel(Modelica)");
 }
 
+// A class inside a package needs its package loaded first: omc's loadFile on a file with
+// `within Pkg.Sub` fails when Pkg is not there. The outermost package.mo loads the whole package,
+// subpackages included when package.order names them; loading a subpackage's package.mo directly
+// would be read as a new top-level package ("expected within ;").
+void load_packages(Omc& omc, const fs::path& file) {
+  fs::path top;
+  for (fs::path dir = file.parent_path(); fs::exists(dir / "package.mo"); dir = dir.parent_path()) {
+    top = dir / "package.mo";
+    if (dir.parent_path() == dir) break;
+  }
+  if (!top.empty() && omc.call("loadFile(" + quote(fs::absolute(top).string()) + ")") != "true")
+    throw std::runtime_error("cannot load package " + top.parent_path().string() + ": " + omc.errors());
+}
+
+// The class in `file`: search the tree of loaded user classes, not just the top level, because a
+// class inside a package (`Pkg.Sub.B`) is not in getClassNames().
+bool find_class(Omc& omc, const std::string& cls, const fs::path& want, std::string& found, int depth) {
+  if (depth > 8) return false;
+  std::error_code ec;
+  const std::string source = text_of(omc.call("getSourceFile(" + cls + ")"));
+  if (!source.empty() && fs::weakly_canonical(source, ec) == want) {
+    found = cls;
+    return true;
+  }
+  for (const auto& v : parse_value(omc.call("getClassNames(" + cls + ")")).items)
+    if (find_class(omc, cls + "." + v.atom, want, found, depth + 1)) return true;
+  return false;
+}
+
 // The class `file` defines, once loaded.
 std::string load_file(Omc& omc, const fs::path& file) {
   ensure_library(omc, "Modelica");
+  load_packages(omc, fs::absolute(file));
   if (omc.call("loadFile(" + quote(fs::absolute(file).string()) + ")") != "true")
     throw std::runtime_error("cannot load " + file.string() + ": " + omc.errors());
   std::error_code ec;
   const fs::path want = fs::weakly_canonical(file, ec);
+  std::string found;
   for (const auto& v : parse_value(omc.call("getClassNames()")).items) {
     if (v.atom == "Modelica") continue;
-    const std::string source = text_of(omc.call("getSourceFile(" + v.atom + ")"));
-    if (!source.empty() && fs::weakly_canonical(source, ec) == want) return v.atom;
+    if (find_class(omc, v.atom, want, found, 0)) return found;
   }
   throw std::runtime_error("no class in " + file.string());
 }
@@ -130,6 +161,42 @@ json op_open(Omc& omc, const json& in, const Session& session) {
     std::ofstream(file) << "model " << name << "\nend " << name << ";\n";
   }
   return {{"file", fs::absolute(file).string()}, {"model", load_file(omc, file)}};
+}
+
+// The folder the open model lives in, for the Files rail: every package (a folder with a
+// package.mo) down to its classes, or, for a model outside a package, the .mo files beside it.
+// A single model in a plain folder is a workspace of one, which is the quick path.
+json op_workspace(const json& in) {
+  const std::string target = in.value("file", "");
+  if (target.empty()) throw std::runtime_error("workspace needs a file");
+  const fs::path file = fs::absolute(target);
+  fs::path root = file.parent_path();
+  while (fs::exists(root / "package.mo") && root.parent_path() != root) root = root.parent_path();
+
+  const std::set<std::string> skip = {".git", "build", "dist", "node_modules", ".cache", "__pycache__"};
+  json entries = json::array();
+  std::function<void(const fs::path&, int)> walk = [&](const fs::path& dir, int depth) {
+    if (depth > 6 || entries.size() >= 500) return;
+    std::vector<fs::path> children;
+    for (const auto& entry : fs::directory_iterator(dir)) children.push_back(entry.path());
+    std::sort(children.begin(), children.end());
+    for (const fs::path& path : children) {
+      const std::string name = path.filename().string();
+      if (skip.contains(name)) continue;
+      if (fs::is_directory(path)) {
+        if (!fs::exists(path / "package.mo")) continue;  // only packages make the tree
+        entries.push_back({{"name", name}, {"path", path.string()}, {"kind", "package"}, {"depth", depth}});
+        walk(path, depth + 1);
+      } else if (path.extension() == ".mo" && name != "package.mo") {
+        entries.push_back({{"name", path.stem().string()}, {"path", path.string()}, {"kind", "class"}, {"depth", depth}});
+      }
+    }
+  };
+  walk(root, 0);
+  return {{"root", root.string()},
+          {"file", file.string()},
+          {"package", fs::exists(file.parent_path() / "package.mo")},
+          {"entries", entries}};
 }
 
 json op_save(Omc& omc, const json& in) {
@@ -660,6 +727,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = omc.call(expr);
     } else if (op == "open") {
       out["result"] = op_open(omc, in, session);
+    } else if (op == "workspace") {
+      out["result"] = op_workspace(in);
     } else if (op == "save") {
       out["result"] = op_save(omc, in);
     } else if (op == "check_model") {
@@ -680,7 +749,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
+      out["error"] = "unknown op; squero/0 has omc, open, workspace, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
       return out.dump();
     }
     out["ok"] = true;

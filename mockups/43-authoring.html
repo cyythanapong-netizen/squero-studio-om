@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>squero studio OM · #68 check model, flat model, messages</title>
+<style>
+  /* ---------------------------------------------------------------------------------
+     Design study for squero#68: check model, instantiate flat model, messages browser.
+
+     The messages browser is a tab of the floating Console (the app's one home for
+     warnings and errors); the flat model is a third source view beside .mo and the
+     generated C++. Both are read-only displays, in the tokens from
+     @paperboat/shared/src/tokens.css.
+     --------------------------------------------------------------------------------- */
+
+  @font-face { font-family: "Geist Sans"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Geist Sans"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-sans/files/geist-sans-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+  @font-face { font-family: "Geist Sans"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff2") format("woff2"); font-weight: 600; font-display: swap; }
+  @font-face { font-family: "Geist Mono"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+  @font-face { font-family: "Geist Mono"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-mono/files/geist-mono-latin-500-normal.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+
+  :root {
+    --grey-50: #f2f2ef; --grey-100: #eaeae6; --grey-200: #dcdcd8; --grey-300: #cfcfca;
+    --grey-500: #9d9d97; --grey-600: #55554f; --grey-900: #161616;
+    --black: #0d0d0d; --white: #ffffff; --screen-text: #f2f2ee; --screen-dim: #5d5d58;
+    --orange: #ff5a1f; --red: #d92d20;
+    --font-sans: "Geist Sans", system-ui, sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, monospace;
+    --size-2xs: 12px; --size-xs: 12.5px; --size-sm: 13px; --size-md: 15px; --size-xl: 30px;
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px;
+    --surface-ground: var(--grey-200); --surface-panel: var(--grey-100); --surface-raised: var(--grey-50);
+    --surface-screen: var(--black); --surface-well: #dcdcd7; --surface-sunken: #e1e1dd;
+    --surface-float: rgb(236 236 232 / 0.78);
+    --well-shadow: inset 0 1px 2px rgb(0 0 0 / 0.08);
+    --text: var(--grey-900); --text-muted: var(--grey-600);
+    --text-on-screen: var(--screen-text); --text-on-screen-muted: var(--screen-dim);
+    --line: var(--grey-300); --line-strong: var(--grey-500); --line-ink: var(--grey-900);
+    --dots: rgb(0 0 0 / 0.15);
+    --signal: var(--orange); --danger: var(--red);
+    --text-on-signal: var(--white);
+    --shadow-1: 0 8px 22px rgb(0 0 0 / 0.16); --shadow-2: 0 16px 40px rgb(0 0 0 / 0.18);
+    --radius-sm: 3px; --radius-md: 5px; --radius-lg: 6px; --radius-round: 999px;
+    --ease: cubic-bezier(.65, 0, .25, 1); --motion: 150ms var(--ease); --glide: 300ms var(--ease);
+    --bar-height: 56px; --panel-head-height: 36px; --gutter: 14px;
+    color-scheme: light;
+  }
+  :root[data-theme="dark"] {
+    --surface-ground: #111111; --surface-panel: #1a1a1a; --surface-raised: #222222;
+    --surface-screen: #050505; --surface-well: #111111; --surface-sunken: #151515;
+    --surface-float: rgb(34 34 34 / 0.8);
+    --well-shadow: inset 0 1px 2px rgb(0 0 0 / 0.5);
+    --text: #e9e9e4; --text-muted: #a3a39d;
+    --text-on-screen: #f2f2ee; --text-on-screen-muted: #5d5d58;
+    --line: #2e2e2e; --line-strong: #4a4a4a; --line-ink: #e9e9e4;
+    --dots: rgb(255 255 255 / 0.1);
+    --signal: #ff6a30; --danger: #ff5c4d;
+    --shadow-1: 0 8px 22px rgb(0 0 0 / 0.5); --shadow-2: 0 16px 40px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    min-height: 100vh; padding: 28px 20px 48px;
+    background: #b9b9b3; color: var(--text);
+    font: 400 var(--size-sm) / 1.45 var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  :root[data-theme="dark"] body { background: #0b0b0b; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--line-ink); outline-offset: 2px; }
+
+  /* ---- the study's own board (outside the app frame) ------------------------------- */
+  .board { max-width: 1440px; margin: 0 auto; }
+  .board-head { display: flex; align-items: flex-end; gap: var(--space-4); margin-bottom: 12px; color: #454540; }
+  :root[data-theme="dark"] .board-head { color: #9c9c96; }
+  .board-head b { color: #161616; font-weight: 600; }
+  :root[data-theme="dark"] .board-head b { color: #e9e9e4; }
+  .board-head .note { font: 400 var(--size-2xs) var(--font-mono); opacity: .75; }
+  .board-head .spacer { flex: 1; }
+  .board-actions { display: inline-flex; gap: 6px; align-items: center; }
+  .board-actions .sep { width: 1px; height: 18px; background: #8f8f89; margin: 0 6px; }
+  .board-actions button {
+    height: 28px; padding: 0 10px; border: 1px solid #8f8f89; border-radius: var(--radius-md);
+    background: transparent; color: #454540; cursor: pointer;
+    font: 500 var(--size-2xs) var(--font-mono);
+  }
+  .board-actions button.on { border-color: #161616; color: #161616; background: #f2f2ef; }
+  :root[data-theme="dark"] .board-actions button { border-color: #4a4a4a; color: #a3a39d; }
+  :root[data-theme="dark"] .board-actions button.on { border-color: #e9e9e4; color: #e9e9e4; background: #222; }
+
+  .frame {
+    position: relative; width: 100%; height: 860px; overflow: hidden;
+    background: var(--surface-ground); border: 1px solid #8f8f89; border-radius: 10px;
+    box-shadow: 0 20px 60px rgb(0 0 0 / .18);
+  }
+  .studio {
+    height: 100%; display: grid; gap: var(--gutter); padding: var(--gutter);
+    grid-template-columns: 236px minmax(0, 1fr) 400px;
+    grid-template-rows: var(--bar-height) minmax(0, 1fr) auto;
+    grid-template-areas: "bar bar bar" "library stage side" "dock dock dock";
+    position: relative;
+  }
+
+  /* ---- bar ------------------------------------------------------------------------- */
+  .bar { grid-area: bar; display: flex; align-items: center; gap: var(--space-3); min-width: 0; position: relative; }
+  .wm { display: inline-flex; align-items: baseline; gap: 5px; font: 600 17px var(--font-sans); letter-spacing: -.01em; white-space: nowrap; }
+  .wm .muted { font-weight: 400; color: var(--text-muted); }
+  .wm .badge {
+    align-self: center; margin-left: 2px; padding: 1px 5px; border-radius: var(--radius-sm);
+    background: var(--text); color: var(--surface-panel);
+    font: 600 10px var(--font-mono); letter-spacing: .02em;
+  }
+  .wm .water { display: inline-flex; gap: 2px; margin-left: 3px; align-self: flex-end; padding-bottom: 2px; }
+  .wm .water i { width: 4px; height: 4px; background: var(--signal); display: block; }
+  .menus { display: inline-flex; align-items: center; gap: 2px; margin-left: var(--space-2); }
+  .menus button { border: 0; background: none; padding: 4px 8px; border-radius: var(--radius-sm); font: 400 var(--size-xs) var(--font-sans); color: var(--text-muted); cursor: pointer; }
+  .menus button:hover { color: var(--text); background: var(--surface-sunken); }
+  .menus button.open { color: var(--text); box-shadow: inset 0 0 0 1px var(--line-ink); border-radius: 2px; }
+  .proj {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    font: 400 var(--size-xs) var(--font-mono); color: var(--text-muted);
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .proj .dirty { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); display: inline-block; }
+  .bar .spacer { flex: 1; }
+  .key {
+    height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-md);
+    font: 500 var(--size-xs) var(--font-sans); white-space: nowrap; cursor: pointer;
+  }
+  .key.small { height: 24px; padding: 0 9px; font-size: var(--size-2xs); }
+  .key.ink { border-color: var(--line-ink); font-weight: 600; }
+  .key.err { color: var(--danger); border-color: var(--danger); }
+  .key.icon-key { width: 28px; padding: 0; justify-content: center; }
+  .key.icon-key svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+  .key.icon-key svg .fill { fill: var(--text); opacity: .18; }
+  .pill {
+    height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px;
+    border: 1px solid var(--line); border-radius: var(--radius-round);
+    font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap;
+  }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--signal); }
+  .theme-key { font-family: var(--font-mono); }
+
+  /* ---- Model menu ------------------------------------------------------------------ */
+  .menu-pop {
+    position: absolute; z-index: 60; min-width: 250px; padding: 5px;
+    background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-1); display: none;
+  }
+  .menu-pop.open { display: block; }
+  .menu-pop .mi {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%;
+    border: 0; background: none; padding: 7px 9px; border-radius: var(--radius-sm);
+    text-align: left; font: 400 var(--size-xs) var(--font-sans); color: var(--text); cursor: pointer;
+  }
+  .menu-pop .mi:hover { background: var(--surface-sunken); }
+  .menu-pop .mi .chk { width: 4px; height: 4px; background: transparent; }
+  .menu-pop .mi.on .chk { background: var(--text); }
+  .menu-pop .mi kbd { margin-left: auto; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .menu-pop .mi .count { margin-left: auto; }
+  .menu-pop hr { border: 0; border-top: 1px solid var(--line); margin: 5px 4px; }
+
+  /* ---- library --------------------------------------------------------------------- */
+  .library {
+    grid-area: library; display: flex; flex-direction: column; min-height: 0;
+    background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: var(--space-2); min-height: var(--panel-head-height);
+    padding: 0 var(--space-3); border-bottom: 1px solid var(--line);
+    font: 500 var(--size-2xs) var(--font-mono); color: var(--text-muted); text-transform: lowercase;
+  }
+  .panel-head .count { margin-left: auto; font: 400 var(--size-2xs) var(--font-mono); opacity: .7; }
+  .lib-search { padding: var(--space-2); border-bottom: 1px solid var(--line); }
+  .well {
+    height: 26px; display: flex; align-items: center; padding: 0 8px;
+    background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-md);
+    font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted);
+  }
+  .tree { flex: 1; min-height: 0; overflow: auto; padding: 4px 0; }
+  .tree-row {
+    display: flex; align-items: center; gap: 3px; height: 25px; padding-right: 10px;
+    font: 400 var(--size-xs) var(--font-mono); color: var(--text-muted); white-space: nowrap;
+  }
+  .tree-row:hover { background: var(--surface-sunken); color: var(--text); }
+  .tree-row .caret { width: 14px; text-align: center; flex: none; opacity: .7; }
+  .tree-row .nm { overflow: hidden; text-overflow: ellipsis; }
+  .tree-row .n { margin-left: auto; font: 400 11px var(--font-mono); opacity: .55; }
+  .tree-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 2px 0 0 var(--line-ink); }
+  .tree-row.on .nm { font-weight: 600; }
+  .tree-row.live .nm::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 6px; border-radius: 50%; background: var(--signal); vertical-align: middle; }
+  .tree .i1 { padding-left: 12px; } .tree .i2 { padding-left: 26px; } .tree .i3 { padding-left: 40px; } .tree .i4 { padding-left: 54px; }
+
+  /* ---- stage ----------------------------------------------------------------------- */
+  .stage { grid-area: stage; display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+  .stage-tabs { display: flex; align-items: center; gap: var(--space-3); min-height: 26px; }
+  .choice { display: inline-flex; align-items: center; gap: 10px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
+  .choice button { border: 0; background: none; padding: 1px 0; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+  .choice button:hover { color: var(--text); }
+  .choice button.on { color: var(--text); font-weight: 500; }
+  .choice button.on::before { content: "[ "; }
+  .choice button.on::after { content: " ]"; }
+  .choice .count { font: 500 10px var(--font-mono); color: var(--danger); margin-left: 3px; }
+  .stage-meta { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
+  .canvas {
+    position: relative; flex: 1; min-height: 0; overflow: hidden;
+    background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg);
+    background-image: radial-gradient(var(--dots) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  .canvas .wires { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .canvas .wires path { fill: none; stroke: var(--line-ink); stroke-width: 1.2; }
+  .canvas .wires path.sel { stroke-width: 2.4; }
+  .plate { position: absolute; min-width: 128px; background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-md); }
+  .plate .phead { display: flex; align-items: center; gap: 6px; padding: 3px 7px; border-bottom: 1px solid var(--line); font: 600 var(--size-2xs) var(--font-sans); }
+  .plate .phead .tag { margin-left: auto; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .plate .pbody { padding: 4px 7px 6px; font: 400 11px var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+  .plate .pbody b { font-weight: 500; color: var(--text); }
+  .plate.sel { box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--line-ink); }
+  .port { position: absolute; width: 8px; height: 8px; background: var(--surface-raised); border: 1.2px solid var(--line-ink); border-radius: 1px; }
+  .port.l { left: -4px; top: 50%; margin-top: -4px; }
+  .port.r { right: -4px; top: 50%; margin-top: -4px; }
+  .legend { position: absolute; left: 12px; bottom: 12px; font: 400 11px var(--font-mono); color: var(--text-muted); background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 3px 7px; }
+  .minimap { position: absolute; right: 12px; bottom: 12px; width: 150px; height: 92px; background: var(--surface-sunken); border: 1px solid var(--line-strong); border-radius: var(--radius-md); overflow: hidden; }
+  .minimap .m { position: absolute; background: var(--line-strong); opacity: .7; }
+  .minimap .view { position: absolute; border: 1px solid var(--line-ink); background: rgb(0 0 0 / .04); }
+
+  /* ---- side ------------------------------------------------------------------------ */
+  .side { grid-area: side; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+  .side-head { display: flex; align-items: center; gap: var(--space-2); min-height: var(--panel-head-height); padding: 0 var(--space-3); border-bottom: 1px solid var(--line); }
+  .side-head .choice { gap: 12px; }
+  .side-head .spacer { flex: 1; }
+  .side-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .pane[hidden] { display: none; }
+
+  /* code panes */
+  .code-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
+  .code-head b { color: var(--text); font: 600 var(--size-xs) var(--font-mono); white-space: nowrap; }
+  .code-head .spacer { flex: 1; }
+  .code-head .code-sub { flex: 1 0 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .code { flex: 1; min-height: 0; overflow: auto; margin: 0; background: var(--surface-screen); color: var(--text-on-screen); font: 400 var(--size-2xs) / 1.5 var(--font-mono); padding: var(--space-2) 0; }
+  .code .row { display: flex; padding: 0 var(--space-3); white-space: pre; }
+  .code .ln { flex: none; width: 34px; margin-right: var(--space-3); text-align: right; color: var(--text-on-screen-muted); opacity: .6; user-select: none; }
+  .code .src { flex: 1; }
+  .tok-keyword { color: #c792ea; font-weight: 500; }
+  .tok-type { color: #4ec9b0; font-weight: 500; }
+  .tok-comment { color: var(--text-on-screen-muted); font-style: italic; }
+  .tok-string { color: #98c379; }
+  .tok-number { color: #e5c07b; }
+  .tok-operator { color: #abb2bf; }
+  .tok-annotation { color: #d19a66; font-style: italic; }
+  .pill2 { padding: 0 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: 400 10px var(--font-mono); color: var(--text-muted); }
+
+  /* ---- dock ------------------------------------------------------------------------ */
+  .dock { grid-area: dock; display: flex; align-items: center; gap: var(--space-3); min-height: 36px; padding: 4px 12px; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+  .balance { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; background: var(--surface-screen); color: var(--text-on-screen); border-radius: var(--radius-md); font: 500 var(--size-2xs) var(--font-mono); white-space: nowrap; }
+  .balance .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-on-screen); }
+  .undrawn { padding: 3px 10px; border: 1px dashed var(--line-strong); border-radius: var(--radius-md); font: 500 var(--size-2xs) var(--font-mono); color: var(--text-muted); white-space: nowrap; cursor: help; }
+  .dock .spacer { flex: 1; }
+  .dock .key { height: 28px; padding: 0 12px; }
+
+  /* ---- Console (the floating window; messages is its second tab) -------------------- */
+  .console-window {
+    position: absolute; z-index: 50; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: min(660px, calc(100% - 96px)); height: min(470px, calc(100% - 120px));
+    display: none; flex-direction: column; overflow: hidden;
+    background: var(--surface-panel); border: 1.5px solid var(--line-ink); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-2);
+  }
+  .console-window.open { display: flex; }
+  .console-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); }
+  .console-head .spacer { flex: 1; }
+  .console-head .lbl { font: 400 11px var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+  .console-body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: var(--space-3) var(--space-4) var(--space-4); }
+  .console-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  .console-pane[hidden] { display: none; }
+
+  .logs { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: var(--space-2) var(--space-3) var(--space-2) 40px; background: var(--surface-screen); color: var(--text-on-screen); border-radius: var(--radius-md); font: 400 var(--size-xs) / 1.75 var(--font-mono); }
+  .logs li::marker { color: var(--text-on-screen-muted); }
+  .logs .error { color: var(--danger); }
+  .logs .warning { color: var(--signal); }
+  .logs .info { color: var(--text-on-screen); }
+
+  .msg-head { display: flex; align-items: center; gap: var(--space-3); }
+  .msg-title { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+  .msg-head h2 { margin: 0; font: 600 var(--size-xs) var(--font-sans); }
+  .msg-head .sub { font: 400 11px var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+  .msg-head .spacer { flex: 1; }
+  .msg-list { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  .msg { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: var(--space-2); padding: 8px 10px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); cursor: default; }
+  .msg:hover { border-color: var(--line-strong); }
+  .msg.sel { border-color: var(--line-ink); box-shadow: 0 0 0 1px var(--line-ink); }
+  .msg .lvl { font: 500 11px var(--font-mono); text-align: right; padding-top: 1px; }
+  .msg.error .lvl { color: var(--danger); }
+  .msg.warning .lvl { color: var(--signal); }
+  .msg.info .lvl { color: var(--text-muted); }
+  .msg .body { min-width: 0; }
+  .msg .text { margin: 0; font: 400 var(--size-2xs) / 1.45 var(--font-sans); color: var(--text); }
+  .msg .where { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; border: 0; background: none; padding: 0; cursor: pointer; font: 400 11px var(--font-mono); color: var(--text-muted); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 2px; }
+  .msg .where:hover { color: var(--text); }
+  .msg-foot { display: flex; align-items: center; gap: var(--space-2); padding-top: 2px; font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
+  .msg-foot .spacer { flex: 1; }
+</style>
+<style>
+  /* ---------------------------------------------------------------------------------
+     Design study for squero#43: the authoring shell.
+
+     Nine pages, one shell: workspace and document tabs, a per-document view strip
+     (diagram | icon | text | docs | 3d), a Files | Library rail, and two sheets.
+     The page buttons at the top switch between them; nothing here is wired to the app.
+     --------------------------------------------------------------------------------- */
+
+  :root { --float-blur: blur(14px) saturate(130%); }
+  .board-head { align-items: center; }
+  .board-head > div:first-child { white-space: nowrap; }
+  .board-head .note { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board-actions { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
+  .page { display: none; height: 100%; }
+  .page.on { display: block; }
+  .frame { height: 880px; }
+  .studio { height: 100%; }
+  .mode { margin-right: 2px; }
+  .mode button { font-size: 11px; }
+
+  /* ---- rail (Files | Library) ------------------------------------------------------ */
+  .rail-tabs {
+    display: flex; align-items: center; gap: var(--space-3);
+    min-height: var(--panel-head-height); padding: 0 var(--space-3);
+    border-bottom: 1px solid var(--line); background: var(--surface-raised);
+  }
+  .rail-tabs .choice { gap: 10px; }
+  .library .panel-head .key { margin-left: auto; height: 20px; padding: 0 6px; }
+  .tree-row .k { margin-left: auto; font: 400 10px var(--font-mono); color: var(--text-muted); opacity: .65; }
+  .tree-row .k.open { opacity: 1; color: var(--text); }
+  .tree-row .dirty { width: 5px; height: 5px; border-radius: 50%; background: var(--signal); margin-left: 6px; }
+  .tree-row .file { opacity: .55; margin-right: 4px; }
+
+  /* ---- document tabs --------------------------------------------------------------- */
+  .docbar { display: flex; align-items: flex-end; gap: 2px; min-height: 31px; border-bottom: 1px solid var(--line); }
+  .doc {
+    display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px;
+    border: 1px solid var(--line); border-bottom: 0; border-radius: var(--radius-md) var(--radius-md) 0 0;
+    background: var(--surface-panel); color: var(--text-muted); cursor: pointer; white-space: nowrap;
+    font: 400 var(--size-xs) var(--font-mono);
+  }
+  .doc.on { background: var(--surface-raised); color: var(--text); font-weight: 500; }
+  .doc .x { opacity: .4; font-size: 13px; }
+  .doc .dirty { width: 5px; height: 5px; border-radius: 50%; background: var(--signal); }
+  .doc-add { height: 30px; border: 0; background: none; padding: 0 10px; color: var(--text-muted); cursor: pointer; font: 400 15px var(--font-mono); }
+  .docbar .stage-meta { margin-left: auto; padding: 0 2px 7px 8px; }
+
+  /* ---- editing mode ---------------------------------------------------------------- */
+  .ed-toolbar { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+  .crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .ed-toolbar .spacer { flex: 1; }
+  .saved { font: 400 11px var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+  .editor {
+    flex: 1; min-height: 0; overflow: auto; padding: var(--space-2) 0;
+    background: var(--surface-screen); color: var(--text-on-screen);
+    border: 1px solid var(--line); border-radius: var(--radius-lg);
+    font: 400 var(--size-2xs) / 1.62 var(--font-mono);
+  }
+  .editor .row { display: flex; padding: 0 var(--space-3) 0 0; white-space: pre; }
+  .editor .ln {
+    position: relative; flex: none; width: 46px; padding-right: 12px; text-align: right;
+    color: var(--text-on-screen-muted); opacity: .55; user-select: none;
+  }
+  .editor .src { flex: 1; }
+  .editor .row.hit { background: rgb(255 255 255 / .06); box-shadow: inset 2px 0 0 var(--danger); }
+  .editor .mark { position: absolute; left: 4px; top: 50%; width: 6px; height: 6px; border-radius: 50%; transform: translateY(-50%); }
+  .editor .mark.err { background: var(--danger); }
+  .editor .mark.warn { background: var(--signal); }
+  .squig { text-decoration: underline wavy var(--danger); text-underline-offset: 3px; }
+
+  /* ---- messages pane --------------------------------------------------------------- */
+  .msgpane { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); }
+  .msgpane .msg-list { overflow: auto; }
+  .msgpane .msg-head h2 { font: 600 var(--size-xs) var(--font-sans); margin: 0; }
+  .msgpane .msg-head .sub { font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .msgpane .msg-head .spacer { flex: 1; }
+  .msgpane .msg-foot { padding-top: var(--space-2); border-top: 1px solid var(--line); }
+
+  /* ---- icon editor ----------------------------------------------------------------- */
+  .icon-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+  .icon-toolbar {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 5px 8px; background: var(--surface-panel);
+    border: 1px solid var(--line); border-radius: var(--radius-md);
+  }
+  .icon-toolbar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
+  .key.on { box-shadow: inset 0 0 0 1px var(--line-ink); font-weight: 600; }
+  .icon-board {
+    position: relative; flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden;
+    background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg);
+    background-image: radial-gradient(var(--dots) 1px, transparent 1px); background-size: 20px 20px;
+  }
+  .icon-art { width: min(430px, 68%); height: auto; }
+  .ico { fill: none; stroke: var(--line-ink); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+  .ico polygon { fill: var(--line-ink); fill-opacity: .14; }
+  .selbox { fill: none; stroke: var(--line-ink); stroke-width: 1; stroke-dasharray: 3 3; }
+  .handle { fill: var(--surface-raised); stroke: var(--line-ink); stroke-width: 1; }
+  .pinp rect { fill: var(--surface-raised); stroke: var(--line-ink); stroke-width: 2; }
+  .pinp text { font: 400 8px var(--font-mono); fill: var(--text-muted); }
+  .extent { position: absolute; left: 12px; bottom: 10px; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .zoom { position: absolute; right: 12px; bottom: 10px; font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .group { padding: 9px var(--space-3); border-bottom: 1px solid var(--line); }
+  .group h3 { margin: 0 0 6px; font: 500 11px var(--font-mono); color: var(--text-muted); text-transform: lowercase; }
+  .group .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 23px; font: 400 11.5px var(--font-sans); color: var(--text-muted); }
+  .group .choice { gap: 8px; font-size: 11px; }
+  .layer { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border: 1px solid transparent; border-radius: var(--radius-sm); font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .layer.on { border-color: var(--line-ink); background: var(--surface-raised); color: var(--text); }
+  .layer .ty { margin-left: auto; opacity: .55; font-size: 10px; }
+  .swatches { display: inline-flex; gap: 4px; }
+  .swatch { width: 16px; height: 16px; border: 1px solid var(--line-strong); border-radius: 3px; display: inline-block; }
+  .swatch.ink { background: var(--text); }
+  .swatch.muted { background: var(--text-muted); }
+  .swatch.signal { background: var(--signal); }
+  .swatch.none { background: repeating-linear-gradient(45deg, transparent 0 3px, var(--line-strong) 3px 4px); }
+  .preview-strip { display: flex; align-items: center; gap: 10px; padding: 8px var(--space-3); }
+  .tile { display: grid; place-items: center; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+  .tile svg { width: 70%; height: 70%; }
+  .tile.dark { background: #161616; border-color: #2e2e2e; }
+  .tile.dark .ico { stroke: #e9e9e4; }
+  .tile.dark .ico polygon { fill: #e9e9e4; }
+
+  /* ---- 3d view --------------------------------------------------------------------- */
+  .viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--surface-screen); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+  .scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .scene .grid { stroke: rgb(255 255 255 / .09); fill: none; }
+  .scene .axis { stroke: var(--text-on-screen-muted); fill: none; }
+  .scene .arm { stroke: var(--text-on-screen); stroke-width: 3; fill: none; stroke-linecap: round; }
+  .scene .joint { fill: var(--signal); stroke: var(--surface-screen); stroke-width: 2; }
+  .scene .lbl { font: 400 10px var(--font-mono); fill: var(--text-on-screen-muted); }
+  .scene .body { fill: none; stroke: var(--text-on-screen-muted); }
+  .playback {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 12px; padding: 6px 10px;
+    background: var(--surface-float); backdrop-filter: var(--float-blur);
+    border: 1px solid var(--line-strong); border-radius: var(--radius-md);
+    font: 400 11px var(--font-mono); color: var(--text); white-space: nowrap;
+  }
+  .playback .track { width: 180px; height: 3px; background: var(--line-strong); border-radius: 2px; position: relative; }
+  .playback .track i { position: absolute; left: 0; top: 0; bottom: 0; width: 42%; background: var(--signal); border-radius: 2px; }
+  .playback .track b { position: absolute; left: 42%; top: -4px; width: 11px; height: 11px; border-radius: 50%; background: var(--surface-raised); border: 2px solid var(--line-ink); }
+  .play { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--line-ink); border-radius: 50%; background: var(--surface-raised); }
+  .scopes { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px var(--space-3); border-bottom: 1px solid var(--line); }
+  .chip { padding: 2px 7px; border: 1px solid var(--line-strong); border-radius: var(--radius-round); font: 400 10px var(--font-mono); color: var(--text-muted); }
+  .chip.on { border-color: var(--line-ink); color: var(--text); }
+  .plot { flex: 1; min-height: 0; margin: 10px; background: var(--surface-screen); border-radius: var(--radius-md); position: relative; overflow: hidden; }
+  .plot svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .plot .g { stroke: rgb(255 255 255 / .08); }
+  .plot .t1 { stroke: var(--signal); fill: none; stroke-width: 1.6; }
+  .plot .t2 { stroke: #4ec9b0; fill: none; stroke-width: 1.4; }
+  .plot text { font: 400 9px var(--font-mono); fill: var(--text-on-screen-muted); }
+
+  /* ---- docs ------------------------------------------------------------------------ */
+  .docs-stage { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .doc-src, .doc-prev { overflow: auto; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 14px 16px; }
+  .doc-src { font: 400 var(--size-2xs) / 1.7 var(--font-mono); color: var(--text-muted); white-space: pre-wrap; }
+  .doc-prev { font: 400 var(--size-xs) / 1.55 var(--font-sans); color: var(--text); }
+  .doc-prev h1 { margin: 0 0 8px; font: 600 19px var(--font-sans); }
+  .doc-prev h2 { margin: 16px 0 6px; font: 600 var(--size-sm) var(--font-sans); }
+  .doc-prev p { margin: 0 0 8px; }
+  .doc-prev code { font: 400 11px var(--font-mono); background: var(--surface-sunken); padding: 1px 4px; border-radius: 3px; }
+  .doc-prev table { width: 100%; border-collapse: collapse; font: 400 11px var(--font-mono); }
+  .doc-prev th, .doc-prev td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  .doc-prev th { color: var(--text-muted); font-weight: 500; }
+  .doc-prev ul { margin: 0 0 8px; padding-left: 18px; }
+  .doc-prev .rev { color: var(--text-muted); font: 400 11px var(--font-mono); }
+
+  /* ---- context menu in the rail ---------------------------------------------------- */
+  .rail-menu { position: absolute; z-index: 55; min-width: 218px; left: 218px; top: 318px; }
+
+  /* ---- sheets ---------------------------------------------------------------------- */
+  .backdrop { position: absolute; inset: 0; z-index: 40; background: rgb(0 0 0 / .22); }
+  .sheet {
+    position: absolute; z-index: 45; left: 50%; bottom: 0; transform: translateX(-50%);
+    width: min(800px, calc(100% - 72px)); display: flex; flex-direction: column;
+    background: var(--surface-panel); border: 1.5px solid var(--line-ink); border-bottom: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0; box-shadow: var(--shadow-up);
+  }
+  .sheet-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .sheet-head h2 { margin: 0; font: 600 var(--size-sm) var(--font-sans); }
+  .sheet-head .sub { font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .sheet-head .spacer { flex: 1; }
+  .sheet-body { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; padding: 16px; }
+  .sheet-body.single { grid-template-columns: 1fr; }
+  .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .field > label { font: 500 var(--size-2xs) var(--font-mono); color: var(--text-muted); }
+  .field .well { height: 30px; padding: 0 9px; font: 400 var(--size-xs) var(--font-mono); color: var(--text); }
+  .kinds { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+  .kind { padding: 8px 9px; text-align: left; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); cursor: pointer; }
+  .kind.on { border-color: var(--line-ink); box-shadow: 0 0 0 1px var(--line-ink); }
+  .kind b { display: block; margin-bottom: 2px; font: 600 var(--size-2xs) var(--font-sans); color: var(--text); }
+  .kind span { display: block; font: 400 10.5px / 1.35 var(--font-sans); color: var(--text-muted); }
+  .skeleton { margin: 0; padding: 10px 12px; background: var(--surface-screen); color: var(--text-on-screen); border-radius: var(--radius-md); font: 400 10.5px / 1.62 var(--font-mono); white-space: pre-wrap; overflow: auto; }
+  .sheet-foot { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-top: 1px solid var(--line); }
+  .sheet-foot .note { font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .sheet-foot .spacer { flex: 1; }
+  .check { display: flex; align-items: center; gap: 7px; min-height: 24px; font: 400 11.5px var(--font-sans); color: var(--text-muted); }
+  .check b { font: 500 var(--size-2xs) var(--font-mono); color: var(--text); }
+
+  /* ---- exchange -------------------------------------------------------------------- */
+  .dropzone { display: grid; place-items: center; gap: 4px; padding: 22px; border: 1.5px dashed var(--line-strong); border-radius: var(--radius-md); color: var(--text-muted); text-align: center; }
+  .dropzone b { font: 600 var(--size-xs) var(--font-sans); color: var(--text); }
+  .dropzone span { font: 400 11px var(--font-mono); }
+  .filecard { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 9px 10px; background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-md); }
+  .filecard .nm { font: 500 var(--size-xs) var(--font-mono); }
+  .filecard .meta { margin-left: auto; font: 400 10.5px var(--font-mono); color: var(--text-muted); }
+  .dep { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: 400 11px var(--font-mono); }
+  .dep + .dep { margin-top: 4px; }
+  .dep .st { width: 12px; text-align: center; }
+  .dep .ok { color: var(--text); }
+  .dep .bad { color: var(--danger); }
+  .dep .spacer { flex: 1; }
+  .target { margin-top: 10px; padding: 8px 10px; background: var(--surface-well); box-shadow: var(--well-shadow); border-radius: var(--radius-md); font: 400 11px var(--font-mono); color: var(--text-muted); }
+  .summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .tag2 { padding: 2px 7px; border: 1px solid var(--line); border-radius: var(--radius-round); font: 400 10.5px var(--font-mono); color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="board">
+  <header class="board-head">
+    <div><b>squero studio OM</b> &nbsp;·&nbsp; #43 authoring shell</div>
+    <span class="note" id="note">canvas mode · documents, views, packages</span>
+    <span class="spacer"></span>
+    <div class="board-actions" id="pages">
+      <button type="button" data-page="diagram" data-note="canvas mode · documents, views, packages" class="on">diagram</button>
+      <button type="button" data-page="icon" data-note="icon authoring is a stage view">icon</button>
+      <button type="button" data-page="three-d" data-note="3D is a stage view, out of the scopes">3d</button>
+      <button type="button" data-page="text" data-note="editing mode · text, messages beside it">text</button>
+      <button type="button" data-page="docs" data-note="write on the left, render on the right">docs</button>
+      <button type="button" data-page="files" data-note="the rail is the workspace">files</button>
+      <button type="button" data-page="new-class" data-note="class creation is a sheet">new class</button>
+      <button type="button" data-page="import" data-note="dependency check before mounting">import</button>
+      <button type="button" data-page="export" data-note=".mo, .molib, .ppk from one sheet">export</button>
+      <span class="sep"></span>
+      <button type="button" id="theme">theme: light</button>
+    </div>
+  </header>
+
+  <div class="frame">
+
+    <!-- ============================================================ page: diagram -->
+    <section class="page on" id="p-diagram">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus">
+            <button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button>
+          </nav>
+          <span class="proj">chiller <i class="dirty" title="unsaved changes"></i></span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" class="on" role="radio" aria-checked="true">canvas</button><button type="button" role="radio" aria-checked="false">editing</button></span>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice" role="radiogroup" aria-label="Rail"><button type="button" class="on" role="radio" aria-checked="true">files</button><button type="button" role="radio" aria-checked="false">library</button></div></div>
+          <div class="panel-head">chiller <span class="count">12 classes</span><button type="button" class="key small" title="New class">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Chiller</span><span class="k">package</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Components</span><span class="k">package</span></div>
+            <div class="tree-row i2 on"><span class="caret"></span><span class="nm">Compressor</span><i class="dirty"></i><span class="k open">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Condenser</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">ExpansionValve</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Evaporator</span><span class="k">model</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Interfaces</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">FluidPort</span><span class="k">connector</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">PartialTwoPort</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Medium</span><span class="k">record</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Saturation</span><span class="k">function</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Controller</span><span class="k">block</span></div>
+            <div class="tree-row"><span class="caret"></span><span class="nm">package.mo</span><span class="k">file</span></div>
+            <div class="tree-row"><span class="caret"></span><span class="nm">package.order</span><span class="k">file</span></div>
+          </div>
+        </aside>
+
+        <main class="stage" aria-label="Compressor">
+          <div class="docbar">
+            <div class="doc on">Compressor <i class="dirty"></i><span class="x">×</span></div>
+            <div class="doc">Chiller <span class="x">×</span></div>
+            <div class="doc">FluidPort <span class="x">×</span></div>
+            <button type="button" class="doc-add" title="New document">+</button>
+            <span class="stage-meta">chiller › Components › Compressor</span>
+          </div>
+          <div class="stage-tabs">
+            <div class="choice" role="radiogroup" aria-label="View">
+              <button type="button" class="on" role="radio" aria-checked="true">diagram</button>
+              <button type="button" role="radio" aria-checked="false">icon</button>
+              <button type="button" role="radio" aria-checked="false">text</button>
+              <button type="button" role="radio" aria-checked="false">docs</button>
+            </div>
+          </div>
+          <div class="canvas">
+            <svg class="wires" aria-hidden="true">
+              <path d="M230 136 H380" />
+              <path d="M530 136 H586 V426 H530" />
+              <path d="M380 426 H230" />
+              <path d="M80 426 V136" />
+            </svg>
+            <div class="plate" style="left:80px; top:110px; width:150px">
+              <div class="phead">evaporator <span class="tag">model</span></div>
+              <div class="pbody"><b>Q</b> = 12 kW</div><span class="port l"></span><span class="port r"></span>
+            </div>
+            <div class="plate" style="left:380px; top:110px; width:150px">
+              <div class="phead">compressor <span class="tag">model</span></div>
+              <div class="pbody"><b>N</b> = 2900 rpm</div><span class="port l"></span><span class="port r"></span>
+            </div>
+            <div class="plate" style="left:380px; top:400px; width:150px">
+              <div class="phead">condenser <span class="tag">model</span></div>
+              <div class="pbody"><b>A</b> = 8 m2</div><span class="port l"></span><span class="port r"></span>
+            </div>
+            <div class="plate sel" style="left:80px; top:400px; width:150px">
+              <div class="phead">expansion <span class="tag">model</span></div>
+              <div class="pbody"><b>Kv</b> = 1.2</div><span class="port l"></span><span class="port r"></span>
+            </div>
+            <div class="legend">32 °C · 8 bar · R134a</div>
+          </div>
+        </main>
+
+        <aside class="side" aria-label="Source">
+          <div class="side-head"><div class="choice"><button type="button" class="on">flat</button><button type="button">causal c++</button></div><span class="spacer"></span><span class="pill2">read-only</span></div>
+          <div class="side-body">
+            <div class="code-head"><b>flat model</b><span class="spacer"></span><span class="pill2">instantiateModel</span></div>
+            <pre class="code"><span class="row"><span class="ln">1</span><span class="src"><span class="tok-keyword">model</span> Compressor</span></span><span class="row"><span class="ln">2</span><span class="src">  <span class="tok-type">Real</span> port_a.m_flow;</span></span><span class="row"><span class="ln">3</span><span class="src">  <span class="tok-type">Real</span> port_b.m_flow;</span></span><span class="row"><span class="ln">4</span><span class="src"><span class="tok-keyword">equation</span></span></span><span class="row"><span class="ln">5</span><span class="src">  port_a.m_flow = port_b.m_flow;</span></span><span class="row"><span class="ln">6</span><span class="src">  <span class="tok-comment">// …</span></span></span></pre>
+          </div>
+        </aside>
+
+        <div class="dock">
+          <span class="balance"><i class="dot"></i> balanced · 214 / 214</span>
+          <span class="undrawn">1 hidden</span>
+          <span class="pill2">checkModel 12 ms</span>
+          <span class="spacer"></span>
+          <span class="pill2">compressor</span>
+          <button type="button" class="key">Export backend</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ page: icon -->
+    <section class="page" id="p-icon">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button></nav>
+          <span class="proj">chiller <i class="dirty" title="unsaved changes"></i></span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" class="on" role="radio" aria-checked="true">canvas</button><button type="button" role="radio" aria-checked="false">editing</button></span>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice" role="radiogroup" aria-label="Rail"><button type="button" class="on" role="radio" aria-checked="true">files</button><button type="button" role="radio" aria-checked="false">library</button></div></div>
+          <div class="panel-head">chiller <span class="count">12 classes</span><button type="button" class="key small" title="New class">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Chiller</span><span class="k">package</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Components</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Compressor</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Condenser</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">ExpansionValve</span><span class="k">model</span></div>
+            <div class="tree-row i2 on"><span class="caret"></span><span class="nm">Pump</span><i class="dirty"></i><span class="k open">block</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Interfaces</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">FluidPort</span><span class="k">connector</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Medium</span><span class="k">record</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Saturation</span><span class="k">function</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Controller</span><span class="k">block</span></div>
+          </div>
+        </aside>
+
+        <main class="stage" aria-label="Pump icon">
+          <div class="docbar">
+            <div class="doc">Compressor <span class="x">×</span></div>
+            <div class="doc on">Pump <i class="dirty"></i><span class="x">×</span></div>
+            <button type="button" class="doc-add">+</button>
+            <span class="stage-meta">chiller › Components › Pump</span>
+          </div>
+          <div class="stage-tabs">
+            <div class="choice" role="radiogroup" aria-label="View">
+              <button type="button" role="radio" aria-checked="false">diagram</button>
+              <button type="button" class="on" role="radio" aria-checked="true">icon</button>
+              <button type="button" role="radio" aria-checked="false">text</button>
+              <button type="button" role="radio" aria-checked="false">docs</button>
+            </div>
+          </div>
+          <div class="icon-stage">
+            <div class="icon-toolbar">
+              <button type="button" class="key small on">select</button>
+              <span class="sep"></span>
+              <button type="button" class="key small">line</button>
+              <button type="button" class="key small">rect</button>
+              <button type="button" class="key small">ellipse</button>
+              <button type="button" class="key small">polygon</button>
+              <button type="button" class="key small">text</button>
+              <span class="sep"></span>
+              <button type="button" class="key small">pin</button>
+              <span class="sep"></span>
+              <button type="button" class="key small">grid 5</button>
+              <button type="button" class="key small">snap</button>
+              <span class="spacer" style="flex:1"></span>
+              <button type="button" class="key small">undo</button>
+              <button type="button" class="key small">redo</button>
+            </div>
+            <div class="icon-board">
+              <svg class="icon-art" viewBox="-110 -110 220 220" aria-label="Pump glyph">
+                <g class="ico">
+                  <circle cx="0" cy="0" r="42" />
+                  <path d="M-72 0 H-42 M42 0 H72" />
+                  <polygon points="-16,-20 20,0 -16,20" />
+                  <circle cx="0" cy="0" r="6" />
+                </g>
+                <rect x="-47" y="-47" width="94" height="94" class="selbox" />
+                <g class="handle"><rect x="-51" y="-51" width="7" height="7"/><rect x="44" y="-51" width="7" height="7"/><rect x="-51" y="44" width="7" height="7"/><rect x="44" y="44" width="7" height="7"/></g>
+                <g class="pinp"><rect x="-5" y="-62" width="10" height="10"/><text x="9" y="-54">port_a</text></g>
+                <g class="pinp"><rect x="-5" y="52" width="10" height="10"/><text x="9" y="68">port_b</text></g>
+              </svg>
+              <span class="extent">extent {{-100, -100}, {100, 100}} · grid 5</span>
+              <span class="zoom">100%</span>
+            </div>
+          </div>
+        </main>
+
+        <aside class="side" aria-label="Icon properties">
+          <div class="side-head"><div class="choice"><button type="button" class="on">icon</button></div><span class="spacer"></span><span class="pill2">200 × 200</span></div>
+          <div class="side-body" style="overflow:auto">
+            <div class="group">
+              <h3>layers</h3>
+              <div class="layer"><span>rect</span><span class="ty">body</span></div>
+              <div class="layer on"><span>ellipse</span><span class="ty">rotor</span></div>
+              <div class="layer"><span>line</span><span class="ty">inlet</span></div>
+              <div class="layer"><span>text</span><span class="ty">P</span></div>
+            </div>
+            <div class="group">
+              <h3>stroke</h3>
+              <div class="row"><span>color</span><div class="choice"><button type="button" class="on">ink</button><button type="button">muted</button><button type="button">signal</button></div></div>
+              <div class="row"><span>weight</span><div class="choice"><button type="button">thin</button><button type="button" class="on">regular</button><button type="button">wire</button></div></div>
+              <div class="row"><span>pattern</span><div class="choice"><button type="button" class="on">solid</button><button type="button">dash</button><button type="button">dot</button></div></div>
+            </div>
+            <div class="group">
+              <h3>fill</h3>
+              <div class="row"><span>color</span><span class="swatches"><i class="swatch none"></i><i class="swatch ink"></i><i class="swatch muted"></i><i class="swatch signal"></i></span></div>
+              <div class="row"><span>pattern</span><div class="choice"><button type="button" class="on">none</button><button type="button">solid</button><button type="button">hatch</button></div></div>
+              <div class="row"><span>corner</span><div class="choice"><button type="button" class="on">sm</button><button type="button">md</button><button type="button">lg</button></div></div>
+            </div>
+            <div class="group">
+              <h3>connectors</h3>
+              <div class="row"><span>port_a</span><span class="pill2">FluidPort · north</span></div>
+              <div class="row"><span>port_b</span><span class="pill2">FluidPort · south</span></div>
+              <div class="row"><span>+ add pin</span><span class="pill2">snap to edge</span></div>
+            </div>
+            <div class="group" style="border-bottom:0">
+              <h3>preview</h3>
+              <div class="preview-strip" style="padding:0">
+                <span class="tile" style="width:52px;height:52px"><svg viewBox="-110 -110 220 220"><g class="ico"><circle cx="0" cy="0" r="42"/><path d="M-72 0 H-42 M42 0 H72"/><polygon points="-16,-20 20,0 -16,20"/></g></svg></span>
+                <span class="tile" style="width:38px;height:38px"><svg viewBox="-110 -110 220 220"><g class="ico"><circle cx="0" cy="0" r="42"/><path d="M-72 0 H-42 M42 0 H72"/><polygon points="-16,-20 20,0 -16,20"/></g></svg></span>
+                <span class="tile dark" style="width:38px;height:38px"><svg viewBox="-110 -110 220 220"><g class="ico"><circle cx="0" cy="0" r="42"/><path d="M-72 0 H-42 M42 0 H72"/><polygon points="-16,-20 20,0 -16,20"/></g></svg></span>
+                <span class="lbl">52 · 38 · 38 dark</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="dock">
+          <span class="balance"><i class="dot"></i> balanced · 8 / 8</span>
+          <span class="pill2">icon + 2 pins</span>
+          <span class="spacer"></span>
+          <span class="pill2">saved to annotation(Icon(graphics = {…}))</span>
+          <button type="button" class="key">Save</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ page: 3d -->
+    <section class="page" id="p-three-d">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button></nav>
+          <span class="proj">DoublePendulum</span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" class="on" role="radio" aria-checked="true">canvas</button><button type="button" role="radio" aria-checked="false">editing</button></span>
+          <button type="button" class="key small err" title="Open the Console">1 log</button>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice" role="radiogroup" aria-label="Rail"><button type="button" class="on" role="radio" aria-checked="true">files</button><button type="button" role="radio" aria-checked="false">library</button></div></div>
+          <div class="panel-head">workspace <span class="count">4 classes</span><button type="button" class="key small" title="New class">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">examples</span><span class="k">folder</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">multibody</span><span class="k">folder</span></div>
+            <div class="tree-row i2 on"><span class="caret"></span><span class="nm">DoublePendulum</span><span class="k open">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Swing</span><span class="k">model</span></div>
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Modelica</span><span class="k">library</span></div>
+            <div class="tree-row i1"><span class="caret">▸</span><span class="nm">Mechanics</span></div>
+            <div class="tree-row i1"><span class="caret">▸</span><span class="nm">Blocks</span></div>
+          </div>
+        </aside>
+
+        <main class="stage" aria-label="DoublePendulum 3d">
+          <div class="docbar">
+            <div class="doc on">DoublePendulum <span class="x">×</span></div>
+            <div class="doc">Swing <span class="x">×</span></div>
+            <button type="button" class="doc-add">+</button>
+            <span class="stage-meta">examples › multibody › DoublePendulum</span>
+          </div>
+          <div class="stage-tabs">
+            <div class="choice" role="radiogroup" aria-label="View">
+              <button type="button" role="radio" aria-checked="false">diagram</button>
+              <button type="button" role="radio" aria-checked="false">icon</button>
+              <button type="button" role="radio" aria-checked="false">text</button>
+              <button type="button" role="radio" aria-checked="false">docs</button>
+              <button type="button" class="on" role="radio" aria-checked="true">3d</button>
+            </div>
+          </div>
+          <div class="viewport">
+            <svg class="scene" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <g class="grid">
+                <path d="M0 430 L900 430" /><path d="M0 470 L900 470" />
+                <path d="M120 520 L450 350" /><path d="M300 520 L450 350" /><path d="M600 520 L450 350" /><path d="M780 520 L450 350" />
+                <path d="M60 430 L330 300" /><path d="M840 430 L570 300" />
+              </g>
+              <g class="body"><path d="M410 380 h80 v34 h-80 z" /><path d="M450 414 v18" /></g>
+              <g class="arm">
+                <line x1="450" y1="300" x2="560" y2="190" />
+                <line x1="560" y1="190" x2="470" y2="90" />
+              </g>
+              <circle cx="450" cy="300" r="9" class="joint" />
+              <circle cx="560" cy="190" r="9" class="joint" />
+              <circle cx="470" cy="90" r="9" class="joint" />
+              <text x="575" y="186" class="lbl">revolute1</text>
+              <text x="485" y="86" class="lbl">revolute2</text>
+              <text x="412" y="404" class="lbl">world</text>
+              <g class="axis" transform="translate(54,474)">
+                <path d="M0 0 H30" stroke="#d92d20" /><path d="M0 0 V-30" stroke="#4ec9b0" /><path d="M0 0 L-18 12" stroke="#98c379" />
+                <text x="34" y="3" class="lbl">x</text><text x="-4" y="-34" class="lbl">y</text><text x="-26" y="20" class="lbl">z</text>
+              </g>
+            </svg>
+            <div class="playback">
+              <span class="play" aria-hidden="true">▶</span>
+              <span>0.84 s</span>
+              <span class="track"><i></i><b></b></span>
+              <span>2.00 s</span>
+              <span class="pill2">1×</span>
+            </div>
+          </div>
+        </main>
+
+        <aside class="side" aria-label="Scopes">
+          <div class="side-head"><div class="choice"><button type="button" class="on">scopes</button></div><span class="spacer"></span><span class="pill2">run 3</span></div>
+          <div class="scopes">
+            <div class="chips"><span class="chip on">theta1</span><span class="chip">omega1</span><span class="chip on">theta2</span><span class="chip">omega2</span><span class="chip">energy</span></div>
+            <div class="plot">
+              <svg viewBox="0 0 360 220" preserveAspectRatio="none" aria-hidden="true">
+                <g class="g"><path d="M0 55 H360" /><path d="M0 110 H360" /><path d="M0 165 H360" /><path d="M90 0 V220" /><path d="M180 0 V220" /><path d="M270 0 V220" /></g>
+                <path class="t1" d="M0 90 C30 90 40 40 70 40 S110 150 150 150 S200 60 240 60 S300 140 360 140" />
+                <path class="t2" d="M0 140 C40 140 60 100 100 100 S160 180 200 180 S260 90 300 90 S340 120 360 120" />
+                <text x="8" y="14">1.4</text><text x="8" y="214">−1.4</text><text x="316" y="214">2.0 s</text>
+              </svg>
+            </div>
+          </div>
+        </aside>
+
+        <div class="dock">
+          <span class="balance"><i class="dot"></i> running · 0.84 / 2.00 s</span>
+          <span class="pill2">8 shapes</span>
+          <span class="spacer"></span>
+          <span class="pill2">dassl · 1e-6 · 500 intervals</span>
+          <button type="button" class="key">Stop</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ page: text -->
+    <section class="page" id="p-text">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button></nav>
+          <span class="proj">chiller <i class="dirty" title="unsaved changes"></i></span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" role="radio" aria-checked="false">canvas</button><button type="button" class="on" role="radio" aria-checked="true">editing</button></span>
+          <button type="button" class="key small err" title="Open the messages">2 errors</button>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice" role="radiogroup" aria-label="Rail"><button type="button" class="on" role="radio" aria-checked="true">files</button><button type="button" role="radio" aria-checked="false">library</button></div></div>
+          <div class="panel-head">chiller <span class="count">12 classes</span><button type="button" class="key small" title="New class">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Chiller</span><span class="k">package</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Components</span><span class="k">package</span></div>
+            <div class="tree-row i2 on"><span class="caret"></span><span class="nm">Compressor</span><i class="dirty"></i><span class="k open">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Condenser</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">ExpansionValve</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Evaporator</span><span class="k">model</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Interfaces</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">FluidPort</span><span class="k">connector</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Medium</span><span class="k">record</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Saturation</span><span class="k">function</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Controller</span><span class="k">block</span></div>
+          </div>
+        </aside>
+
+        <main class="stage" aria-label="Compressor text">
+          <div class="docbar">
+            <div class="doc on">Compressor <i class="dirty"></i><span class="x">×</span></div>
+            <div class="doc">Chiller <span class="x">×</span></div>
+            <div class="doc">FluidPort <span class="x">×</span></div>
+            <button type="button" class="doc-add">+</button>
+            <span class="stage-meta">chiller › Components › Compressor</span>
+          </div>
+          <div class="stage-tabs">
+            <div class="choice" role="radiogroup" aria-label="View">
+              <button type="button" role="radio" aria-checked="false">diagram</button>
+              <button type="button" role="radio" aria-checked="false">icon</button>
+              <button type="button" class="on" role="radio" aria-checked="true">text</button>
+              <button type="button" role="radio" aria-checked="false">docs</button>
+            </div>
+          </div>
+          <div class="ed-toolbar">
+            <span class="crumb">chiller › Components › Compressor</span>
+            <span class="spacer"></span>
+            <span class="saved">saved 2 s ago</span>
+            <button type="button" class="key small">Show flat</button>
+            <button type="button" class="key small ink">Check model</button>
+          </div>
+          <div class="editor" role="textbox" aria-label="Modelica source">
+            <div class="row"><span class="ln">1</span><span class="src"><span class="tok-keyword">within</span> Chiller.Components;</span></div>
+            <div class="row"><span class="ln">2</span><span class="src"></span></div>
+            <div class="row"><span class="ln">3</span><span class="src"><span class="tok-keyword">model</span> <span class="tok-type">Compressor</span></span></div>
+            <div class="row"><span class="ln">4</span><span class="src">  <span class="tok-string">"Scroll compressor with a variable speed drive."</span></span></div>
+            <div class="row hit"><span class="ln">5<i class="mark err"></i></span><span class="src">  <span class="tok-keyword">extends</span> <span class="squig">Chiller.Interfaces.PartialTwoPort</span>;</span></div>
+            <div class="row"><span class="ln">6</span><span class="src"></span></div>
+            <div class="row"><span class="ln">7</span><span class="src">  <span class="tok-keyword">parameter</span> <span class="tok-type">Real</span> displacement = <span class="tok-number">12.5</span> <span class="tok-string">"cm3 per revolution"</span>;</span></div>
+            <div class="row"><span class="ln">8<i class="mark warn"></i></span><span class="src">  <span class="tok-keyword">parameter</span> <span class="tok-type">Real</span> eta = <span class="tok-number">0.72</span> <span class="tok-string">"volumetric efficiency"</span>;</span></div>
+            <div class="row"><span class="ln">9</span><span class="src">  <span class="tok-type">Real</span> speed(<span class="tok-annotation">unit</span> = <span class="tok-string">"rev/min"</span>) = <span class="tok-number">2900</span>;</span></div>
+            <div class="row"><span class="ln">10</span><span class="src"></span></div>
+            <div class="row"><span class="ln">11</span><span class="src"><span class="tok-keyword">equation</span></span></div>
+            <div class="row"><span class="ln">12</span><span class="src">  port_a.m_flow = port_b.m_flow;</span></div>
+            <div class="row"><span class="ln">13</span><span class="src">  port_a.h_outflow = port_b.h_outflow;</span></div>
+            <div class="row hit"><span class="ln">14<i class="mark err"></i></span><span class="src">  <span class="tok-keyword">der</span>(v) = <span class="tok-number">0</span>;</span></div>
+            <div class="row"><span class="ln">15</span><span class="src"><span class="tok-keyword">end</span> <span class="tok-type">Compressor</span>;</span></div>
+          </div>
+        </main>
+
+        <aside class="side" aria-label="Messages">
+          <div class="side-head"><div class="choice"><button type="button" class="on">messages</button></div><span class="spacer"></span><span class="pill2">checkModel</span></div>
+          <div class="side-body">
+            <div class="msgpane">
+              <div class="msg-head">
+                <div class="msg-title"><h2>messages</h2><span class="sub">Compressor · 12 ms</span></div>
+                <span class="spacer"></span>
+              </div>
+              <div class="choice" role="radiogroup" aria-label="Filter">
+                <button type="button" class="on" role="radio" aria-checked="true">all 4</button>
+                <button type="button" role="radio" aria-checked="false">errors 2</button>
+                <button type="button" role="radio" aria-checked="false">warnings 2</button>
+              </div>
+              <div class="msg-list">
+                <article class="msg error sel">
+                  <span class="lvl">error</span>
+                  <div class="body"><p class="text">Class Chiller.Interfaces.PartialTwoPort not found in scope Compressor.</p><button type="button" class="where">Compressor.mo:5:11</button></div>
+                </article>
+                <article class="msg error">
+                  <span class="lvl">error</span>
+                  <div class="body"><p class="text">Variable v not found in scope Compressor.</p><button type="button" class="where">Compressor.mo:14:7</button></div>
+                </article>
+                <article class="msg warning">
+                  <span class="lvl">warning</span>
+                  <div class="body"><p class="text">Parameter eta has no unit; the checker assumes 1.</p><button type="button" class="where">Compressor.mo:8:16</button></div>
+                </article>
+                <article class="msg warning">
+                  <span class="lvl">warning</span>
+                  <div class="body"><p class="text">Compressor requested package Modelica of version 3.2.3; 4.1.0 is used instead.</p></div>
+                </article>
+              </div>
+              <div class="msg-foot"><span>Click a card to put its line in view; the location opens it.</span><span class="spacer" style="flex:1"></span><button type="button" class="key small">Check model</button></div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="dock">
+          <span class="balance" style="background:var(--danger);color:#fff"><i class="dot"></i> 0 / 0 · error</span>
+          <span class="pill2">line 5</span>
+          <span class="spacer"></span>
+          <span class="pill2">unsaved · 14 lines</span>
+          <button type="button" class="key">Save</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ page: docs -->
+    <section class="page" id="p-docs">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button></nav>
+          <span class="proj">chiller <i class="dirty" title="unsaved changes"></i></span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" role="radio" aria-checked="false">canvas</button><button type="button" class="on" role="radio" aria-checked="true">editing</button></span>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice" role="radiogroup" aria-label="Rail"><button type="button" class="on" role="radio" aria-checked="true">files</button><button type="button" role="radio" aria-checked="false">library</button></div></div>
+          <div class="panel-head">chiller <span class="count">12 classes</span><button type="button" class="key small" title="New class">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Chiller</span><span class="k">package</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Components</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Compressor</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Condenser</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">ExpansionValve</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Evaporator</span><span class="k">model</span></div>
+            <div class="tree-row i1 on"><span class="caret">▾</span><span class="nm">Interfaces</span><span class="k open">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">FluidPort</span><span class="k">connector</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Medium</span><span class="k">record</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Saturation</span><span class="k">function</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Controller</span><span class="k">block</span></div>
+          </div>
+        </aside>
+
+        <main class="stage" aria-label="Chiller documentation">
+          <div class="docbar">
+            <div class="doc">Compressor <span class="x">×</span></div>
+            <div class="doc on">Chiller <i class="dirty"></i><span class="x">×</span></div>
+            <div class="doc">FluidPort <span class="x">×</span></div>
+            <button type="button" class="doc-add">+</button>
+            <span class="stage-meta">chiller › Documentation</span>
+          </div>
+          <div class="stage-tabs">
+            <div class="choice" role="radiogroup" aria-label="View">
+              <button type="button" role="radio" aria-checked="false">diagram</button>
+              <button type="button" role="radio" aria-checked="false">icon</button>
+              <button type="button" role="radio" aria-checked="false">text</button>
+              <button type="button" class="on" role="radio" aria-checked="true">docs</button>
+            </div>
+          </div>
+          <div class="ed-toolbar">
+            <div class="choice"><button type="button" class="on">write</button><button type="button">preview</button></div>
+            <span class="sep" style="width:1px;height:16px;background:var(--line)"></span>
+            <button type="button" class="key small">B</button>
+            <button type="button" class="key small">I</button>
+            <button type="button" class="key small">code</button>
+            <button type="button" class="key small">link</button>
+            <button type="button" class="key small">table</button>
+            <span class="spacer"></span>
+            <span class="saved">saved 6 s ago</span>
+          </div>
+          <div class="docs-stage">
+            <div class="doc-src"># Chiller
+
+A water-cooled chiller with a **variable speed** compressor.
+
+## Parameters
+
+| name | unit | default | meaning |
+| --- | --- | --- | --- |
+| capacity | kW | 12 | nominal cooling |
+| eta | – | 0.72 | volumetric efficiency |
+
+## Revisions
+
+- **1.2** — speed input
+- **1.0** — first version
+
+See `Chiller.Components.Compressor` for the compressor model.</div>
+            <div class="doc-prev">
+              <h1>Chiller</h1>
+              <p>A water-cooled chiller with a <b>variable speed</b> compressor.</p>
+              <h2>Parameters</h2>
+              <table>
+                <thead><tr><th>name</th><th>unit</th><th>default</th><th>meaning</th></tr></thead>
+                <tbody><tr><td>capacity</td><td>kW</td><td>12</td><td>nominal cooling</td></tr><tr><td>eta</td><td>–</td><td>0.72</td><td>volumetric efficiency</td></tr></tbody>
+              </table>
+              <h2>Revisions</h2>
+              <ul><li><b>1.2</b> — speed input</li><li><b>1.0</b> — first version</li></ul>
+              <p>See <code>Chiller.Components.Compressor</code> for the compressor model.</p>
+            </div>
+          </div>
+        </main>
+
+        <aside class="side" aria-label="Messages">
+          <div class="side-head"><div class="choice"><button type="button" class="on">messages</button></div><span class="spacer"></span><span class="pill2">docs only</span></div>
+          <div class="side-body">
+            <div class="msgpane">
+              <div class="msg-head"><div class="msg-title"><h2>messages</h2><span class="sub">Chiller · not checked</span></div><span class="spacer"></span></div>
+              <div class="msg-list">
+                <p style="margin:0;padding:14px 0;font:400 var(--size-2xs) var(--font-sans);color:var(--text-muted)">Documentation edits do not touch the model. Check when you change equations.</p>
+              </div>
+              <div class="msg-foot"><span>Model ▸ Check Model also writes the messages here.</span><span class="spacer" style="flex:1"></span><button type="button" class="key small">Check model</button></div>
+            </div>
+          </div>
+        </aside>
+
+        <div class="dock">
+          <span class="balance"><i class="dot"></i> balanced · 214 / 214</span>
+          <span class="pill2">annotation(Documentation(info = "…"))</span>
+          <span class="spacer"></span>
+          <span class="pill2">12 lines</span>
+          <button type="button" class="key">Save</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ page: files -->
+    <section class="page" id="p-files">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button></nav>
+          <span class="proj">chiller <i class="dirty" title="unsaved changes"></i></span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" class="on" role="radio" aria-checked="true">canvas</button><button type="button" role="radio" aria-checked="false">editing</button></span>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice" role="radiogroup" aria-label="Rail"><button type="button" class="on" role="radio" aria-checked="true">files</button><button type="button" role="radio" aria-checked="false">library</button></div></div>
+          <div class="panel-head">chiller <span class="count">12 classes</span><button type="button" class="key small" title="New class">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Chiller</span><span class="k">package</span></div>
+            <div class="tree-row i1 on"><span class="caret">▾</span><span class="nm">Components</span><span class="k open">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Compressor</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Condenser</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">ExpansionValve</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Evaporator</span><span class="k">model</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Interfaces</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">FluidPort</span><span class="k">connector</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">PartialTwoPort</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Medium</span><span class="k">record</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Saturation</span><span class="k">function</span></div>
+            <div class="tree-row i1"><span class="caret"></span><span class="nm">Controller</span><span class="k">block</span></div>
+            <div class="tree-row"><span class="caret"></span><span class="nm">package.mo</span><span class="k">file</span></div>
+            <div class="tree-row"><span class="caret"></span><span class="nm">package.order</span><span class="k">file</span></div>
+          </div>
+        </aside>
+
+        <main class="stage" aria-label="Compressor">
+          <div class="docbar">
+            <div class="doc on">Compressor <i class="dirty"></i><span class="x">×</span></div>
+            <div class="doc">Chiller <span class="x">×</span></div>
+            <div class="doc">FluidPort <span class="x">×</span></div>
+            <button type="button" class="doc-add">+</button>
+            <span class="stage-meta">chiller › Components › Compressor</span>
+          </div>
+          <div class="stage-tabs">
+            <div class="choice" role="radiogroup" aria-label="View">
+              <button type="button" class="on" role="radio" aria-checked="true">diagram</button>
+              <button type="button" role="radio" aria-checked="false">icon</button>
+              <button type="button" role="radio" aria-checked="false">text</button>
+              <button type="button" role="radio" aria-checked="false">docs</button>
+            </div>
+          </div>
+          <div class="canvas">
+            <svg class="wires" aria-hidden="true"><path d="M230 136 H380" /><path d="M530 136 H586 V426 H530" /><path d="M380 426 H230" /><path d="M80 426 V136" /></svg>
+            <div class="plate" style="left:80px; top:110px; width:150px"><div class="phead">evaporator <span class="tag">model</span></div><div class="pbody"><b>Q</b> = 12 kW</div><span class="port l"></span><span class="port r"></span></div>
+            <div class="plate" style="left:380px; top:110px; width:150px"><div class="phead">compressor <span class="tag">model</span></div><div class="pbody"><b>N</b> = 2900 rpm</div><span class="port l"></span><span class="port r"></span></div>
+            <div class="plate" style="left:380px; top:400px; width:150px"><div class="phead">condenser <span class="tag">model</span></div><div class="pbody"><b>A</b> = 8 m2</div><span class="port l"></span><span class="port r"></span></div>
+            <div class="plate sel" style="left:80px; top:400px; width:150px"><div class="phead">expansion <span class="tag">model</span></div><div class="pbody"><b>Kv</b> = 1.2</div><span class="port l"></span><span class="port r"></span></div>
+          </div>
+        </main>
+
+        <aside class="side" aria-label="Source">
+          <div class="side-head"><div class="choice"><button type="button" class="on">flat</button><button type="button">causal c++</button></div><span class="spacer"></span><span class="pill2">read-only</span></div>
+          <div class="side-body"><div class="code-head"><b>flat model</b><span class="spacer"></span><span class="pill2">instantiateModel</span></div><pre class="code"><span class="row"><span class="ln">1</span><span class="src"><span class="tok-keyword">model</span> Compressor</span></span><span class="row"><span class="ln">2</span><span class="src">  <span class="tok-type">Real</span> port_a.m_flow;</span></span><span class="row"><span class="ln">3</span><span class="src">  <span class="tok-type">Real</span> port_b.m_flow;</span></span><span class="row"><span class="ln">4</span><span class="src"><span class="tok-keyword">equation</span></span></span><span class="row"><span class="ln">5</span><span class="src">  port_a.m_flow = port_b.m_flow;</span></span></pre></div>
+        </aside>
+
+        <div class="menu-pop rail-menu open" role="menu" aria-label="Components">
+          <button type="button" class="mi" role="menuitem"><span class="chk"></span><span>New Class…</span><kbd>Ctrl+N</kbd></button>
+          <button type="button" class="mi" role="menuitem"><span class="chk"></span><span>New Package</span></button>
+          <button type="button" class="mi" role="menuitem"><span class="chk"></span><span>Duplicate</span></button>
+          <button type="button" class="mi" role="menuitem"><span class="chk"></span><span>Rename</span><kbd>F2</kbd></button>
+          <button type="button" class="mi" role="menuitem"><span class="chk"></span><span>Delete</span></button>
+          <hr />
+          <button type="button" class="mi" role="menuitem"><span class="chk"></span><span>Reveal in file manager</span></button>
+          <button type="button" class="mi" role="menuitem"><span class="chk"></span><span>Copy path</span></button>
+        </div>
+
+        <div class="dock">
+          <span class="balance"><i class="dot"></i> balanced · 214 / 214</span>
+          <span class="pill2">workspace · chiller/</span>
+          <span class="spacer"></span>
+          <span class="pill2">package.order in sync</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ page: new class -->
+    <section class="page" id="p-new-class">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button></nav>
+          <span class="proj">chiller</span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" class="on" role="radio" aria-checked="true">canvas</button><button type="button" role="radio" aria-checked="false">editing</button></span>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice"><button type="button" class="on">files</button><button type="button">library</button></div></div>
+          <div class="panel-head">chiller <span class="count">12 classes</span><button type="button" class="key small">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Chiller</span><span class="k">package</span></div>
+            <div class="tree-row i1 on"><span class="caret">▾</span><span class="nm">Components</span><span class="k open">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Compressor</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Condenser</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Evaporator</span><span class="k">model</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Interfaces</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">FluidPort</span><span class="k">connector</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Medium</span><span class="k">record</span></div>
+          </div>
+        </aside>
+        <main class="stage" aria-label="Compressor">
+          <div class="docbar"><div class="doc on">Compressor <span class="x">×</span></div><div class="doc">Chiller <span class="x">×</span></div><span class="stage-meta">chiller › Components</span></div>
+          <div class="stage-tabs"><div class="choice"><button type="button" class="on">diagram</button><button type="button">icon</button><button type="button">text</button><button type="button">docs</button></div></div>
+          <div class="canvas">
+            <svg class="wires" aria-hidden="true"><path d="M230 136 H380" /><path d="M530 136 H586 V426 H530" /><path d="M380 426 H230" /><path d="M80 426 V136" /></svg>
+            <div class="plate" style="left:80px; top:110px; width:150px"><div class="phead">evaporator <span class="tag">model</span></div><div class="pbody"><b>Q</b> = 12 kW</div><span class="port l"></span><span class="port r"></span></div>
+            <div class="plate" style="left:380px; top:110px; width:150px"><div class="phead">compressor <span class="tag">model</span></div><div class="pbody"><b>N</b> = 2900 rpm</div><span class="port l"></span><span class="port r"></span></div>
+            <div class="plate" style="left:380px; top:400px; width:150px"><div class="phead">condenser <span class="tag">model</span></div><div class="pbody"><b>A</b> = 8 m2</div><span class="port l"></span><span class="port r"></span></div>
+          </div>
+        </main>
+        <aside class="side" aria-label="Source">
+          <div class="side-head"><div class="choice"><button type="button" class="on">flat</button><button type="button">causal c++</button></div><span class="spacer"></span><span class="pill2">read-only</span></div>
+          <div class="side-body"><pre class="code"><span class="row"><span class="ln">1</span><span class="src"><span class="tok-keyword">model</span> Compressor</span></span><span class="row"><span class="ln">2</span><span class="src">  <span class="tok-type">Real</span> port_a.m_flow;</span></span></pre></div>
+        </aside>
+        <div class="dock"><span class="balance"><i class="dot"></i> balanced · 214 / 214</span><span class="spacer"></span><button type="button" class="key">Export backend</button></div>
+
+        <div class="backdrop"></div>
+        <div class="sheet" role="dialog" aria-label="New class" aria-modal="true">
+          <div class="sheet-head"><h2>New Class</h2><span class="sub">in Chiller.Components</span><span class="spacer"></span><button type="button" class="key small">Close</button></div>
+          <div class="sheet-body">
+            <div>
+              <div class="field"><label for="nc-name">name</label><div class="well" id="nc-name">ExpansionValve</div></div>
+              <div class="field"><label>kind</label>
+                <div class="kinds">
+                  <button type="button" class="kind on"><b>model</b><span>parts, equations, connectors</span></button>
+                  <button type="button" class="kind"><b>block</b><span>causal inputs and outputs</span></button>
+                  <button type="button" class="kind"><b>connector</b><span>potential and flow variables</span></button>
+                  <button type="button" class="kind"><b>record</b><span>typed parameter fields</span></button>
+                  <button type="button" class="kind"><b>function</b><span>algorithm with inputs</span></button>
+                </div>
+              </div>
+              <div class="field"><label for="nc-base">base class</label><div class="well" id="nc-base">Chiller.Interfaces.PartialTwoPort <span style="margin-left:auto;opacity:.6">▾</span></div></div>
+              <div class="field" style="margin-bottom:6px"><label>on create</label>
+                <div class="check"><b>[x]</b> add to package.order</div>
+                <div class="check"><b>[x]</b> open in the diagram view</div>
+                <div class="check"><b>[ ]</b> start from the base class icon</div>
+              </div>
+            </div>
+            <div>
+              <div class="field"><label>skeleton</label><pre class="skeleton">within Chiller.Components;
+
+model ExpansionValve
+  "A thermostatic expansion valve."
+  extends Chiller.Interfaces.PartialTwoPort;
+
+  parameter Real Kv = 1.2;
+equation
+  // …
+end ExpansionValve;</pre></div>
+            </div>
+          </div>
+          <div class="sheet-foot"><span class="note">one sheet; the canvas stays visible behind it</span><span class="spacer"></span><button type="button" class="key">Cancel</button><button type="button" class="key ink">Create class</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ page: import -->
+    <section class="page" id="p-import">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button></nav>
+          <span class="proj">chiller</span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" class="on" role="radio" aria-checked="true">canvas</button><button type="button" role="radio" aria-checked="false">editing</button></span>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice"><button type="button" class="on">files</button><button type="button">library</button></div></div>
+          <div class="panel-head">chiller <span class="count">12 classes</span><button type="button" class="key small">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Chiller</span><span class="k">package</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Components</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Compressor</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Condenser</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Evaporator</span><span class="k">model</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Interfaces</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">FluidPort</span><span class="k">connector</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Medium</span><span class="k">record</span></div>
+          </div>
+        </aside>
+        <main class="stage" aria-label="Compressor">
+          <div class="docbar"><div class="doc on">Compressor <span class="x">×</span></div><div class="doc">Chiller <span class="x">×</span></div><span class="stage-meta">chiller › Components</span></div>
+          <div class="stage-tabs"><div class="choice"><button type="button" class="on">diagram</button><button type="button">icon</button><button type="button">text</button><button type="button">docs</button></div></div>
+          <div class="canvas">
+            <svg class="wires" aria-hidden="true"><path d="M230 136 H380" /><path d="M530 136 H586 V426 H530" /><path d="M380 426 H230" /><path d="M80 426 V136" /></svg>
+            <div class="plate" style="left:80px; top:110px; width:150px"><div class="phead">evaporator <span class="tag">model</span></div><div class="pbody"><b>Q</b> = 12 kW</div><span class="port l"></span><span class="port r"></span></div>
+            <div class="plate" style="left:380px; top:110px; width:150px"><div class="phead">compressor <span class="tag">model</span></div><div class="pbody"><b>N</b> = 2900 rpm</div><span class="port l"></span><span class="port r"></span></div>
+          </div>
+        </main>
+        <aside class="side" aria-label="Source">
+          <div class="side-head"><div class="choice"><button type="button" class="on">flat</button><button type="button">causal c++</button></div><span class="spacer"></span><span class="pill2">read-only</span></div>
+          <div class="side-body"><pre class="code"><span class="row"><span class="ln">1</span><span class="src"><span class="tok-keyword">model</span> Compressor</span></span><span class="row"><span class="ln">2</span><span class="src">  <span class="tok-type">Real</span> port_a.m_flow;</span></span></pre></div>
+        </aside>
+        <div class="dock"><span class="balance"><i class="dot"></i> balanced · 214 / 214</span><span class="spacer"></span><button type="button" class="key">Export backend</button></div>
+
+        <div class="backdrop"></div>
+        <div class="sheet" role="dialog" aria-label="Import" aria-modal="true">
+          <div class="sheet-head"><h2>Import</h2><span class="sub">into chiller</span><span class="spacer"></span><div class="choice"><button type="button" class="on">import</button><button type="button">export</button></div></div>
+          <div class="sheet-body">
+            <div>
+              <div class="dropzone"><b>Drop a .mo file, a .molib bundle, or a package folder</b><span>or choose a file…</span></div>
+              <div class="filecard"><span class="nm">Chiller.molib</span><span class="meta">12 classes · 3 packages · 48 kB</span></div>
+              <div style="margin-top:12px">
+                <div class="dep"><span class="st bad">✕</span><span>Buildings 11.0.0</span><span class="spacer"></span><button type="button" class="key small">Load</button></div>
+                <div class="dep"><span class="st ok">✓</span><span>Modelica 4.1.0</span><span class="spacer"></span><span class="ok">loaded</span></div>
+                <div class="dep"><span class="st ok">✓</span><span>ModelicaServices 4.1.0</span><span class="spacer"></span><span class="ok">loaded</span></div>
+              </div>
+              <p style="margin:10px 0 0;font:400 11px var(--font-sans);color:var(--text-muted)">One dependency is missing. Load it before importing, or import and the classes that use it stay unopened.</p>
+            </div>
+            <div>
+              <div class="field"><label>what arrives</label>
+                <div class="summary"><span class="tag2">8 models</span><span class="tag2">2 blocks</span><span class="tag2">1 connector</span><span class="tag2">1 record</span></div>
+              </div>
+              <div class="field"><label>syntax check</label>
+                <div class="dep"><span class="st ok">✓</span><span>12 classes parsed by omc</span></div>
+                <div class="dep"><span class="st bad">✕</span><span>1 class needs Buildings</span></div>
+              </div>
+              <div class="field" style="margin-bottom:0"><label>collision</label><div class="dep"><span class="st">–</span><span>no class name clashes</span></div></div>
+            </div>
+          </div>
+          <div class="sheet-foot"><span class="note">dependency state is checked before anything mounts</span><span class="spacer"></span><button type="button" class="key">Cancel</button><button type="button" class="key ink">Import into workspace</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ page: export -->
+    <section class="page" id="p-export">
+      <div class="studio">
+        <header class="bar">
+          <span class="wm">squero <span class="muted">studio</span><span class="badge">OM</span><span class="water" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+          <nav class="menus" aria-label="Menus"><button type="button">File</button><button type="button">Edit</button><button type="button">View</button><button type="button">Model</button><button type="button">Run</button></nav>
+          <span class="proj">chiller</span>
+          <span class="spacer"></span>
+          <span class="choice mode" role="radiogroup" aria-label="Mode"><button type="button" class="on" role="radio" aria-checked="true">canvas</button><button type="button" role="radio" aria-checked="false">editing</button></span>
+          <span class="pill"><i class="dot"></i> omc 1.27.1 · ready</span>
+          <button type="button" class="key small theme-key">auto</button>
+        </header>
+        <aside class="library" aria-label="Files">
+          <div class="rail-tabs"><div class="choice"><button type="button" class="on">files</button><button type="button">library</button></div></div>
+          <div class="panel-head">chiller <span class="count">12 classes</span><button type="button" class="key small">+</button></div>
+          <div class="lib-search"><div class="well">filter classes…</div></div>
+          <div class="tree">
+            <div class="tree-row"><span class="caret">▾</span><span class="nm">Chiller</span><span class="k">package</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Components</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Compressor</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Condenser</span><span class="k">model</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Evaporator</span><span class="k">model</span></div>
+            <div class="tree-row i1"><span class="caret">▾</span><span class="nm">Interfaces</span><span class="k">package</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">FluidPort</span><span class="k">connector</span></div>
+            <div class="tree-row i2"><span class="caret"></span><span class="nm">Medium</span><span class="k">record</span></div>
+          </div>
+        </aside>
+        <main class="stage" aria-label="Compressor">
+          <div class="docbar"><div class="doc on">Compressor <span class="x">×</span></div><div class="doc">Chiller <span class="x">×</span></div><span class="stage-meta">chiller › Components</span></div>
+          <div class="stage-tabs"><div class="choice"><button type="button" class="on">diagram</button><button type="button">icon</button><button type="button">text</button><button type="button">docs</button></div></div>
+          <div class="canvas">
+            <svg class="wires" aria-hidden="true"><path d="M230 136 H380" /><path d="M530 136 H586 V426 H530" /><path d="M380 426 H230" /><path d="M80 426 V136" /></svg>
+            <div class="plate" style="left:80px; top:110px; width:150px"><div class="phead">evaporator <span class="tag">model</span></div><div class="pbody"><b>Q</b> = 12 kW</div><span class="port l"></span><span class="port r"></span></div>
+            <div class="plate" style="left:380px; top:110px; width:150px"><div class="phead">compressor <span class="tag">model</span></div><div class="pbody"><b>N</b> = 2900 rpm</div><span class="port l"></span><span class="port r"></span></div>
+          </div>
+        </main>
+        <aside class="side" aria-label="Source">
+          <div class="side-head"><div class="choice"><button type="button" class="on">flat</button><button type="button">causal c++</button></div><span class="spacer"></span><span class="pill2">read-only</span></div>
+          <div class="side-body"><pre class="code"><span class="row"><span class="ln">1</span><span class="src"><span class="tok-keyword">model</span> Compressor</span></span><span class="row"><span class="ln">2</span><span class="src">  <span class="tok-type">Real</span> port_a.m_flow;</span></span></pre></div>
+        </aside>
+        <div class="dock"><span class="balance"><i class="dot"></i> balanced · 214 / 214</span><span class="spacer"></span><button type="button" class="key">Export backend</button></div>
+
+        <div class="backdrop"></div>
+        <div class="sheet" role="dialog" aria-label="Export" aria-modal="true">
+          <div class="sheet-head"><h2>Export</h2><span class="sub">from chiller</span><span class="spacer"></span><div class="choice"><button type="button">import</button><button type="button" class="on">export</button></div></div>
+          <div class="sheet-body">
+            <div>
+              <div class="field"><label>format</label>
+                <div class="choice" style="gap:14px;font-size:12px"><button type="button">.mo</button><button type="button" class="on">.molib</button><button type="button">.ppk</button></div>
+              </div>
+              <div class="field"><label>include</label>
+                <div class="check"><b>[x]</b> documentation annotations</div>
+                <div class="check"><b>[x]</b> icon and diagram annotations</div>
+                <div class="check"><b>[ ]</b> flatten to one file</div>
+                <div class="check"><b>[ ]</b> station adapter (ppk only)</div>
+              </div>
+              <div class="field" style="margin-bottom:0"><label>target</label><div class="target">./dist/Chiller.molib</div></div>
+            </div>
+            <div>
+              <div class="field"><label>what goes</label>
+                <div class="summary"><span class="tag2">12 classes</span><span class="tag2">3 packages</span><span class="tag2">1 dependency</span></div>
+              </div>
+              <div class="dep"><span class="st ok">✓</span><span>Modelica 4.1.0</span></div>
+              <div class="dep"><span class="st ok">✓</span><span>package.order written</span></div>
+              <div class="dep"><span class="st ok">✓</span><span>omc syntax check</span></div>
+              <p style="margin:10px 0 0;font:400 11px var(--font-sans);color:var(--text-muted)">A .ppk also runs the exporter and writes the Paperboat backend beside the model.</p>
+            </div>
+          </div>
+          <div class="sheet-foot"><span class="note">one sheet for .mo, .molib and .ppk</span><span class="spacer"></span><button type="button" class="key">Cancel</button><button type="button" class="key ink">Export</button></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+  const pages = Array.from(document.querySelectorAll('.page'));
+  const buttons = Array.from(document.querySelectorAll('#pages [data-page]'));
+  const note = document.getElementById('note');
+
+  function show(name) {
+    pages.forEach((page) => page.classList.toggle('on', page.id === 'p-' + name));
+    buttons.forEach((button) => button.classList.toggle('on', button.dataset.page === name));
+    const here = buttons.find((button) => button.dataset.page === name);
+    note.textContent = here ? here.dataset.note : '';
+    history.replaceState(null, '', '#' + name);
+  }
+
+  buttons.forEach((button) => button.addEventListener('click', () => show(button.dataset.page)));
+  window.addEventListener('hashchange', () => show(location.hash.slice(1) || 'diagram'));
+
+  const theme = document.getElementById('theme');
+  theme.addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+    theme.textContent = 'theme: ' + (dark ? 'light' : 'dark');
+  });
+
+  show(location.hash.slice(1) || 'diagram');
+</script>
+</body>
+</html>

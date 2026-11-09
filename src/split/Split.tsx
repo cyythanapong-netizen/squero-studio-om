@@ -1,15 +1,14 @@
-// The split view (contracts §8.2): `[ .mo ] causal ODE c++` beside the canvas. .mo is the model's
-// text from omc's `list()`, read-only this wave. C++ is the generated backend from a dry-run
-// generate: its path and the reason above the code, nothing written to disk.
+// The split view (contracts §8.2): the generated artifacts beside the canvas. `flat` is
+// instantiateModel's text, `causal ODE c++` the generated backend from a dry-run generate; both
+// read-only. The model's own .mo is the stage's Text view, not a pane here.
 
 import { useEffect, useRef, useState } from "react";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
 import { CodeView } from "./CodeView.tsx";
 
-export type View = "mo" | "flat" | "cpp";
+export type View = "flat" | "cpp";
 const OPTIONS: { value: View; label: string }[] = [
-  { value: "mo", label: ".mo" },
   { value: "flat", label: "flat" },
   { value: "cpp", label: "causal ODE c++" },
 ];
@@ -44,15 +43,12 @@ export function Split({
   actions,
   view,
   onView,
-  line,
 }: {
   model: StudioModel;
   actions: Actions;
   view: View;
   onView: (v: View) => void;
-  line?: number;
 }) {
-  const mo = useLater<string>(model, actions.source, view === "mo");
   const flat = useLater<string>(model, actions.flatModel, view === "flat");
   const cpp = useLater<Preview>(model, actions.preview, view === "cpp");
   const [file, setFile] = useState("");
@@ -70,9 +66,7 @@ export function Split({
           ))}
         </div>
       </header>
-      {view === "mo" ? (
-        <CodeView code={mo.value ?? (mo.error || "…")} lang="mo" ariaLabel="Modelica source" line={line} />
-      ) : view === "flat" ? (
+      {view === "flat" ? (
         <>
           <p className="code-about" role="status">
             <b>flat model</b> · instantiateModel({model.name}) · read-only

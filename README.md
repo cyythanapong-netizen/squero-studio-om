@@ -12,8 +12,13 @@ Simulating a `Modelica.Mechanics.MultiBody` model also fills the stage's **3d** 
 **diagram**) with its shapes, played back against the run's time (try `bin/squero-om examples/multibody/DoublePendulum.mo`). Every edit goes through `omc`, so the `.mo` stays OMEdit-compatible.
 
 The **Model** menu runs `checkModel` and shows its messages as cards in the Console's **messages** tab;
-**Show Flat Model** opens `instantiateModel` beside `.mo` and the generated C++. The Console's **console**
-tab also streams omc's own log as it works.
+**Show Flat Model** opens `instantiateModel` beside the generated C. The stage's **text** view shows the
+model's `.mo`, and the Console's **console** tab streams omc's own log as it works.
+
+The left rail switches between **files** — the model's folder as packages and classes, `package.order`
+included — and **library**, the MSL browser. Opening a `.mo` adds a tab above the stage. A model outside a
+package opens on **library**, so assembling something quick from the library needs no package at all; a
+class inside a package opens on **files**, with its package loaded first.
 
 This repo contains both the React web application (`src/`) and the native C++ server & tools (`server/`).
 The server provides `squero/0`, the `omc` bridge, the `.mo` importer (`extends` resolver, `Icon(graphics)` and

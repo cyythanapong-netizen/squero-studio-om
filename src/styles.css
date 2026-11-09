@@ -21,6 +21,7 @@ h2 { margin: 0; }
 
 /* A label: small, grey, sentence case. Names things; never says what is selected. */
 .lbl, .muted { font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
+.mono { font-family: var(--font-mono); }
 
 /* Keys: flat and outlined. Every button is one. */
 button {
@@ -160,6 +161,86 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .proj-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj .dirty { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
 
+
+/* ---- The rail (#43): Files | Library ------------------------------------------------ */
+/* A quick model (no package) opens on Library; a package opens on its files. Both stay
+   mounted, so the library keeps its search when the rail switches. */
+.rail {
+  grid-area: library;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.rail-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--panel-head-height);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+.rail-tab { border: 0; background: none; padding: 0; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.rail-tab:hover { color: var(--text); }
+.rail-tab.on { color: var(--text); font-weight: 500; }
+.rail-tab.on::before { content: "[ "; }
+.rail-tab.on::after { content: " ]"; }
+.rail-add { margin-left: auto; height: 20px; padding: 0 6px; }
+.rail-body { flex: 1; min-height: 0; display: flex; min-width: 0; }
+.rail-body > [hidden] { display: none; }
+.files-panel { width: 244px; min-height: 0; display: flex; flex-direction: column; }
+.files-head { display: flex; align-items: baseline; gap: var(--space-2); padding: 8px var(--space-3) 4px; border-bottom: 1px solid var(--line); }
+.files-head .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--size-xs) var(--font-mono); }
+.files-head .lbl { margin-left: auto; white-space: nowrap; }
+.files-tree { flex: 1; min-height: 0; overflow: auto; padding: 4px 0; }
+.file-row {
+  display: flex; align-items: center; gap: 4px;
+  width: 100%; height: 25px; padding: 0 var(--space-2) 0 8px;
+  border: 0; background: none; color: var(--text-muted); text-align: left;
+  font: 400 var(--size-xs) var(--font-mono); cursor: pointer;
+}
+.file-row:hover { background: var(--surface-sunken); color: var(--text); }
+.file-row:focus-visible { outline-offset: -2px; }
+.file-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 2px 0 0 var(--line-ink); }
+.file-row.on .nm { font-weight: 500; }
+.file-row .caret { width: 12px; flex: none; text-align: center; opacity: .7; }
+.file-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row .k { font-size: 10px; opacity: .55; }
+.files-empty { margin: 0; padding: var(--space-3); font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
+.files-foot { margin: 0; padding: 6px var(--space-3); border-top: 1px solid var(--line); font: 400 11px var(--font-mono); color: var(--text-muted); }
+.library-slot { flex: 1; min-width: 0; display: flex; }
+.library-slot > .library { flex: 1; min-height: 0; border: 0; border-radius: 0; background: none; }
+
+/* ---- Document tabs above the stage (#43) -------------------------------------------- */
+.docbar { display: flex; align-items: flex-end; gap: 2px; min-height: 31px; border-bottom: 1px solid var(--line); }
+.doc-tab {
+  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 10px;
+  min-width: 0; max-width: 270px;
+  border: 1px solid var(--line); border-bottom: 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--surface-panel); color: var(--text-muted);
+}
+.doc-tab.on { background: var(--surface-raised); color: var(--text); }
+.doc-pick { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: none; padding: 0; color: inherit; font: 400 var(--size-xs) var(--font-mono); cursor: pointer; }
+.doc-tab.on .doc-pick { font-weight: 500; }
+.doc-tab .dirty { width: 5px; height: 5px; border-radius: 50%; background: var(--signal); }
+.doc-tab .x { border: 0; background: none; padding: 0 2px; color: inherit; opacity: .45; font: 400 var(--size-sm) var(--font-mono); cursor: pointer; }
+.doc-tab .x:hover { opacity: 1; }
+.doc-tab .x:disabled { opacity: .15; cursor: default; }
+.doc-add { height: 30px; border: 0; background: none; padding: 0 9px; color: var(--text-muted); font: 400 15px var(--font-mono); cursor: pointer; }
+.doc-add:hover { color: var(--text); }
+.docbar .stage-meta { margin-left: auto; padding: 0 2px 7px 8px; }
+
+/* The stage's Text view: the .mo, read-only for now. The floating Run dock is a diagram control,
+   so it steps aside while the code is being read. */
+.stage-text { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.stage-text .code-head { flex: none; }
+.stage-text .code-view { flex: 1; min-height: 0; }
+.studio.text-mode .dock { display: none; }
 
 /* ---- Library & Component Browser (squero#12) --------------------------------------- */
 .library {

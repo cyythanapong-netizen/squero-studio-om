@@ -22,6 +22,10 @@ import { Simulate } from "./simulate/Simulate.tsx";
 import { Viewport3D, type ShapeRun } from "./viewport3d/Viewport3D.tsx";
 import { Split, type View } from "./split/Split.tsx";
 import { StudioConsole, type ConsoleTab } from "./shell/StudioConsole.tsx";
+import { DocTabs } from "./shell/DocTabs.tsx";
+import { Rail, type RailTab } from "./shell/Rail.tsx";
+import { TextStage } from "./shell/TextStage.tsx";
+import { closeDoc, neighbour, openDoc, type Doc, type Workspace } from "./shell/workspace.ts";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
 
@@ -70,10 +74,15 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [sheet, setSheet] = useState(false);
   const [side, setSide] = useState(true);
   const [running, setRunning] = useState(false);
-  const [view, setView] = useState<View>("mo");
+  const [view, setView] = useState<View>("flat");
   const [focus, setFocus] = useState<Focus>("split");
-  // the stage's view of the model (#62): the diagram, or the last MultiBody run in 3D
-  const [stageView, setStageView] = useState<"diagram" | "3d">("diagram");
+  // the stage's view of the model (#62): the diagram, the last MultiBody run in 3D, or the .mo
+  const [stageView, setStageView] = useState<"diagram" | "3d" | "text">("diagram");
+  // the workspace and its open documents (#43): the rail lists the folder, the tabs switch files
+  const [docs, setDocs] = useState<Doc[]>([]);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [rail, setRail] = useState<RailTab>("files");
+  const railTouched = useRef(false);
   const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
   const [theme, setTheme, shown] = useThemeChoice();
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
@@ -117,9 +126,66 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     setSourceLine(0);
   }, [model?.name]);
 
+  // Every open model joins the tab strip; the model the server opened first is the first tab.
+  useEffect(() => {
+    const file = model?.file;
+    if (!file) return;
+    setDocs((list) => openDoc(list, { file, name: model.name }));
+  }, [model?.file, model?.name]);
+
+  // The folder the model sits in, for the Files rail. A workspace read is never fatal: the rail
+  // just shows the open documents when the server can't list the folder.
+  useEffect(() => {
+    const file = model?.file;
+    if (!file) {
+      setWorkspace(null);
+      return;
+    }
+    let live = true;
+    omc.op<Workspace>("workspace", { file }).then(
+      (next) => live && setWorkspace(next),
+      () => live && setWorkspace(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [omc, model?.file]);
+
+  // A quick model — a .mo outside a package — is assembled from the library, so open on Library.
+  // A package opens on its own files. Once the user picks a tab, that choice wins.
+  useEffect(() => {
+    if (!workspace || railTouched.current) return;
+    setRail(workspace.package ? "files" : "library");
+  }, [workspace]);
+
   useEffect(() => {
     if (actions.notice) say(actions.notice);
   }, [actions.notice]);
+
+  const chooseRail = (tab: RailTab) => {
+    railTouched.current = true;
+    setRail(tab);
+  };
+
+  /** Switch documents: save the current one first, so a tab is never a stale buffer. */
+  const openDocument = async (file: string, content?: string) => {
+    if (file === model?.file) return;
+    try {
+      if (actions.dirty) await actions.save();
+      await actions.openFile(file, content);
+    } catch (err) {
+      fail(err as Error);
+    }
+  };
+
+  const closeDocument = async (doc: Doc) => {
+    if (docs.length < 2) return;
+    const rest = closeDoc(docs, doc.file);
+    setDocs(rest);
+    if (doc.file !== model?.file) return;
+    const next = neighbour(docs, doc.file);
+    if (next) await openDocument(next.file);
+  };
 
   const handleExportBackend = async () => {
     if (!api) return;
@@ -138,7 +204,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     reader.onload = async () => {
       const content = String(reader.result ?? "");
       try {
-        await actions.openFile(file.name, content);
+        await openDocument(file.name, content);
       } catch (err) {
         fail(err as Error);
       }
@@ -182,8 +248,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const openMessage = (message: Message) => {
     setSelectedMessage(message);
     setSourceLine(message.line ?? 0);
-    setView("mo");
-    setSide(true);
+    setStageView("text");
     const part = model?.components.find((component) => message.text.includes(component.name))?.name;
     if (part) api?.select([part]);
   };
@@ -204,7 +269,10 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             label: "Model Name",
             value: "NewModel.mo",
             confirmLabel: "Create",
-            onConfirm: (name) => actions.newModel(name).catch(fail),
+            onConfirm: async (name) => {
+              if (actions.dirty) await actions.save();
+              await actions.newModel(name);
+            },
           }),
       },
       {
@@ -227,7 +295,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             label: "File Path",
             placeholder: "e.g. models/MyModel.mo",
             confirmLabel: "Open",
-            onConfirm: (path) => actions.openFile(path).catch(fail),
+            onConfirm: (path) => openDocument(path),
           }),
       },
       {
@@ -314,7 +382,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl+K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
       { id: "solver", label: "Solver settings…", menu: "run", group: "solver", run: () => (setSide(true), window.dispatchEvent(new Event("squero:solver"))) },
       { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
-      { id: "mo", label: ".mo", menu: "view", group: "source", checked: view === "mo", run: () => (setView("mo"), setSide(true)) },
+      { id: "stage-diagram", label: "Diagram", menu: "view", group: "stage", checked: stageView === "diagram", run: () => setStageView("diagram") },
+      { id: "stage-3d", label: "3D", menu: "view", group: "stage", checked: stageView === "3d", run: () => setStageView("3d") },
+      { id: "stage-text", label: "Text", menu: "view", group: "stage", checked: stageView === "text", run: () => setStageView("text") },
       { id: "flat", label: "flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(true)) },
       { id: "cpp", label: "causal ODE c++", menu: "view", group: "source", checked: view === "cpp", run: () => (setView("cpp"), setSide(true)) },
       ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Code and scopes" : f === "code" ? "Focus code" : "Focus scopes", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(true)) })),
@@ -322,13 +392,13 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
       ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
     ],
-    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole],
+    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, stageView, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole],
   );
   useShortcuts(commands);
 
   return (
     <StudioContext.Provider value={api}>
-      <div className={`studio${side ? " with-side" : ""}`}>
+      <div className={`studio${side ? " with-side" : ""}${stageView === "text" ? " text-mode" : ""}`}>
         <TopBar
           status={status}
           model={model?.name}
@@ -359,15 +429,34 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         />
         {api && model ? (
           <>
-            <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
+            <Rail
+              tab={rail}
+              onTab={chooseRail}
+              workspace={workspace}
+              active={model.file}
+              onOpen={(file) => void openDocument(file)}
+              onNew={() => fileInputRef.current?.click()}
+            >
+              <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
+            </Rail>
             <main className="stage" aria-label={model.name}>
-              <Switch<"diagram" | "3d">
+              <DocTabs
+                docs={docs}
+                active={model.file}
+                dirty={actions.dirty}
+                meta={workspace?.root}
+                onSelect={(doc) => void openDocument(doc.file)}
+                onClose={(doc) => void closeDocument(doc)}
+                onOpen={() => fileInputRef.current?.click()}
+              />
+              <Switch<"diagram" | "3d" | "text">
                 label="View"
                 value={stageView}
                 onChange={setStageView}
                 options={[
                   { value: "diagram", label: "diagram", hint: "The model's parts and wires" },
                   { value: "3d", label: "3d", hint: "The last run's MultiBody shapes in 3D" },
+                  { value: "text", label: "text", hint: "The model's .mo, read-only for now" },
                 ]}
               />
               <div className="stage-view">
@@ -378,12 +467,13 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                   (shapeRun?.shapes?.length ? (
                     <Viewport3D run={shapeRun} theme={shown} />
                   ) : (
-                    <p className="stage-empty">Run a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</p>
+                    <p className="stage-empty"><span>Run a <span className="mono">Modelica.Mechanics.MultiBody</span> model to see it here.</span></p>
                   ))}
+                {stageView === "text" && <TextStage model={model} actions={actions} line={sourceLine} />}
               </div>
             </main>
             <aside className={`side focus-${focus}`} inert={!side}>
-                <Split model={model} actions={actions} view={view} onView={setView} line={sourceLine} />
+                <Split model={model} actions={actions} view={view} onView={setView} />
                 <Simulate actions={actions} model={model} theme={shown} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
               </aside>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
