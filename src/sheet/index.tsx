@@ -1,60 +1,25 @@
+// The Variables sheet (Alt+V): OMEdit's variable browser, plus a Paperboat tab that turns the
+// model's own top-level parameters into Station properties the runtime can set. Icon and port
+// drawing lives on the canvas (View ▸ Icon), not here.
+
+import { useEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import {
-  CORNER,
-  DASH,
-  FILL,
-  FONT,
-  STROKE,
-  WEIGHT,
-  type Corner,
-  type Dash,
-  type Fill,
-  type IconDef,
-  type IconPort,
-  type Prim,
-  type Stroke,
-  type Weight,
-} from "@paperboat/shared";
-import { CompactBlock, NumberField, Switch } from "@paperboat/shared/components";
-import { useStudio, type Param } from "../model/types.ts";
-import { VAR_DRAG } from "../popover/popover.ts";
-import { usesOf } from "../store/plans.ts";
+import { Switch } from "@paperboat/shared/components";
+import { CompactBlock } from "@paperboat/shared/components";
+import { useStudio } from "../model/types.ts";
 import { defaultExportFolder } from "../dock/dock.ts";
-import {
-  addPrimToIcon,
-  applyPlateSize,
-  buildLinkedBlockDef,
-  CORNER_OPTIONS,
-  DASH_OPTIONS,
-  FILL_OPTIONS,
-  FONT_OPTIONS,
-  movePrimBy,
-  PLATE_SIZES,
-  plateSizeKey,
-  PRIM_KINDS,
-  removePrimAt,
-  sanitizeIconDef,
-  setPortPlacement,
-  SIDE_OPTIONS,
-  SIZE_OPTIONS,
-  snapTo5,
-  STROKE_OPTIONS,
-  syncPortsWithEntries,
-  updatePrimTokens,
-  WEIGHT_OPTIONS,
-  type PlateSizeKey,
-} from "./look.ts";
+import { buildLinkedBlockDef } from "./look.ts";
+import { VariablesTree } from "./VariablesTree.tsx";
 import "./sheet.css";
 
-export type InterfaceSheetProps = { open: boolean; onOpen: () => void; onClose: () => void };
+export type InterfaceSheetProps = { open: boolean; onOpen: () => void; onClose: () => void; canExport: boolean };
 
-type SheetTab = "interface" | "look";
+type SheetTab = "interface" | "paperboat";
 
 function initialTabFromUrl(): SheetTab {
   if (typeof window !== "undefined") {
     const q = new URLSearchParams(window.location.search).get("sheetTab");
-    if (q === "look") return "look";
+    if (q === "paperboat") return "paperboat";
   }
   return "interface";
 }
@@ -67,252 +32,21 @@ function RemoveGlyph() {
   );
 }
 
-const GRID_STEPS = Array.from({ length: 21 }, (_, i) => i * 5);
-
-function primBounds(p: Prim): { x: number; y: number; w: number; h: number } {
-  switch (p.t) {
-    case "line":
-    case "poly": {
-      const xs = p.p.map((pt) => pt[0]);
-      const ys = p.p.map((pt) => pt[1]);
-      const minX = Math.min(...xs);
-      const maxX = Math.max(...xs);
-      const minY = Math.min(...ys);
-      const maxY = Math.max(...ys);
-      return { x: minX - 3, y: minY - 3, w: Math.max(6, maxX - minX + 6), h: Math.max(6, maxY - minY + 6) };
-    }
-    case "rect":
-    case "ellipse":
-    case "arc":
-      return { x: p.x - 2, y: p.y - 2, w: p.w + 4, h: p.h + 4 };
-    case "text":
-      return { x: p.x - 14, y: p.y - 8, w: 28, h: 16 };
-  }
-}
-
-/** Paperboat's Variables sheet, for the model's top-level parameters: public ones are Station props, private ones stay inside. */
-function VariablesSection() {
-  const api = useStudio();
-  const [error, setError] = useState("");
-  const tryIt = (job: Promise<void>) => void job.then(() => setError(""), (e: Error) => setError(e.message));
-  const add = () => {
-    const taken = new Set([...api.model.params.map((p) => p.id), ...api.model.components.map((c) => c.name)]);
-    let n = 1;
-    while (taken.has(`var${n}`)) n++;
-    tryIt(api.addVariable(`var${n}`, "0", false));
-  };
-  return (
-    <section className="studio-sheet-section" aria-label="Variables">
-      <div className="studio-sheet-subhead">
-        Variables
-        <button type="button" className="studio-look-key studio-var-add" onClick={add} title="A new public Real parameter">
-          + Add Variable
-        </button>
-      </div>
-      {api.model.params.length === 0 ? (
-        <p className="studio-handoff-note">No variables yet. Add one, then drag it onto a parameter in a component popover (or bind there with =).</p>
-      ) : (
-        <div role="list" className="studio-var-list">
-          {api.model.params.map((p) => (
-            <VariableRow key={p.id} p={p} onError={setError} />
-          ))}
-        </div>
-      )}
-      {error && <p className="studio-var-error" role="alert">{error}</p>}
-      <p className="studio-handoff-note">Public: a Station property of the exported backend. Private: a protected parameter, only inside the model.</p>
-    </section>
-  );
-}
-
-function VariableRow({ p, onError }: { p: Param; onError: (words: string) => void }) {
-  const api = useStudio();
-  const tryIt = (job: Promise<void>) => void job.then(() => onError(""), (e: Error) => onError(e.message));
-  const uses = usesOf(api.model, p.id);
-  const set = (v: string) => tryIt(api.setParam(p.id, v));
-  return (
-    <div className="studio-var-row" role="listitem">
-      <span
-        className="studio-var-grip"
-        draggable
-        title={`Drag ${p.id} onto a component parameter to bind it`}
-        onDragStart={(e) => {
-          e.dataTransfer.setData(VAR_DRAG, p.id);
-          e.dataTransfer.setData("text/plain", p.id);
-          e.dataTransfer.effectAllowed = "link";
-        }}
-      >
-        =
-      </span>
-      <input
-        className="studio-prop-input studio-var-name"
-        aria-label={`Name of ${p.id}`}
-        defaultValue={p.id}
-        spellCheck={false}
-        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-        onBlur={(e) => {
-          const to = e.currentTarget.value.trim();
-          if (to && to !== p.id) tryIt(api.renameVariable(p.id, to));
-          else e.currentTarget.value = p.id;
-        }}
-      />
-      {p.type === "number" ? (
-        <NumberField className="studio-prop-input" aria-label={`Value of ${p.id}`} value={p.default} onChange={(v) => set(String(v))} />
-      ) : p.type === "boolean" ? (
-        <input type="checkbox" aria-label={`Value of ${p.id}`} checked={p.default} onChange={(e) => set(String(e.target.checked))} />
-      ) : (
-        <input
-          className="studio-prop-input"
-          aria-label={`Value of ${p.id}`}
-          defaultValue={String(p.default)}
-          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          onBlur={(e) => e.currentTarget.value !== String(p.default) && set(e.currentTarget.value)}
-        />
-      )}
-      <span className="studio-prop-unit" title={uses.length ? `read by ${uses.join(", ")}` : "not used yet"}>
-        {p.modelica ?? p.type}
-      </span>
-      <button
-        type="button"
-        className={`studio-var-vis${p.private ? "" : " on"}`}
-        aria-pressed={!p.private}
-        title={p.private ? "Private: stays inside the model. Click to make it a Station property." : "Public: a Station property of the exported backend. Click to make it private."}
-        onClick={() => tryIt(api.setPrivate(p.id, !p.private))}
-      >
-        {p.private ? "private" : "public"}
-      </button>
-      <button type="button" className="studio-remove" title={uses.length ? `Remove ${p.id} (unbind ${uses.join(", ")} first)` : `Remove ${p.id}`} onClick={() => tryIt(api.removeVariable(p.id))}>
-        <RemoveGlyph />
-      </button>
-    </div>
-  );
-}
-
-export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
+export function InterfaceSheet({ open, onOpen, onClose, canExport }: InterfaceSheetProps) {
   const api = useStudio();
   const [tab, setTab] = useState<SheetTab>(initialTabFromUrl);
-  const [draftIcon, setDraftIcon] = useState<IconDef>(() =>
-    syncPortsWithEntries(api.model.icon, api.model.entries),
-  );
-  const [selectedIdx, setSelectedIdx] = useState<number>(0);
-  const [savedToast, setSavedToast] = useState(false);
-  const [, setTick] = useState(0);
-  const dragRef = useRef<{ idx: number; startX: number; startY: number; orig: Prim } | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-
-  useEffect(() => {
-    setDraftIcon(syncPortsWithEntries(api.model.icon, api.model.entries));
-  }, [api.model.icon, api.model.entries]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      } else if (
-        tab === "look" &&
-        (e.key === "Delete" || e.key === "Backspace") &&
-        !(e.target instanceof HTMLInputElement)
-      ) {
-        setDraftIcon((prev) => {
-          if (selectedIdx < 0 || selectedIdx >= prev.g.length) return prev;
-          const next = removePrimAt(prev, selectedIdx);
-          setSelectedIdx(Math.max(0, next.g.length - 1));
-          return next;
-        });
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, tab, selectedIdx]);
-
-  const selectedPrim: Prim | undefined = draftIcon.g[selectedIdx];
   const inputs = api.model.entries.filter((e) => e.kind === "input");
   const outputs = api.model.entries.filter((e) => e.kind === "output");
-  const linkedBlockDef = buildLinkedBlockDef(api.model, draftIcon);
   const shortModel = api.model.name.split(".").pop() ?? api.model.name;
   const folderHint = `${defaultExportFolder(shortModel)}/`;
+  const linkedBlockDef = buildLinkedBlockDef(api.model);
 
-  const svgPoint = (e: ReactPointerEvent<SVGElement>): [number, number] => {
-    const svg = svgRef.current;
-    if (!svg) return [50, 50];
-    const rect = svg.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / Math.max(1, rect.width)) * 100;
-    const y = ((e.clientY - rect.top) / Math.max(1, rect.height)) * 100;
-    return [snapTo5(x), snapTo5(y)];
-  };
-
-  const onPrimPointerDown = (e: ReactPointerEvent<SVGElement>, idx: number) => {
-    e.stopPropagation();
-    setSelectedIdx(idx);
-    const prim = draftIcon.g[idx];
-    if (!prim) return;
-    const [sx, sy] = svgPoint(e);
-    dragRef.current = { idx, startX: sx, startY: sy, orig: structuredClone(prim) };
-    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
-  };
-
-  const onCanvasPointerMove = (e: ReactPointerEvent<SVGSVGElement>) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const [cx, cy] = svgPoint(e);
-    const dx = cx - d.startX;
-    const dy = cy - d.startY;
-    const moved = movePrimBy(d.orig, dx, dy);
-    setDraftIcon((prev) => ({
-      ...prev,
-      g: prev.g.map((item, i) => (i === d.idx ? moved : item)),
-    }));
-  };
-
-  const onCanvasPointerUp = () => {
-    dragRef.current = null;
-  };
-
-  const patchSelected = (patch: Parameters<typeof updatePrimTokens>[1]) => {
-    if (!selectedPrim) return;
-    setDraftIcon((prev) => ({
-      ...prev,
-      g: prev.g.map((item, i) => (i === selectedIdx ? updatePrimTokens(item, patch) : item)),
-    }));
-  };
-
-  const handleAddPrim = (kind: Prim["t"]) => {
-    setDraftIcon((prev) => {
-      const next = addPrimToIcon(prev, kind, {
-        stroke: selectedPrim?.stroke ?? "ink",
-        weight: selectedPrim?.weight ?? "normal",
-        dash: selectedPrim?.dash ?? "solid",
-        fill: selectedPrim?.fill ?? "none",
-      });
-      setSelectedIdx(next.g.length - 1);
-      return next;
-    });
-  };
-
-  const handleDeleteSelected = () => {
-    setDraftIcon((prev) => {
-      if (selectedIdx < 0 || selectedIdx >= prev.g.length) return prev;
-      const next = removePrimAt(prev, selectedIdx);
-      setSelectedIdx(Math.max(0, next.g.length - 1));
-      return next;
-    });
-  };
-
-  const handleSaveLook = async () => {
-    const clean = sanitizeIconDef(draftIcon, api.model.entries);
-    setDraftIcon(clean);
-    await api.setIcon(clean);
-    setSavedToast(true);
-    setTimeout(() => setSavedToast(false), 1200);
-    setTick((t) => t + 1);
-  };
+  useEffect(() => {
+    if (!canExport && tab === "paperboat") setTab("interface");
+  }, [canExport, tab]);
 
   return (
-    <aside
-      className={`studio-sheet${open ? " open" : ""}`}
-      aria-label="Interface and Look"
-      data-own-keys
-    >
+    <aside className={`studio-sheet${open ? " open" : ""}`} aria-label="Variables and Paperboat" data-own-keys>
       {/* Folded: a standing tab at the right edge, as Paperboat's Variables sheet. */}
       <button type="button" className="studio-sheet-tab" hidden={open} onClick={onOpen} title="Open the Variables (Alt+V)" aria-expanded={false}>
         <svg viewBox="0 0 14 14" aria-hidden="true">
@@ -320,7 +54,7 @@ export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
         </svg>
         <span className="studio-sheet-glyph" aria-hidden="true">=</span>
         <span className="studio-sheet-tab-name">Variables</span>
-        <span className="lbl">{api.model.params.filter((p) => !p.private).length}</span>
+        <span className="lbl">{api.model.vars?.length ?? api.model.params.length}</span>
       </button>
       <header className="studio-sheet-head" hidden={!open}>
         <h2 className="studio-sheet-title">{shortModel}</h2>
@@ -329,8 +63,8 @@ export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
           value={tab}
           onChange={setTab}
           options={[
-            { value: "interface", label: "interface", hint: "Variables (Station properties) and causal entry points" },
-            { value: "look", label: "look", hint: "Custom block icon and port placement" },
+            { value: "interface", label: "variables", hint: "Every top-level variable, then each component's parameters" },
+            ...(canExport ? [{ value: "paperboat" as const, label: "paperboat", hint: "Parameters passed to the model at run time, and the linked block" }] : []),
           ]}
         />
         <button type="button" className="studio-look-key studio-sheet-fold" title="Fold (Alt+V or Esc)" aria-label="Fold the sheet" aria-expanded onClick={onClose}>
@@ -343,7 +77,7 @@ export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
       <div className="studio-sheet-body" hidden={!open}>
         {tab === "interface" ? (
           <>
-            <VariablesSection />
+            <VariablesTree model={api.model} mode="edit" />
 
             <section className="studio-sheet-section" aria-label="Entry points">
               <div className="studio-sheet-subhead">Entry points</div>
@@ -360,12 +94,7 @@ export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
                           {entry.name}
                         </span>
                         {entry.unit && <span className="studio-prop-unit">{entry.unit}</span>}
-                        <button
-                          type="button"
-                          className="studio-remove"
-                          title={`Remove ${entry.name}`}
-                          onClick={() => void api.removeEntry(entry.name).then(() => setTick((t) => t + 1))}
-                        >
+                        <button type="button" className="studio-remove" title={`Remove ${entry.name}`} onClick={() => void api.removeEntry(entry.name)}>
                           <RemoveGlyph />
                         </button>
                       </div>
@@ -384,12 +113,7 @@ export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
                           {entry.name}
                         </span>
                         {entry.unit && <span className="studio-prop-unit">{entry.unit}</span>}
-                        <button
-                          type="button"
-                          className="studio-remove"
-                          title={`Remove ${entry.name}`}
-                          onClick={() => void api.removeEntry(entry.name).then(() => setTick((t) => t + 1))}
-                        >
+                        <button type="button" className="studio-remove" title={`Remove ${entry.name}`} onClick={() => void api.removeEntry(entry.name)}>
                           <RemoveGlyph />
                         </button>
                       </div>
@@ -397,6 +121,17 @@ export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
                   )}
                 </div>
               </div>
+            </section>
+          </>
+        ) : (
+          <>
+            <section className="studio-sheet-section" aria-label="Parameter passthrough">
+              <div className="studio-sheet-subhead">Parameters passed to Paperboat</div>
+              <VariablesTree model={api.model} mode="passthrough" />
+              <p className="studio-handoff-note">
+                A <b>passthrough</b> parameter becomes a Station property; Paperboat sets it when the model starts. Everything else stays
+                inside the model. The icon and the connector pins are drawn on the canvas: <b>View ▸ Icon</b>.
+              </p>
             </section>
 
             <section className="studio-sheet-section" aria-label="Linked block preview">
@@ -418,295 +153,6 @@ export function InterfaceSheet({ open, onOpen, onClose }: InterfaceSheetProps) {
                 </p>
               </div>
             </section>
-          </>
-        ) : (
-          <>
-            <section className="studio-sheet-section" aria-label="Primitives">
-              <div className="studio-sheet-subhead">Primitives (5-unit snap grid)</div>
-              <div className="studio-look-toolbar">
-                {PRIM_KINDS.map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    className="studio-look-key"
-                    onClick={() => handleAddPrim(k)}
-                  >
-                    + {k}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="studio-look-key"
-                  disabled={!selectedPrim}
-                  onClick={handleDeleteSelected}
-                >
-                  Delete
-                </button>
-              </div>
-
-              <div className="studio-look-canvas-wrap">
-                <svg
-                  ref={svgRef}
-                  className="studio-look-canvas"
-                  viewBox="0 0 100 100"
-                  aria-label="Look 0 to 100 icon canvas"
-                  onPointerMove={onCanvasPointerMove}
-                  onPointerUp={onCanvasPointerUp}
-                  onPointerCancel={onCanvasPointerUp}
-                >
-                  {GRID_STEPS.flatMap((gx) =>
-                    GRID_STEPS.map((gy) => (
-                      <circle
-                        key={`${gx}-${gy}`}
-                        className="studio-look-grid-dot"
-                        cx={gx}
-                        cy={gy}
-                        r={gx % 25 === 0 && gy % 25 === 0 ? 0.9 : 0.45}
-                      />
-                    )),
-                  )}
-                  {draftIcon.g.map((p, idx) => {
-                    const stroke = STROKE[p.stroke ?? "ink"];
-                    const strokeWidth = WEIGHT[p.weight ?? "normal"];
-                    const strokeDasharray = DASH[p.dash ?? "solid"];
-                    const fill = FILL[p.fill ?? "none"];
-                    const common = {
-                      stroke,
-                      strokeWidth,
-                      strokeDasharray,
-                      strokeLinecap: "round" as const,
-                      strokeLinejoin: "round" as const,
-                      onPointerDown: (e: ReactPointerEvent<SVGElement>) => onPrimPointerDown(e, idx),
-                      style: { cursor: "move" },
-                    };
-                    switch (p.t) {
-                      case "line":
-                        return (
-                          <polyline
-                            key={idx}
-                            {...common}
-                            fill="none"
-                            points={p.p.map(([x, y]) => `${x},${y}`).join(" ")}
-                          />
-                        );
-                      case "poly":
-                        return (
-                          <polygon
-                            key={idx}
-                            {...common}
-                            fill={fill}
-                            points={p.p.map(([x, y]) => `${x},${y}`).join(" ")}
-                          />
-                        );
-                      case "rect":
-                        return (
-                          <rect
-                            key={idx}
-                            {...common}
-                            fill={fill}
-                            x={p.x}
-                            y={p.y}
-                            width={p.w}
-                            height={p.h}
-                            rx={CORNER[p.corner ?? "0"]}
-                          />
-                        );
-                      case "ellipse":
-                        return (
-                          <ellipse
-                            key={idx}
-                            {...common}
-                            fill={fill}
-                            cx={p.x + p.w / 2}
-                            cy={p.y + p.h / 2}
-                            rx={p.w / 2}
-                            ry={p.h / 2}
-                          />
-                        );
-                      case "arc": {
-                        const [cx, cy, rx, ry] = [p.x + p.w / 2, p.y + p.h / 2, p.w / 2, p.h / 2];
-                        const pt = (a: number) =>
-                          `${+(cx + rx * Math.cos((a * Math.PI) / 180)).toFixed(2)},${+(
-                            cy -
-                            ry * Math.sin((a * Math.PI) / 180)
-                          ).toFixed(2)}`;
-                        const sweep = (((p.a1 - p.a0) % 360) + 360) % 360;
-                        return (
-                          <path
-                            key={idx}
-                            {...common}
-                            fill={fill}
-                            d={`M${pt(p.a0)}A${rx},${ry} 0 ${sweep > 180 ? 1 : 0} 0 ${pt(p.a1)}`}
-                          />
-                        );
-                      }
-                      case "text":
-                        return (
-                          <text
-                            key={idx}
-                            x={p.x}
-                            y={p.y}
-                            fill={stroke}
-                            textAnchor="middle"
-                            dominantBaseline="central"
-                            fontFamily={FONT[p.font ?? "sans"]}
-                            fontSize={p.size ?? 12}
-                            style={{ cursor: "move" }}
-                            onPointerDown={(e) => onPrimPointerDown(e, idx)}
-                          >
-                            {p.s}
-                          </text>
-                        );
-                    }
-                  })}
-                  {selectedPrim && (() => {
-                    const b = primBounds(selectedPrim);
-                    return <rect className="studio-look-sel-box" x={b.x} y={b.y} width={b.w} height={b.h} />;
-                  })()}
-                </svg>
-              </div>
-            </section>
-
-            <section className="studio-sheet-section" aria-label="Style tokens">
-              <div className="studio-sheet-subhead">Tokens (§3)</div>
-              <div className="studio-look-choices">
-                <Switch<PlateSizeKey>
-                  label="Plate"
-                  value={plateSizeKey(draftIcon)}
-                  onChange={(sz) => setDraftIcon((prev) => applyPlateSize(prev, sz))}
-                  options={PLATE_SIZES.map((s) => ({ value: s, label: s }))}
-                />
-                <Switch<Stroke>
-                  label="Stroke"
-                  value={selectedPrim?.stroke ?? "ink"}
-                  onChange={(stroke) => patchSelected({ stroke })}
-                  options={STROKE_OPTIONS}
-                />
-                <Switch<Weight>
-                  label="Weight"
-                  value={selectedPrim?.weight ?? "normal"}
-                  onChange={(weight) => patchSelected({ weight })}
-                  options={WEIGHT_OPTIONS}
-                />
-                <Switch<Fill>
-                  label="Fill"
-                  value={selectedPrim?.fill ?? "none"}
-                  onChange={(fill) => patchSelected({ fill })}
-                  options={FILL_OPTIONS}
-                />
-                <Switch<Dash>
-                  label="Dash"
-                  value={selectedPrim?.dash ?? "solid"}
-                  onChange={(dash) => patchSelected({ dash })}
-                  options={DASH_OPTIONS}
-                />
-                {selectedPrim?.t === "rect" && (
-                  <Switch<Corner>
-                    label="Corner"
-                    value={selectedPrim.corner ?? "0"}
-                    onChange={(corner) => patchSelected({ corner })}
-                    options={CORNER_OPTIONS}
-                  />
-                )}
-                {selectedPrim?.t === "text" && (
-                  <>
-                    <Switch<"sans" | "mono">
-                      label="Font"
-                      value={selectedPrim.font ?? "sans"}
-                      onChange={(font) => patchSelected({ font })}
-                      options={FONT_OPTIONS}
-                    />
-                    <Switch<"12" | "12.5" | "13" | "15" | "30">
-                      label="Size"
-                      value={String(selectedPrim.size ?? 12) as "12" | "12.5" | "13" | "15" | "30"}
-                      onChange={(sz) => patchSelected({ size: Number(sz) as 12 | 12.5 | 13 | 15 | 30 })}
-                      options={SIZE_OPTIONS}
-                    />
-                    <div className="studio-look-port-row">
-                      <span className="studio-prop-unit">Text</span>
-                      <input
-                        className="studio-prop-input"
-                        value={selectedPrim.s}
-                        aria-label="Primitive text"
-                        onChange={(e) => patchSelected({ s: e.target.value })}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </section>
-
-            <section className="studio-sheet-section" aria-label="Port placement">
-              <div className="studio-sheet-subhead">Port placement</div>
-              {(draftIcon.ports ?? []).length === 0 ? (
-                <span className="studio-prop-unit">No entry ports</span>
-              ) : (
-                (draftIcon.ports ?? []).map((port) => (
-                  <div key={port.id} className="studio-look-port-row">
-                    <span className="studio-prop-name">{port.id}</span>
-                    <Switch<IconPort["side"]>
-                      label="Side"
-                      value={port.side}
-                      onChange={(side) =>
-                        setDraftIcon((prev) => setPortPlacement(prev, api.model.entries, port.id, side, port.at))
-                      }
-                      options={SIDE_OPTIONS}
-                    />
-                    <NumberField
-                      className="studio-look-at-input"
-                      aria-label={`Port ${port.id} at`}
-                      value={port.at}
-                      onChange={(at) =>
-                        setDraftIcon((prev) => setPortPlacement(prev, api.model.entries, port.id, port.side, at))
-                      }
-                    />
-                  </div>
-                ))
-              )}
-            </section>
-
-            <section className="studio-sheet-section" aria-label="Theme preview">
-              <div className="studio-sheet-subhead">Preview (light & dark)</div>
-              <div className="studio-preview-pair">
-                <div className="studio-preview-tile" data-theme="light">
-                  <ReactFlowProvider>
-                    <CompactBlock
-                      id={`${shortModel}-light`}
-                      def={linkedBlockDef}
-                      params={{}}
-                      selected={false}
-                      onExpand={() => {}}
-                      popover={null}
-                      connectors={api.model.connectors}
-                    />
-                  </ReactFlowProvider>
-                  <span className="studio-preview-caption">light</span>
-                </div>
-                <div className="studio-preview-tile" data-theme="dark">
-                  <ReactFlowProvider>
-                    <CompactBlock
-                      id={`${shortModel}-dark`}
-                      def={linkedBlockDef}
-                      params={{}}
-                      selected={false}
-                      onExpand={() => {}}
-                      popover={null}
-                      connectors={api.model.connectors}
-                    />
-                  </ReactFlowProvider>
-                  <span className="studio-preview-caption">dark</span>
-                </div>
-              </div>
-            </section>
-
-            <footer className="studio-look-foot">
-              <span className="studio-prop-unit">
-                {savedToast ? "Saved Icon annotation" : `${draftIcon.g.length} shapes · ${plateSizeKey(draftIcon)}`}
-              </span>
-              <button type="button" className="studio-save-key" onClick={() => void handleSaveLook()}>
-                Save
-              </button>
-            </footer>
           </>
         )}
       </div>

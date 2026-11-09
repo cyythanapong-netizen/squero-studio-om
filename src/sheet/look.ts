@@ -146,6 +146,77 @@ export function createDefaultPrim(kind: Prim["t"], style?: PrimStyle): Prim {
   }
 }
 
+/** A primitive from a drag on the canvas: the box the user pulled, or the default on a click. */
+export function primFromDrag(kind: Prim["t"], a: Pt, b: Pt, style?: PrimStyle): Prim {
+  const [ax, ay] = a;
+  const [bx, by] = b;
+  const x = Math.min(ax, bx);
+  const y = Math.min(ay, by);
+  const w = Math.max(5, Math.abs(bx - ax));
+  const h = Math.max(5, Math.abs(by - ay));
+  if (Math.abs(bx - ax) < 5 && Math.abs(by - ay) < 5) return createDefaultPrim(kind, style);
+  const base = cleanStyle(style);
+  switch (kind) {
+    case "line":
+      return { t: "line", p: [a, b], ...base };
+    case "poly":
+      return { t: "poly", p: [[x, y + h], [x + w / 2, y], [x + w, y + h]], ...base };
+    case "rect":
+      return { t: "rect", x, y, w, h, corner: style?.corner && Object.hasOwn(CORNER, style.corner) ? style.corner : "0", ...base };
+    case "ellipse":
+      return { t: "ellipse", x, y, w, h, ...base };
+    case "arc":
+      return { t: "arc", x, y, w, h, a0: 0, a1: 270, ...base };
+    case "text":
+      return {
+        t: "text",
+        x: ax,
+        y: ay,
+        s: "Text",
+        font: style?.font && Object.hasOwn(FONT, style.font) ? style.font : "sans",
+        size: style?.size && (SIZE as readonly number[]).includes(style.size) ? style.size : 12,
+        ...base,
+      };
+  }
+}
+
+/** A corner of the selection box, moved to `point`; rectangles, ellipses and arcs only. */
+export function resizePrim(prim: Prim, corner: "nw" | "ne" | "sw" | "se", point: Pt): Prim {
+  if (prim.t !== "rect" && prim.t !== "ellipse" && prim.t !== "arc") return prim;
+  const x1 = prim.x;
+  const y1 = prim.y;
+  const x2 = prim.x + prim.w;
+  const y2 = prim.y + prim.h;
+  const [px, py] = [snapTo5(point[0]), snapTo5(point[1])];
+  const nx1 = corner.includes("w") ? Math.min(px, x2 - 5) : x1;
+  const nx2 = corner.includes("e") ? Math.max(px, x1 + 5) : x2;
+  const ny1 = corner.includes("n") ? Math.min(py, y2 - 5) : y1;
+  const ny2 = corner.includes("s") ? Math.max(py, y1 + 5) : y2;
+  return sanitizePrim({ ...prim, x: nx1, y: ny1, w: nx2 - nx1, h: ny2 - ny1 });
+}
+
+/** The box a primitive covers, for the selection outline and its corner handles. */
+export function primBounds(p: Prim): { x: number; y: number; w: number; h: number } {
+  switch (p.t) {
+    case "line":
+    case "poly": {
+      const xs = p.p.map((pt) => pt[0]);
+      const ys = p.p.map((pt) => pt[1]);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      return { x: minX - 3, y: minY - 3, w: Math.max(6, maxX - minX + 6), h: Math.max(6, maxY - minY + 6) };
+    }
+    case "rect":
+    case "ellipse":
+    case "arc":
+      return { x: p.x - 2, y: p.y - 2, w: p.w + 4, h: p.h + 4 };
+    case "text":
+      return { x: p.x - 14, y: p.y - 8, w: 28, h: 16 };
+  }
+}
+
 export function addPrimToIcon(icon: IconDef, kind: Prim["t"], style?: PrimStyle): IconDef {
   return {
     ...icon,

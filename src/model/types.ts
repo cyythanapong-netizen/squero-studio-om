@@ -24,6 +24,20 @@ export type Connection = { a: string; b: string; points?: [number, number][] };
  * ones are `protected` in the .mo: shared values inside the model, not exported. */
 export type Param = ParamDef & { private?: boolean; modelica?: string };
 
+/** A variable the model declares at its top level: a state, an input/output, or a parameter. */
+export type ModelVar = {
+  name: string;
+  /** Short class name: Real, Boolean, SI.Pressure, … */
+  type: string;
+  /** parameter | constant | continuous | discrete | "" */
+  variability: string;
+  /** input | output | "" */
+  causality: string;
+  visibility: "public" | "protected";
+  value?: string;
+  comment?: string;
+};
+
 /** A top-level causal entry point (+ Input on a port, + Probe on a variable). */
 export type EntryPoint = { name: string; kind: "input" | "output"; target: string; unit?: string };
 
@@ -37,6 +51,8 @@ export type StudioModel = {
   components: ComponentInst[];
   connections: Connection[];
   params: Param[]; // top-level parameters: the public ones are the generated object's Station props
+  /** Every top-level variable, for the Variables tree. Parameters also appear in `params`. */
+  vars?: ModelVar[];
   entries: EntryPoint[];
   icon?: IconDef; // the model's own look (Look tab), the generated linked block's view.icon
   connectors: Connectors;
