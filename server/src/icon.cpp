@@ -217,7 +217,9 @@ std::string quantise_weight(double thickness) {
 
 std::string quantise_dash(std::string_view pattern) {
   const std::string p = trim(pattern);
-  if (p.find("Dash") != std::string::npos || p.find("Dot") != std::string::npos) return "axis";
+  if (p.find("DashDot") != std::string::npos) return "dashdot";
+  if (p.find("Dash") != std::string::npos) return "dash";
+  if (p.find("Dot") != std::string::npos) return "dot";
   return "solid";
 }
 

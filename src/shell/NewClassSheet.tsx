@@ -5,25 +5,31 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { StudioModel } from "../model/types.ts";
 import type { Workspace } from "./workspace.ts";
-import { KINDS, defaultWithin, fileFor, packageOptions, skeleton, type ClassKind, type NewClassSpec } from "./newClass.ts";
+import { KINDS, defaultWithin as modelWithin, fileFor, packageOptions, skeleton, type ClassKind, type NewClassSpec } from "./newClass.ts";
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 export function NewClassSheet({
   workspace,
   model,
+  defaultWithin,
   onClose,
   onCreate,
 }: {
   workspace: Workspace | null;
   model: StudioModel;
+  /** The package the rail or menu asked for; defaults to the open model's package. */
+  defaultWithin?: string;
   onClose: () => void;
   onCreate: (spec: NewClassSpec) => void | Promise<void>;
 }) {
   const options = packageOptions(workspace);
   const [name, setName] = useState("");
   const [kind, setKind] = useState<ClassKind>("model");
-  const [within, setWithin] = useState(() => (options.some((o) => o.value === defaultWithin(model)) ? defaultWithin(model) : ""));
+  const [within, setWithin] = useState(() => {
+    const wanted = defaultWithin ?? modelWithin(model);
+    return options.some((o) => o.value === wanted) ? wanted : "";
+  });
   const [base, setBase] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

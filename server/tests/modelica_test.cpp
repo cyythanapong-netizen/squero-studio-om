@@ -176,7 +176,7 @@ void check_contract_tokens(const json& doc) {
 
   static const std::set<std::string> kStrokes = {"ink", "muted", "electrical", "translational", "thermal", "fluid", "magnetic", "rotational"};  // never "signal"
   static const std::set<std::string> kWeights = {"thin", "normal", "wire"};
-  static const std::set<std::string> kDashes = {"solid", "axis"};
+  static const std::set<std::string> kDashes = {"solid", "axis", "dash", "dot", "dashdot"};
   static const std::set<std::string> kFills = {"none", "ink", "raised", "sunken", "electrical", "translational", "thermal", "fluid", "magnetic", "rotational"};
   static const std::set<std::string> kCorners = {"0", "sm", "md"};
   static const std::set<std::string> kFonts = {"sans", "mono"};
@@ -360,7 +360,7 @@ TEST_CASE("Icon(graphics) quantiser maps primitives, drops Bitmap/DynamicSelect,
   CHECK(icon.value("h", 1) == 1);
   REQUIRE(icon["g"].size() == 4);
   CHECK(icon["g"][0]["t"] == "rect");
-  CHECK(icon["g"][0]["dash"] == "axis");
+  CHECK(icon["g"][0]["dash"] == "dash");
   CHECK(icon["g"][0]["weight"] == "wire");
   CHECK(icon["g"][0]["fill"] == "raised");
   CHECK(icon["g"][0]["corner"] == "md");
@@ -675,6 +675,42 @@ TEST_CASE("create_class writes a class and keeps package.order in step", "[squer
   const std::string quick_text((std::istreambuf_iterator<char>(quick_body)), std::istreambuf_iterator<char>());
   CHECK_THAT(quick_text, Catch::Matchers::StartsWith("function Q"));
   CHECK_FALSE(fs::exists(dir / "package.order"));
+
+  fs::remove_all(dir);
+}
+
+TEST_CASE("packages and class files can be created, duplicated and deleted", "[squero]") {
+  const fs::path dir = fs::temp_directory_path() / "paperboat-squero-package-ops";
+  fs::remove_all(dir);
+  fs::create_directories(dir / "Pkg");
+  std::ofstream(dir / "Pkg" / "package.mo") << "package Pkg\nend Pkg;\n";
+  std::ofstream(dir / "Pkg" / "package.order") << "A\n";
+  std::ofstream(dir / "Pkg" / "A.mo") << "within Pkg;\nmodel A\n  Real x;\nend A;\n";
+
+  mo::Omc omc;  // never started: these ops only touch the disk
+  const json pkg = op(omc, {{"op", "new_package"}, {"parent", dir.string()}, {"name", "Sub"}, {"within", "Pkg"}});
+  INFO(pkg.dump());
+  REQUIRE(pkg["ok"] == true);
+  CHECK(fs::exists(dir / "Sub" / "package.mo"));
+  CHECK(fs::exists(dir / "Sub" / "package.order"));
+
+  const json dup = op(omc, {{"op", "duplicate_class"}, {"file", (dir / "Pkg" / "A.mo").string()}, {"name", "A"}, {"newName", "B"}, {"within", "Pkg"}});
+  INFO(dup.dump());
+  REQUIRE(dup["ok"] == true);
+  CHECK(dup["result"]["model"] == "Pkg.B");
+  std::ifstream made(dir / "Pkg" / "B.mo");
+  const std::string text((std::istreambuf_iterator<char>(made)), std::istreambuf_iterator<char>());
+  CHECK_THAT(text, Catch::Matchers::ContainsSubstring("model B"));
+  CHECK_THAT(text, Catch::Matchers::ContainsSubstring("end B;"));
+  std::ifstream order(dir / "Pkg" / "package.order");
+  const std::string listed((std::istreambuf_iterator<char>(order)), std::istreambuf_iterator<char>());
+  CHECK(listed == "A\nB\n");
+
+  CHECK(op(omc, {{"op", "delete_class"}, {"file", (dir / "Pkg" / "B.mo").string()}, {"name", "B"}})["ok"] == true);
+  CHECK_FALSE(fs::exists(dir / "Pkg" / "B.mo"));
+  std::ifstream after(dir / "Pkg" / "package.order");
+  const std::string left((std::istreambuf_iterator<char>(after)), std::istreambuf_iterator<char>());
+  CHECK(left == "A\n");
 
   fs::remove_all(dir);
 }

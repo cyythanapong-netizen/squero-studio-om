@@ -50,6 +50,8 @@ export type Read = { model: StudioModel; looks: IconCache };
 
 // ponytail: per-class defaults cached for the session; a user class edited in place keeps its old defaults until reload
 const defaultsOf = new Map<string, Promise<Record<string, string>>>();
+// A class's restriction never changes under Studio; one lookup per class for the session.
+const typeCache = new Map<string, boolean>();
 
 /** A class's numeric parameters and what they are when not set (`C`: its `start`, 1), so an unset C still shows and edits. */
 export function classDefaults(omc: OmcCalls, cls: string): Promise<Record<string, string>> {
@@ -84,7 +86,7 @@ export async function readModel(omc: OmcCalls, name: string, file: string | unde
     wires.push({ a: atom(c[0]), b: atom(c[1]), ...(bends ? { points: bends } : {}) });
   }
 
-  const typeClass = new Map<string, boolean>();
+  const typeClass = typeCache;
   const undrawn: Undrawn = { total: 0, hidden: 0, arrays: 0, conditionals: 0 };
   const vars: ModelVar[] = [];
   let index = 0;

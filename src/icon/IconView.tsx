@@ -23,6 +23,7 @@ import {
 } from "@paperboat/shared";
 import { CompactBlock, NumberField, Switch } from "@paperboat/shared/components";
 import { useStudio } from "../model/types.ts";
+import { SideSelect } from "../sheet/SideSelect.tsx";
 import {
   applyPlateSize,
   buildLinkedBlockDef,
@@ -38,7 +39,6 @@ import {
   resizePrim,
   sanitizeIconDef,
   setPortPlacement,
-  SIDE_OPTIONS,
   SIZE_OPTIONS,
   snapTo5,
   syncPortsWithEntries,
@@ -158,6 +158,7 @@ export function IconView() {
   const [connClass, setConnClass] = useState("Modelica.Blocks.Interfaces.RealInput");
   const [connBusy, setConnBusy] = useState(false);
   const drag = useRef<Drag | null>(null);
+  const dragPort = useRef<string | null>(null);
   const previewRef = useRef<Prim | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -221,13 +222,17 @@ export function IconView() {
     ...(prim?.t === "text" ? { font: prim.font ?? "sans", size: prim.size ?? 12 } : {}),
   });
 
-  const placePort = (at: Pt) => {
-    const id = selectedPort ?? ports[0]?.id;
-    if (!id) return;
+  const edgeOf = (at: Pt): { side: IconPort["side"]; along: number } => {
     const [x, y] = at;
     const edge = Math.min(x, 100 - x, y, 100 - y);
     const side: IconPort["side"] = edge === x ? "left" : edge === 100 - x ? "right" : edge === y ? "top" : "bottom";
-    const along = side === "left" || side === "right" ? y : x;
+    return { side, along: side === "left" || side === "right" ? y : x };
+  };
+
+  const placePort = (at: Pt) => {
+    const id = selectedPort ?? ports[0]?.id;
+    if (!id) return;
+    const { side, along } = edgeOf(at);
     change((icon) => setPortPlacement(icon, api.model.entries, id, side, along));
     setSelectedPort(id);
   };
@@ -272,6 +277,12 @@ export function IconView() {
     const d = drag.current;
     if (!d) return;
     const at = point(e);
+    if (dragPort.current) {
+      const { side, along } = edgeOf(at);
+      const id = dragPort.current;
+      change((icon) => setPortPlacement(icon, api.model.entries, id, side, along));
+      return;
+    }
     if (d.kind === "create") {
       const next = primFromDrag(d.tool, d.start, at, d.style);
       previewRef.current = next;
@@ -290,6 +301,7 @@ export function IconView() {
   const onUp = () => {
     const d = drag.current;
     drag.current = null;
+    dragPort.current = null;
     if (d?.kind === "create") {
       const made = previewRef.current;
       previewRef.current = null;
@@ -485,6 +497,8 @@ export function IconView() {
                   onPointerDown={(e) => {
                     e.stopPropagation();
                     setSelectedPort(port.id);
+                    dragPort.current = port.id;
+                    svgRef.current?.setPointerCapture?.(e.pointerId);
                   }}
                 >
                   <title>{port.id} · {port.side} {port.at}</title>
@@ -589,12 +603,7 @@ export function IconView() {
                   <button type="button" className="icon-port-pick" onClick={() => setSelectedPort(port.id)} title="Place this connector with the pin tool">
                     {port.id}
                   </button>
-                  <Switch<IconPort["side"]>
-                    label=""
-                    value={port.side}
-                    onChange={(side) => change((icon) => setPortPlacement(icon, api.model.entries, port.id, side, port.at))}
-                    options={SIDE_OPTIONS}
-                  />
+                  <SideSelect label={`${port.id} side`} value={port.side} onChange={(side) => change((icon) => setPortPlacement(icon, api.model.entries, port.id, side, port.at))} />
                   <NumberField className="studio-look-at-input" aria-label={`${port.id} at`} value={port.at} onChange={(at) => change((icon) => setPortPlacement(icon, api.model.entries, port.id, port.side, at))} />
                 </div>
               ))

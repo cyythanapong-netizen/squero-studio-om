@@ -9,7 +9,7 @@ import { Canvas } from "./canvas/Canvas.tsx";
 import { runBackendExport } from "./dock/dock.ts";
 import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
-import { StudioContext } from "./model/types.ts";
+import { StudioContext, type StudioModel } from "./model/types.ts";
 import { OmcClient, type OmcStatus } from "./omc/omc.ts";
 import { type Log, type Message } from "@paperboat/shared/components";
 import { ComponentPopover } from "./popover/index.tsx";
@@ -28,7 +28,8 @@ import { Rail, type RailTab } from "./shell/Rail.tsx";
 import { TextStage } from "./shell/TextStage.tsx";
 import { NewClassSheet } from "./shell/NewClassSheet.tsx";
 import type { NewClassSpec } from "./shell/newClass.ts";
-import { closeDoc, neighbour, openDoc, type Doc, type Workspace } from "./shell/workspace.ts";
+import { closeDoc, neighbour, openDoc, type Doc, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
+import { packageName } from "./shell/newClass.ts";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
 
@@ -87,7 +88,12 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [rail, setRail] = useState<RailTab>("files");
   const [newClassOpen, setNewClassOpen] = useState(false);
+  const [newClassWithin, setNewClassWithin] = useState<string | undefined>(undefined);
+  const [workspaceTick, setWorkspaceTick] = useState(0);
   const railTouched = useRef(false);
+  // Documents and their folder listings read once: switching back is a state restore, not omc again.
+  const modelCache = useRef(new Map<string, StudioModel>());
+  const workspaceCache = useRef(new Map<string, Workspace>());
   const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
   const [theme, setTheme, shown] = useThemeChoice();
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
@@ -155,7 +161,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     const file = model?.file;
     if (!file) return;
     setDocs((list) => openDoc(list, { file, name: model.name }));
-  }, [model?.file, model?.name]);
+    modelCache.current.set(file, model);
+  }, [model, model?.file, model?.name]);
 
   // The folder the model sits in, for the Files rail. A workspace read is never fatal: the rail
   // just shows the open documents when the server can't list the folder.
@@ -165,15 +172,30 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       setWorkspace(null);
       return;
     }
+    const cached = workspaceCache.current.get(file);
+    if (cached) {
+      setWorkspace(cached);
+      return;
+    }
     let live = true;
     omc.op<Workspace>("workspace", { file }).then(
-      (next) => live && setWorkspace(next),
+      (next) => {
+        if (!live) return;
+        setWorkspace(next);
+        workspaceCache.current.set(file, next);
+      },
       () => live && setWorkspace(null),
     );
     return () => {
       live = false;
     };
-  }, [omc, model?.file]);
+  }, [omc, model?.file, workspaceTick]);
+
+  /** A create/delete/duplicate changed the folder: forget every listing and read the active one again. */
+  const refreshWorkspace = () => {
+    workspaceCache.current.clear();
+    setWorkspaceTick((t) => t + 1);
+  };
 
   // A quick model — a .mo outside a package — is assembled from the library, so open on Library.
   // A package opens on its own files. Once the user picks a tab, that choice wins.
@@ -196,7 +218,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     if (file === model?.file) return;
     try {
       if (actions.dirty) await actions.save();
-      await actions.openFile(file, content);
+      const cached = content === undefined ? modelCache.current.get(file) : undefined;
+      if (cached) actions.restore(cached);
+      else await actions.openFile(file, content);
     } catch (err) {
       fail(err as Error);
     }
@@ -217,7 +241,97 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     const made = await actions.createClass(spec);
     await actions.openFile(made.file);
     setNewClassOpen(false);
+    refreshWorkspace();
     say(`Created ${made.model}`);
+  };
+
+  /** The qualified package of an entry (a package itself, or a class's parent), or "". */
+  const withinOf = (entry?: WorkspaceEntry): string => {
+    if (!workspace || !entry) return "";
+    const dir = entry.kind === "package" ? entry.path : entry.path.slice(0, entry.path.lastIndexOf("/"));
+    return packageName(workspace.root, dir);
+  };
+  const parentOf = (entry?: WorkspaceEntry): string | undefined => {
+    if (!workspace) return undefined;
+    if (!entry) return workspace.root;
+    return entry.kind === "package" ? entry.path : entry.path.slice(0, entry.path.lastIndexOf("/"));
+  };
+
+  const openNewClass = (entry?: WorkspaceEntry) => {
+    setNewClassWithin(entry ? withinOf(entry) : undefined);
+    setNewClassOpen(true);
+  };
+
+  const newPackage = (entry?: WorkspaceEntry) => {
+    const parent = parentOf(entry);
+    if (!parent) return;
+    setPromptModal({
+      title: "New Package",
+      label: "Package name",
+      value: "NewPackage",
+      confirmLabel: "Create",
+      onConfirm: async (name) => {
+        try {
+          await actions.newPackage(parent, name, withinOf(entry));
+          refreshWorkspace();
+          say(`Created package ${name}`);
+        } catch (err) {
+          fail(err as Error);
+        }
+      },
+    });
+  };
+
+  const duplicate = (entry: WorkspaceEntry) => {
+    if (entry.kind !== "class") return;
+    setPromptModal({
+      title: `Duplicate ${entry.name}`,
+      label: "New class name",
+      value: `${entry.name}Copy`,
+      confirmLabel: "Duplicate",
+      onConfirm: async (name) => {
+        try {
+          const made = await actions.duplicateClass({ file: entry.path, name: entry.name, newName: name, within: withinOf(entry) });
+          modelCache.current.delete(made.file);
+          await openDocument(made.file);
+          refreshWorkspace();
+          say(`Duplicated ${entry.name} as ${made.model}`);
+        } catch (err) {
+          fail(err as Error);
+        }
+      },
+    });
+  };
+
+  const removeClass = (entry: WorkspaceEntry) => {
+    if (entry.kind !== "class") return;
+    const next = neighbour(docs, entry.path);
+    if (entry.path === model?.file && !next) {
+      say("open another document first; the last one stays open", "error");
+      return;
+    }
+    setPromptModal({
+      title: `Delete ${entry.name}`,
+      label: `Type ${entry.name} to confirm`,
+      value: "",
+      confirmLabel: "Delete",
+      onConfirm: async (typed) => {
+        if (typed.trim() !== entry.name) {
+          say("the name did not match; nothing was deleted", "error");
+          return;
+        }
+        try {
+          await actions.deleteClass({ file: entry.path, name: entry.name });
+          modelCache.current.delete(entry.path);
+          setDocs((list) => closeDoc(list, entry.path));
+          if (entry.path === model?.file && next) await openDocument(next.file);
+          refreshWorkspace();
+          say(`Deleted ${entry.name}`);
+        } catch (err) {
+          fail(err as Error);
+        }
+      },
+    });
   };
 
   const handleExportBackend = async () => {
@@ -236,8 +350,10 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     const reader = new FileReader();
     reader.onload = async () => {
       const content = String(reader.result ?? "");
+      // Import into the workspace being authored, not the server's cwd: the package tree stays.
+      const target = workspace?.root ? `${workspace.root}/${file.name}` : file.name;
       try {
-        await openDocument(file.name, content);
+        await openDocument(target, content);
       } catch (err) {
         fail(err as Error);
       }
@@ -304,7 +420,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             confirmLabel: "Create",
             onConfirm: async (name) => {
               if (actions.dirty) await actions.save();
-              await actions.newModel(name);
+              const target = workspace?.root ? `${workspace.root}/${name.endsWith(".mo") ? name : `${name}.mo`}` : undefined;
+              await actions.newModel(name, target);
             },
           }),
       },
@@ -315,7 +432,14 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
         group: "model",
         shortcut: "Ctrl+Shift+N",
         chord: { key: "n", ctrl: true, shift: true },
-        run: () => setNewClassOpen(true),
+        run: () => openNewClass(),
+      },
+      {
+        id: "file.new-package",
+        label: "New Package…",
+        menu: "file",
+        group: "model",
+        run: () => newPackage(),
       },
       {
         id: "file.open",
@@ -475,7 +599,14 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               workspace={workspace}
               active={model.file}
               onOpen={(file) => void openDocument(file)}
-              onNew={() => setNewClassOpen(true)}
+              onNewClass={openNewClass}
+              onNewPackage={newPackage}
+              onDuplicate={duplicate}
+              onDelete={removeClass}
+              onCopyPath={(entry) => {
+                void navigator.clipboard?.writeText(entry.path);
+                say(`Copied ${entry.path}`);
+              }}
             >
               <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
             </Rail>
@@ -510,7 +641,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               </aside>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} canExport={canExport} />
-            {newClassOpen && <NewClassSheet workspace={workspace} model={model} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}
+            {newClassOpen && <NewClassSheet workspace={workspace} model={model} defaultWithin={newClassWithin} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}
             <div className="dock-slot">
               <StudioDock />
             </div>

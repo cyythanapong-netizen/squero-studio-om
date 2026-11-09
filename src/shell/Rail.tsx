@@ -6,7 +6,7 @@
 // to read. Opening a folder or a package opens on Files. That is the whole difference between the
 // quick path and the authoring path; they are the same shell.
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { visibleEntries, workspaceName, type Workspace, type WorkspaceEntry } from "./workspace.ts";
 
 export type RailTab = "files" | "library";
@@ -71,7 +71,11 @@ export function Rail({
   workspace,
   active,
   onOpen,
-  onNew,
+  onNewClass,
+  onNewPackage,
+  onDuplicate,
+  onDelete,
+  onCopyPath,
   children,
 }: {
   tab: RailTab;
@@ -79,11 +83,24 @@ export function Rail({
   workspace: Workspace | null;
   active?: string;
   onOpen: (file: string) => void;
-  onNew: () => void;
+  onNewClass: (entry?: WorkspaceEntry) => void;
+  onNewPackage: (entry?: WorkspaceEntry) => void;
+  onDuplicate: (entry: WorkspaceEntry) => void;
+  onDelete: (entry: WorkspaceEntry) => void;
+  onCopyPath: (entry: WorkspaceEntry) => void;
   children: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [menu, setMenu] = useState<{ entry?: WorkspaceEntry; x: number; y: number } | null>(null);
   const rows = workspace ? visibleEntries(workspace.entries, collapsed) : [];
+  const close = () => setMenu(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenu(null);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [menu]);
   const classes = rows.filter((entry) => entry.kind === "class").length;
   const toggle = (path: string) =>
     setCollapsed((prev) => {
@@ -103,7 +120,15 @@ export function Rail({
           library
         </button>
         {tab === "files" && (
-          <button type="button" className="key small rail-add" title="New class in this workspace" onClick={onNew}>
+          <button
+            type="button"
+            className="key small rail-add"
+            title="New class or package"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setMenu({ x: rect.left, y: rect.bottom + 4 });
+            }}
+          >
             +
           </button>
         )}
@@ -132,6 +157,10 @@ export function Rail({
                     style={{ paddingLeft: 8 + entry.depth * 14 }}
                     title={entry.path}
                     onClick={() => (entry.kind === "package" ? toggle(entry.path) : onOpen(entry.path))}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMenu({ entry, x: e.clientX, y: e.clientY });
+                    }}
                   >
                     <span className="caret">{entry.kind === "package" ? (open ? "▾" : "▸") : ""}</span>
                     <span className="file-icon" title={entry.kind === "package" ? "package" : (entry.classKind ?? "class")}>
@@ -154,6 +183,38 @@ export function Rail({
           {children}
         </div>
       </div>
+      {menu && (
+        <>
+          <div className="file-menu-scrim" onPointerDown={close} />
+          <div className="file-menu" role="menu" aria-label="Workspace actions" style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 240) }}>
+            <button type="button" role="menuitem" onClick={() => { onNewClass(menu.entry); close(); }}>
+              New class…
+            </button>
+            <button type="button" role="menuitem" onClick={() => { onNewPackage(menu.entry); close(); }}>
+              New package…
+            </button>
+            {menu.entry?.kind === "class" && (
+              <>
+                <hr />
+                <button type="button" role="menuitem" onClick={() => { onDuplicate(menu.entry!); close(); }}>
+                  Duplicate…
+                </button>
+                <button type="button" role="menuitem" onClick={() => { onDelete(menu.entry!); close(); }}>
+                  Delete…
+                </button>
+              </>
+            )}
+            {menu.entry && (
+              <>
+                <hr />
+                <button type="button" role="menuitem" onClick={() => { onCopyPath(menu.entry!); close(); }}>
+                  Copy path
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </aside>
   );
 }
