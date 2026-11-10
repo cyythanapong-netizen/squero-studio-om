@@ -299,7 +299,7 @@ export function defaultExportFolder(modelName: string): string {
 
 export type ExportOutcome =
   | { ok: true; result: ExportResult; line: string }
-  | { ok: false; line: string };
+  | { ok: false; result?: ExportResult; line: string };
 
 function saveBase64(file: string, b64: string) {
   const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -318,7 +318,7 @@ export function serveLine(mode: ExportMode, r: ExportResult, port?: number): str
   if (mode === "stop") return `stopped backend on port ${port}`;
   if (mode === "ppk") return `${r.file} downloaded · ${r.reason}`;
   if (r.state === "running") return `${r.name ?? "backend"} running on port ${r.port}`;
-  if (r.state === "exited") return `backend on port ${r.port} exited:\n${r.log ?? ""}`;
+  if (r.state === "exited") return `backend on port ${r.port} exited:\n${r.tail ?? r.log ?? ""}`;
   return `building ${r.name ?? "backend"} for port ${r.port}… (the first build compiles the engine: minutes)`;
 }
 
@@ -327,12 +327,13 @@ export async function runBackendExport(
   mode: ExportMode,
   onProgress: (p: ExportProgress) => void,
   port?: number,
+  offset?: number,
 ): Promise<ExportOutcome> {
   try {
-    const result = await api.exportBackend(mode, onProgress, port);
+    const result = await api.exportBackend(mode, onProgress, port, offset);
     if (result.ppk && result.file) saveBase64(result.file, result.ppk);
     const line = serveLine(mode, result, port);
-    return result.state === "exited" ? { ok: false, line } : { ok: true, result, line };
+    return result.state === "exited" ? { ok: false, result, line } : { ok: true, result, line };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, line: explainOmcError(msg) || "export failed" };

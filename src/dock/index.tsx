@@ -12,7 +12,17 @@ import {
 } from "./dock.ts";
 import "./dock.css";
 
-export function StudioDock({ canExport = true, why = "", beforeExport }: { canExport?: boolean; why?: string; beforeExport?: () => Promise<void> }) {
+export function StudioDock({
+  canExport = true,
+  why = "",
+  beforeExport,
+  onLog,
+}: {
+  canExport?: boolean;
+  why?: string;
+  beforeExport?: () => Promise<void>;
+  onLog?: (text: string, level?: "info" | "warn" | "error") => void;
+}) {
   const api = useStudio();
   const [balance, setBalance] = useState<BalanceResult>({
     kind: "balanced",
@@ -27,6 +37,9 @@ export function StudioDock({ canExport = true, why = "", beforeExport }: { canEx
   const [outcome, setOutcome] = useState<ExportOutcome | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  // The backend build writes a log; follow it from this byte and send each new line to the console.
+  const logOffset = useRef(0);
+  const logPending = useRef("");
 
   const modelSignature = JSON.stringify({
     name: api.model.name,
@@ -70,6 +83,9 @@ export function StudioDock({ canExport = true, why = "", beforeExport }: { canEx
     setBusy(true);
     await beforeExport?.();
     setOutcome(null);
+    logOffset.current = 0;
+    logPending.current = "";
+    onLog?.(mode === "ppk" ? "packing the backend…" : "starting the backend: building…", "info");
     const again = mode === "serve" ? running?.port : undefined; // a restart keeps its port
     if (again) await runBackendExport(api, "stop", () => {}, again);
     setRunning(null);
@@ -79,7 +95,10 @@ export function StudioDock({ canExport = true, why = "", beforeExport }: { canEx
     }, again);
     setProgress(null);
     if (!(mode === "serve" && res.ok)) setOutcome(res); // a started backend reports below as it comes up
-    if (mode === "serve" && res.ok && res.result.port) setRunning({ port: res.result.port, up: false });
+    if (mode === "serve" && res.ok && res.result.port) {
+      logOffset.current = 0;
+      setRunning({ port: res.result.port, up: false });
+    }
     setBusy(false);
   };
 
@@ -90,12 +109,26 @@ export function StudioDock({ canExport = true, why = "", beforeExport }: { canEx
   useEffect(() => {
     if (!pollPort) return;
     const timer = setInterval(() => {
-      void runBackendExport(apiRef.current, "status", () => {}, pollPort).then((res) => {
+      void runBackendExport(apiRef.current, "status", () => {}, pollPort, logOffset.current).then((res) => {
+        // Stream the log: the poll returns only what was written since the last one.
+        const chunk = res.result?.log ?? "";
+        if (chunk) {
+          logPending.current += chunk;
+          for (let at; (at = logPending.current.indexOf("\n")) >= 0;) {
+            const line = logPending.current.slice(0, at).trimEnd();
+            logPending.current = logPending.current.slice(at + 1);
+            if (line) onLog?.(line, "info");
+          }
+          if (res.result?.offset !== undefined) logOffset.current = res.result.offset;
+        }
         if (res.ok && res.result.state === "building") {
-          const line = (res.result.log ?? "").trim().split("\n").pop();
+          const line = (logPending.current || chunk).trim().split("\n").pop();
           return setRunning((r) => (r && r.port === pollPort ? { ...r, line } : r));
         }
-        if (!res.ok) setOutcome(res); // it exited: the log says why
+        if (!res.ok) {
+          if (res.result?.tail && !chunk.includes(res.result.tail)) onLog?.(res.result.tail.trimEnd(), "error");
+          setOutcome(res); // it exited: the log says why
+        }
         setRunning(res.ok ? { port: pollPort, up: true } : null);
       });
     }, 1500);

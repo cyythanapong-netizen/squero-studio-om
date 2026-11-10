@@ -65,6 +65,7 @@ export type Actions = {
   newPackage(parent: string, name: string, within: string): Promise<{ path: string; name: string }>;
   duplicateClass(spec: { file: string; name: string; newName: string; within: string }): Promise<{ file: string; model: string }>;
   deleteClass(spec: { file: string; name: string }): Promise<void>;
+  deletePackage(spec: { dir: string; root: string }): Promise<void>;
   moveClass(spec: { file: string; targetDir: string; within: string }): Promise<{ file: string; model: string }>;
   /** The .mo file itself, for the text editor (list() is the class body only). */
   fileText(): Promise<string>;
@@ -245,10 +246,10 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
           await refresh();
         });
       },
-      async exportBackend(mode: ExportMode, onProgress: (p: ExportProgress) => void, port?: number): Promise<ExportResult> {
+      async exportBackend(mode: ExportMode, onProgress: (p: ExportProgress) => void, port?: number, offset?: number): Promise<ExportResult> {
         return enqueue(async () => {
           if (!model.file) throw new Error("save the model to a file first");
-          return omc.op<ExportResult>("export", { source: model.file, model: name, mode, port, fmu_solver: fmuSolver(loadSolver(name)) }, (stage, fraction) =>
+          return omc.op<ExportResult>("export", { source: model.file, model: name, mode, port, offset, fmu_solver: fmuSolver(loadSolver(name)) }, (stage, fraction) =>
             onProgress({ stage: stage as ExportProgress["stage"], fraction }),
           );
         });
@@ -387,6 +388,9 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       },
       deleteClass(spec) {
         return enqueue(() => omc.op<void>("delete_class", spec));
+      },
+      deletePackage(spec) {
+        return enqueue(() => omc.op<void>("delete_package", spec));
       },
       moveClass(spec) {
         return enqueue(() => omc.op<{ file: string; model: string }>("move_class", spec));

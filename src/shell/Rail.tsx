@@ -195,6 +195,12 @@ export function Rail({
                       if (source) onMove(source, entry);
                     }}
                     onClick={() => (entry.kind === "package" ? toggle(entry.path) : onOpen(entry.path))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Delete" || e.key === "Backspace") {
+                        e.preventDefault();
+                        onDelete(entry);
+                      }
+                    }}
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setMenu({ entry, x: e.clientX, y: e.clientY });
@@ -231,14 +237,16 @@ export function Rail({
             <button type="button" role="menuitem" onClick={() => { onNewPackage(menu.entry); close(); }}>
               New package…
             </button>
-            {menu.entry?.kind === "class" && (
+            {menu.entry && (
               <>
                 <hr />
-                <button type="button" role="menuitem" onClick={() => { onDuplicate(menu.entry!); close(); }}>
-                  Duplicate…
-                </button>
-                <button type="button" role="menuitem" onClick={() => { onDelete(menu.entry!); close(); }}>
-                  Delete…
+                {menu.entry.kind === "class" && (
+                  <button type="button" role="menuitem" onClick={() => { onDuplicate(menu.entry!); close(); }}>
+                    Duplicate…
+                  </button>
+                )}
+                <button type="button" role="menuitem" className="danger" onClick={() => { onDelete(menu.entry!); close(); }}>
+                  Delete {menu.entry.kind === "package" ? "package" : ""}…
                 </button>
               </>
             )}

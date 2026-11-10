@@ -734,6 +734,14 @@ TEST_CASE("packages and class files can be created, duplicated and deleted", "[s
   const std::string left((std::istreambuf_iterator<char>(after)), std::istreambuf_iterator<char>());
   CHECK(left == "");
 
+  // A package goes with everything under it, but never the workspace root or a folder outside it.
+  CHECK(op(omc, {{"op", "delete_package"}, {"dir", dir.string()}, {"root", dir.string()}})["ok"] == false);
+  const json removed_pkg = op(omc, {{"op", "delete_package"}, {"dir", (dir / "Sub").string()}, {"root", dir.string()}});
+  INFO(removed_pkg.dump());
+  REQUIRE(removed_pkg["ok"] == true);
+  CHECK_FALSE(fs::exists(dir / "Sub"));
+  CHECK(fs::exists(dir / "Pkg" / "B.mo") == false);
+
   fs::remove_all(dir);
 }
 

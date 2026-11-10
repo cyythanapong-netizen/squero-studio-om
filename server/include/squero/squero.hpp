@@ -24,6 +24,7 @@
 //   duplicate_class {file, name, newName, within?}
 //                                              → {file, model}      copy a class file under a new name
 //   delete_class {file, name}                  → {}                 remove the file and its package.order entry
+//   delete_package {dir, root}                 → {dir}              remove a package folder inside the workspace
 //   move_class {file, targetDir, within?}      → {file, model}      move a class to another package, rewrite `within`
 //   read_file {file}                           → {text}             the .mo file's own text, for the editor
 //   save      {model}                           → {file}             `save(model)`: the model's own .mo

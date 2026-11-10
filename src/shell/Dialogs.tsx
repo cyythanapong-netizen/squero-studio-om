@@ -69,6 +69,53 @@ export function PromptModal({
   );
 }
 
+export function ConfirmModal({
+  title,
+  body,
+  confirmLabel = "Delete",
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  body: string;
+  confirmLabel?: string;
+  onConfirm: () => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const cancel = useRef<HTMLButtonElement>(null);
+  useEffect(() => cancel.current?.focus(), []);
+  return (
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
+      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+        <header className="modal-head">
+          <h3>{title}</h3>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
+            ×
+          </button>
+        </header>
+        <div className="modal-body">
+          <p className="lbl">{body}</p>
+        </div>
+        <footer className="modal-actions">
+          <button ref={cancel} type="button" className="key small" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="key small err"
+            onClick={() => {
+              void onConfirm();
+              onClose();
+            }}
+          >
+            {confirmLabel}
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 const COMMON_LIBRARIES = [
   { name: "Modelica", desc: "Modelica Standard Library (MSL)" },
   { name: "Modelica_Synchronous", desc: "Synchronous control systems library" },

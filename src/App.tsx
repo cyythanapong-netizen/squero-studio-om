@@ -16,7 +16,7 @@ import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { IconView } from "./icon/IconView.tsx";
 import { AboutModal } from "./shell/AboutModal.tsx";
-import { LibraryModal, PromptModal, StatusModal } from "./shell/Dialogs.tsx";
+import { ConfirmModal, LibraryModal, PromptModal, StatusModal } from "./shell/Dialogs.tsx";
 import { TopBar } from "./shell/TopBar.tsx";
 import { useTheme, type Theme } from "@paperboat/shared/components";
 import { Opening } from "./shell/Opening.tsx";
@@ -74,6 +74,13 @@ type PromptSpec = {
   onConfirm: (val: string) => void | Promise<void>;
 };
 
+type ConfirmSpec = {
+  title: string;
+  body: string;
+  confirmLabel?: string;
+  onConfirm: () => void | Promise<void>;
+};
+
 function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const { api, actions, error, stage } = useStudioStore(omc, status);
   const [popover, setPopover] = useState<string | null>(null);
@@ -98,6 +105,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
   const [theme, setTheme, shown] = useThemeChoice();
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
+  const [confirmModal, setConfirmModal] = useState<ConfirmSpec | null>(null);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -141,13 +149,13 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const exportWhy = !canExport ? "only a model or a block can be exported to Paperboat" : !hasInterface ? "add a public parameter or an input/output first" : "";
   // A class only offers the views it can use: no diagram for a connector/record/function, no icon for a
   // record/function, no 3D unless the model has MultiBody parts or a run.
-  const hasMultiBody = Boolean(shapeRun?.shapes?.length) || Boolean(model?.components.some((c) => c.class.startsWith("Modelica.Mechanics.MultiBody")));
+  const hasMultiBody = Boolean(shapeRun?.shapes?.length) || Boolean(model?.components.some((c) => /MultiBody/i.test(c.class)));
   const stageOptions = useMemo(() => {
     const kind = classKind ?? "model";
     const out: { value: Stage; label: string; hint: string }[] = [];
     if (kind === "model" || kind === "block") out.push({ value: "diagram", label: "diagram", hint: "The model's parts and wires" });
     if (kind === "model" || kind === "block" || kind === "connector") out.push({ value: "icon", label: "icon", hint: "Draw the icon and place connectors" });
-    if (kind === "model" && hasMultiBody) out.push({ value: "3d", label: "3d", hint: "The last MultiBody run in 3D" });
+    if ((kind === "model" || kind === "block") && hasMultiBody) out.push({ value: "3d", label: "3d", hint: "The last MultiBody run in 3D" });
     out.push({ value: "text", label: "text", hint: "The model's .mo" });
     return out;
   }, [classKind, hasMultiBody]);
@@ -342,28 +350,50 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
 
   const removeClass = (entry: WorkspaceEntry) => {
     if (entry.kind !== "class") return;
-    const next = neighbour(docs, entry.path);
+    const next = neighbour(docs, entry.path)?.file ?? workspace?.entries.find((one) => one.kind === "class" && one.path !== entry.path)?.path;
     if (entry.path === model?.file && !next) {
-      say("open another document first; the last one stays open", "error");
+      say("create another class first; the last document stays open", "error");
       return;
     }
-    setPromptModal({
-      title: `Delete ${entry.name}`,
-      label: `Type ${entry.name} to confirm`,
-      value: "",
-      confirmLabel: "Delete",
-      onConfirm: async (typed) => {
-        if (typed.trim() !== entry.name) {
-          say("the name did not match; nothing was deleted", "error");
-          return;
-        }
+    setConfirmModal({
+      title: `Delete ${entry.name}?`,
+      body: `${entry.path} is removed from disk. This cannot be undone.`,
+      onConfirm: async () => {
         try {
           await actions.deleteClass({ file: entry.path, name: entry.name });
           modelCache.current.delete(entry.path);
           setDocs((list) => closeDoc(list, entry.path));
-          if (entry.path === model?.file && next) await openDocument(next.file);
+          if (entry.path === model?.file && next) await openDocument(next);
           refreshWorkspace();
           say(`Deleted ${entry.name}`);
+        } catch (err) {
+          fail(err as Error);
+        }
+      },
+    });
+  };
+
+  const removePackage = (entry: WorkspaceEntry) => {
+    if (entry.kind !== "package" || !workspace) return;
+    const inside = (file: string) => file === entry.path || file.startsWith(`${entry.path}/`);
+    const gone = workspace.entries.filter((one) => inside(one.path) && one.kind === "class").length;
+    const survivors = docs.filter((doc) => !inside(doc.file));
+    const outside = survivors[0]?.file ?? workspace.entries.find((one) => one.kind === "class" && !inside(one.path))?.path;
+    if (docs.length > 0 && !outside) {
+      say("create a class outside this package first; the last document stays open", "error");
+      return;
+    }
+    setConfirmModal({
+      title: `Delete package ${entry.name}?`,
+      body: `${entry.path} and everything in it (${gone} class${gone === 1 ? "" : "es"}) is removed from disk. This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await actions.deletePackage({ dir: entry.path, root: workspace.root });
+          for (const doc of docs) if (inside(doc.file)) modelCache.current.delete(doc.file);
+          setDocs(survivors);
+          if (model?.file && inside(model.file) && outside) await openDocument(outside);
+          refreshWorkspace();
+          say(`Deleted package ${entry.name}`);
         } catch (err) {
           fail(err as Error);
         }
@@ -650,7 +680,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               onNewClass={openNewClass}
               onNewPackage={newPackage}
               onDuplicate={duplicate}
-              onDelete={removeClass}
+              onDelete={(entry) => (entry.kind === "package" ? removePackage(entry) : removeClass(entry))}
               onMove={(source, target) => void moveEntry(source, target)}
               onCopyPath={(entry) => {
                 void navigator.clipboard?.writeText(entry.path);
@@ -702,7 +732,16 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <InterfaceSheet open={sheet} onOpen={() => setSheet(true)} onClose={() => setSheet(false)} canExport={canExport} />
             {newClassOpen && <NewClassSheet workspace={workspace} model={model} defaultWithin={newClassWithin} onClose={() => setNewClassOpen(false)} onCreate={createNewClass} />}
             <div className="dock-slot">
-              <StudioDock canExport={exportReady} why={exportWhy} beforeExport={saveCurrent} />
+              <StudioDock
+                canExport={exportReady}
+                why={exportWhy}
+                beforeExport={saveCurrent}
+                onLog={(text, level) => {
+                  setConsoleTab("console");
+                  setConsoleShown(true);
+                  say(text, level);
+                }}
+              />
             </div>
           </>
         ) : (
@@ -716,6 +755,16 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           style={{ display: "none" }}
           onChange={handleFileInputChange}
         />
+
+        {confirmModal && (
+          <ConfirmModal
+            title={confirmModal.title}
+            body={confirmModal.body}
+            confirmLabel={confirmModal.confirmLabel}
+            onConfirm={confirmModal.onConfirm}
+            onClose={() => setConfirmModal(null)}
+          />
+        )}
 
         {promptModal && (
           <PromptModal

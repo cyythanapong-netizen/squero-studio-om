@@ -391,6 +391,26 @@ json op_delete_class(const json& in) {
   return json::object();
 }
 
+// Delete a package folder and everything under it. `root` is the workspace the UI shows, so a
+// stray path (or the root itself) cannot take the whole workspace with it.
+json op_delete_package(const json& in) {
+  const std::string dir_name = in.value("dir", "");
+  const std::string root_name = in.value("root", "");
+  if (dir_name.empty()) throw std::runtime_error("delete_package needs a folder");
+  std::error_code ec;
+  const fs::path dir = fs::weakly_canonical(fs::absolute(dir_name), ec);
+  const fs::path root = fs::weakly_canonical(fs::absolute(root_name), ec);
+  if (ec) throw std::runtime_error("cannot resolve " + dir_name);
+  if (dir == root) throw std::runtime_error("the workspace root cannot be deleted");
+  if (!fs::is_directory(dir) || !fs::is_regular_file(dir / "package.mo"))
+    throw std::runtime_error(dir.string() + " is not a Modelica package");
+  auto a = dir.begin(), b = root.begin();
+  for (; b != root.end(); ++a, ++b)
+    if (a == dir.end() || *a != *b) throw std::runtime_error(dir.string() + " is outside " + root.string());
+  fs::remove_all(dir);
+  return json{{"dir", dir.string()}};
+}
+
 json op_read_file(const json& in) {
   const std::string file_name = in.value("file", "");
   if (file_name.empty()) throw std::runtime_error("read_file needs a file");
@@ -629,6 +649,103 @@ int run_paperboat(const std::vector<std::string>& args, const fs::path& log) {
   return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
 }
 
+// Runs a program with its output going to `log` and to `on_line` as it arrives, so a slow build
+// shows why it is slow while it runs (a packed archive reports its progress too).
+int run_process_streaming(const std::string& bin, const std::vector<std::string>& args, const fs::path& log,
+                          const std::function<void(const std::string&)>& on_line) {
+  std::vector<char*> argv{const_cast<char*>(bin.c_str())};
+  for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
+  argv.push_back(nullptr);
+  int fds[2];
+  if (pipe2(fds, O_CLOEXEC) != 0) throw std::runtime_error("cannot pipe paperboat's output");
+  const pid_t pid = fork();
+  if (pid == 0) {
+    setsid();
+    const int null = open("/dev/null", O_RDONLY);
+    dup2(null, 0);
+    dup2(fds[1], 1);
+    dup2(fds[1], 2);
+    close_range(3, ~0U, 0);
+    execvp(bin.c_str(), argv.data());
+    dprintf(2, "cannot run %s: %s\n", bin.c_str(), std::strerror(errno));
+    _exit(127);
+  }
+  close(fds[1]);
+  if (pid < 0) {
+    close(fds[0]);
+    throw std::runtime_error("fork failed");
+  }
+  std::ofstream out(log, std::ios::binary | std::ios::trunc);
+  std::string pending;
+  std::array<char, 8192> buf{};
+  for (ssize_t n; (n = read(fds[0], buf.data(), buf.size())) > 0;) {
+    out.write(buf.data(), n);
+    out.flush();
+    pending.append(buf.data(), static_cast<std::size_t>(n));
+    for (std::size_t at; (at = pending.find('\n')) != std::string::npos;) {
+      on_line(pending.substr(0, at));
+      pending.erase(0, at + 1);
+    }
+  }
+  close(fds[0]);
+  if (!pending.empty()) on_line(pending);
+  int st = 0;
+  waitpid(pid, &st, 0);
+  return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+}
+
+int run_paperboat_streaming(const std::vector<std::string>& args, const fs::path& log,
+                            const std::function<void(const std::string&)>& on_line) {
+  return run_process_streaming(paperboat_bin(), args, log, on_line);
+}
+
+// The prebuilt SDK for the checkout the paperboat binary came from, installing it once if it is
+// missing or older than the engine library. Without it every backend rebuilds the engine and all
+// its dependencies in its own build folder (minutes, and gigabytes).
+void ensure_engine_sdk(const Session& session) {
+  if (const char* given = std::getenv("PAPERBOAT_SDK_DIR"); given && *given) return;
+  std::error_code ec;
+  const fs::path bin = fs::canonical(paperboat_bin(), ec);
+  if (ec || !fs::is_regular_file(bin)) return;
+  // <repo>/paperboat/bin/paperboat -> <repo>/paperboat/engine/build/dev
+  const fs::path engine = bin.parent_path().parent_path() / "engine";
+  fs::path build;
+  for (const fs::path candidate : {engine / "build" / "dev", engine / "build"}) {
+    if (fs::is_regular_file(candidate / "core" / "libpaperboat_core.a", ec) ||
+        fs::is_regular_file(candidate / "libpaperboat_core.a", ec)) {
+      build = candidate;
+      break;
+    }
+  }
+  if (build.empty()) return;
+  const fs::path sdk = engine / "build" / "sdk";
+  fs::path config;
+  const auto find_config = [&] {
+    for (const fs::path lib : {sdk / "lib64" / "cmake" / "Paperboat", sdk / "lib" / "cmake" / "Paperboat"})
+      if (fs::is_regular_file(lib / "PaperboatConfig.cmake", ec)) return lib;
+    return fs::path{};
+  };
+  config = find_config();
+  const fs::path core = fs::is_regular_file(build / "core" / "libpaperboat_core.a", ec) ? build / "core" / "libpaperboat_core.a"
+                                                                                        : build / "libpaperboat_core.a";
+  if (config.empty() || fs::last_write_time(config / "PaperboatConfig.cmake", ec) < fs::last_write_time(core, ec)) {
+    const auto say = [&](const std::string& line) {
+      if (session.push && !line.empty()) session.push(json{{"op", "log"}, {"level", "info"}, {"text", line}}.dump());
+    };
+    say(config.empty() ? "installing the engine SDK once (every backend build reuses it)…" : "refreshing the engine SDK…");
+    const fs::path log = fs::temp_directory_path() / "ssom_sdk.log";
+    const int code = run_process_streaming(
+        "cmake", {"--install", build.string(), "--prefix", sdk.string(), "--component", "dev"}, log, say);
+    if (code != 0) {
+      say("engine SDK install failed; the backend will build the engine from source (slow)");
+      return;
+    }
+    config = find_config();
+    if (config.empty()) return;
+  }
+  setenv("PAPERBOAT_SDK_DIR", config.c_str(), 1);
+}
+
 // The last lines of a log, for an error the user can act on.
 std::string log_tail(const fs::path& log, std::size_t lines = 12) {
   std::ifstream f(log);
@@ -661,8 +778,9 @@ bool listening(int port) {
 std::mutex served_mutex;
 std::map<int, std::pair<pid_t, fs::path>> served;
 
-// "status": building (not listening yet), running, or exited (with the log's tail).
-json serve_status(int port) {
+// "status": building (not listening yet), running, or exited (with the log's tail). `offset`
+// asks for the log from that byte on: the console streams a long build instead of re-reading it.
+json serve_status(int port, std::size_t offset) {
   std::lock_guard lock(served_mutex);
   const auto it = served.find(port);
   if (it == served.end()) throw std::runtime_error("no backend started on port " + std::to_string(port));
@@ -673,7 +791,24 @@ json serve_status(int port) {
     state = "exited";
     served.erase(it);
   }
-  return json{{"port", port}, {"name", log.stem().string()}, {"state", state}, {"log", log_tail(log)}};
+  std::error_code ec;
+  const auto size = fs::file_size(log, ec);
+  std::string chunk;
+  std::size_t at = offset;
+  if (!ec) {
+    // the first call (offset 0) shows the last 64 KiB, not a whole old log
+    if (at == 0 && size > 64 * 1024) at = size - 64 * 1024;
+    if (at > size) at = 0;
+    if (at < size) {
+      std::ifstream f(log, std::ios::binary);
+      f.seekg(static_cast<std::streamoff>(at));
+      chunk.resize(static_cast<std::size_t>(size - at));
+      f.read(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+      chunk.resize(static_cast<std::size_t>(f.gcount()));
+      at += chunk.size();
+    }
+  }
+  return json{{"port", port}, {"name", log.stem().string()}, {"state", state}, {"log", chunk}, {"offset", at}, {"tail", log_tail(log)}};
 }
 
 // "stop": `paperboat stop <port>` once it listens, then the rest of its session (a build in flight).
@@ -696,7 +831,7 @@ json serve_stop(int port) {
 // first start builds the engine, minutes); "stop" ends one.
 json op_export(Omc& omc, const json& in, const Session& session) {
   const std::string mode = in.value("mode", "ppk");
-  if (mode == "status") return serve_status(in.value("port", 0));
+  if (mode == "status") return serve_status(in.value("port", 0), in.value("offset", 0));
   if (mode == "stop") return serve_stop(in.value("port", 0));
   if (mode != "ppk" && mode != "serve") throw std::runtime_error("export mode is ppk, serve, status or stop");
   const std::string model = user_model(in);
@@ -707,6 +842,7 @@ json op_export(Omc& omc, const json& in, const Session& session) {
   stem = stem.substr(stem.rfind('.') == std::string::npos ? 0 : stem.rfind('.') + 1);
   for (auto& c : stem) if (!std::isalnum(static_cast<unsigned char>(c))) c = '_';
   const fs::path dir = fs::temp_directory_path() / ("ssom_" + stem);
+  if (mode == "serve") ensure_engine_sdk(session);
   json g = in;
   g["out"] = dir.string();
   g["dry"] = false;
@@ -716,8 +852,27 @@ json op_export(Omc& omc, const json& in, const Session& session) {
   if (mode == "ppk") {
     const fs::path ppk = dir.string() + ".ppk";
     // pack verifies first, and the catalog check builds a C++ backend: minutes on a cold build/
-    if (const int code = run_paperboat({"pack", dir.string(), "--out", ppk.string()}, log); code != 0)
-      throw paperboat_failed("pack", code, log);
+    const auto say = [&](const std::string& line) {
+      if (session.push && !line.empty()) session.push(json{{"op", "log"}, {"level", "info"}, {"text", line}}.dump());
+    };
+    const int code = run_paperboat_streaming({"pack", dir.string(), "--out", ppk.string(), "--json-stream"}, log, [&](const std::string& line) {
+      // its JSON-stream lines are progress, not prose: show the readable milestones only
+      try {
+        const json e = json::parse(line);
+        if (e.value("event", "") == "progress") {
+          const int files = e.value("files", 0), total = e.value("total", 0);
+          if (total > 0 && (files == total || files % std::max(1, total / 10) == 0)) say("packing " + std::to_string(files) + "/" + std::to_string(total) + " files…");
+        } else if (e.value("event", "") == "result") {
+          if (e.value("ok", false))
+            say("packed " + e.value("name", std::string("backend")) + " · " + std::to_string(e.value("files", 0)) + " files");
+        } else {
+          say(line);
+        }
+      } catch (const std::exception&) {
+        say(line);
+      }
+    });
+    if (code != 0) throw paperboat_failed("pack", code, log);
     std::ifstream f(ppk, std::ios::binary);
     out["file"] = "ssom_" + stem + ".ppk";
     out["ppk"] = base64(std::string(std::istreambuf_iterator<char>(f), {}));
@@ -725,7 +880,7 @@ json op_export(Omc& omc, const json& in, const Session& session) {
     // a restart asks for the port it just left, so a paperboat tab on it reconnects
     const int want = in.value("port", 0);
     const int port = want > 0 && !listening(want) ? want : free_port();
-    const pid_t pid = spawn_paperboat({"start", dir.string(), "--port", std::to_string(port)}, log);
+    const pid_t pid = spawn_paperboat({"start", dir.string(), "--port", std::to_string(port), "--verbose", "--time"}, log);
     {
       std::lock_guard lock(served_mutex);
       served[port] = {pid, log};
@@ -996,6 +1151,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_delete_class(in);
     } else if (op == "move_class") {
       out["result"] = op_move_class(in);
+    } else if (op == "delete_package") {
+      out["result"] = op_delete_package(in);
     } else if (op == "read_file") {
       out["result"] = op_read_file(in);
     } else if (op == "save") {
@@ -1018,7 +1175,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, workspace, about, create_class, new_package, duplicate_class, delete_class, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
+      out["error"] = "unknown op; squero/0 has omc, open, workspace, about, create_class, new_package, duplicate_class, delete_class, delete_package, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
       return out.dump();
     }
     out["ok"] = true;
