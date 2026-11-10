@@ -18,6 +18,7 @@
 
 #include <cerrno>
 #include <csignal>
+#include <cstdio>
 #include <cstring>
 
 #include <arpa/inet.h>
@@ -573,6 +574,26 @@ std::string paperboat_bin() {
   return "paperboat";
 }
 
+// The installed paperboat's version, or "" when it can't be run. Cached: About asks once.
+std::string paperboat_version() {
+  static const std::string version = [] {
+    std::string out;
+    const std::string cmd = "\"" + paperboat_bin() + "\" --version 2>/dev/null";
+    if (FILE* p = popen(cmd.c_str(), "r")) {
+      char line[512];
+      while (std::fgets(line, sizeof line, p)) out += line;
+      pclose(p);
+    }
+    const auto first = out.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return std::string();
+    const auto end = out.find_first_of("\r\n", first);
+    const std::string text = out.substr(first, end == std::string::npos ? std::string::npos : end - first);
+    const auto space = text.find(' ');
+    return space == std::string::npos ? text : text.substr(space + 1);
+  }();
+  return version;
+}
+
 // Spawns paperboat in its own session, stdout and stderr to `log`; returns its pid.
 pid_t spawn_paperboat(const std::vector<std::string>& args, const fs::path& log) {
   const std::string bin = paperboat_bin();
@@ -962,6 +983,9 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_open(omc, in, session);
     } else if (op == "workspace") {
       out["result"] = op_workspace(in);
+    } else if (op == "about") {
+      const std::string version = paperboat_version();
+      out["result"] = json{{"paperboat", version.empty() ? json(nullptr) : json(version)}};
     } else if (op == "create_class") {
       out["result"] = op_create_class(in);
     } else if (op == "new_package") {
@@ -994,7 +1018,7 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_simulate(omc, in);
     } else {
       out["ok"] = false;
-      out["error"] = "unknown op; squero/0 has omc, open, workspace, create_class, new_package, duplicate_class, delete_class, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
+      out["error"] = "unknown op; squero/0 has omc, open, workspace, about, create_class, new_package, duplicate_class, delete_class, move_class, read_file, save, check_model, instantiate_model, get_messages, icon, set_icon, generate, export, simulate";
       return out.dump();
     }
     out["ok"] = true;

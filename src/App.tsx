@@ -15,6 +15,7 @@ import { type Log, type Message } from "@paperboat/shared/components";
 import { ComponentPopover } from "./popover/index.tsx";
 import { InterfaceSheet } from "./sheet/index.tsx";
 import { IconView } from "./icon/IconView.tsx";
+import { AboutModal } from "./shell/AboutModal.tsx";
 import { LibraryModal, PromptModal, StatusModal } from "./shell/Dialogs.tsx";
 import { TopBar } from "./shell/TopBar.tsx";
 import { useTheme, type Theme } from "@paperboat/shared/components";
@@ -99,6 +100,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false); // the command search (Ctrl+K)
   const [logs, setLogs] = useState<Log[]>([]);
   const [consoleShown, setConsoleShown] = useState(false);
@@ -598,6 +600,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       { id: "console", label: "Console", menu: "view", group: "sheet", checked: consoleShown, run: toggleConsole },
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
       ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
+      { id: "about", label: "About Squero Studio", menu: "view", group: "about", run: () => setAboutOpen(true) },
     ],
     [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy],
   );
@@ -629,6 +632,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           errors={errors}
           consoleShown={consoleShown}
           onConsole={toggleConsole}
+          aboutShown={aboutOpen}
+          onAbout={() => setAboutOpen(true)}
           theme={theme}
           onTheme={setTheme}
           onStatusClick={() => setStatusModalOpen(true)}
@@ -738,6 +743,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             onClose={() => setStatusModalOpen(false)}
           />
         )}
+
+        {aboutOpen && <AboutModal omc={omc} status={status} onClose={() => setAboutOpen(false)} />}
 
         {searchOpen && <CommandSearch commands={commands} onClose={() => setSearchOpen(false)} />}
 

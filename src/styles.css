@@ -989,3 +989,25 @@ body.dragging-card .library {
 .viewport3d-sep { width: 1px; align-self: stretch; background: var(--line); }
 .viewport3d-bar { display: flex; align-items: center; gap: 6px; padding: 4px var(--space-2); border-bottom: 1px solid var(--line); }
 .viewport3d-scrub { flex: 1; min-width: 60px; }
+
+/* The bar's menus and the About title sit as one row, the same 2px apart. */
+.menubar-group { display: flex; align-items: center; gap: 2px; }
+
+/* ---- About: the W3 Water mark, rippling, and what this build is. --------------------- */
+.about-dialog { width: min(680px, calc(100vw - 32px)); }
+.about-body { display: grid; grid-template-columns: minmax(220px, 260px) minmax(0, 1fr); gap: var(--space-5); padding: var(--space-4); }
+.about-mark { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-5) var(--space-3); text-align: center; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+.about-mark .squero-logo { max-width: 100%; height: auto; }
+.about-info { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.about-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px var(--space-4); margin: 0; }
+.about-facts dt, .about-section h3 { font: 600 var(--size-2xs) var(--font-sans); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.about-facts dd { margin: 0; font: 400 var(--size-xs) var(--font-mono); color: var(--text); }
+.about-facts a, .about-section a { color: var(--text); text-decoration-color: var(--line-strong); text-underline-offset: 2px; }
+.about-facts a:hover, .about-section a:hover { text-decoration-color: var(--text); }
+.about-section { padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.about-section h3 { margin: 0 0 var(--space-2); }
+.about-section p { margin: 0 0 var(--space-1); font: 400 var(--size-xs) var(--font-sans); color: var(--text-muted); }
+@media (max-width: 640px) {
+  .about-body { grid-template-columns: 1fr; }
+  .about-mark { padding: var(--space-4) var(--space-3); }
+}
