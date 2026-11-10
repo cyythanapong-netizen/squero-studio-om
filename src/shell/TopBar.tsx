@@ -42,6 +42,8 @@ export type TopBarProps = {
   errors?: number;
   consoleShown?: boolean;
   onConsole?: () => void;
+  aboutShown?: boolean;
+  onAbout?: () => void;
 };
 
 const STATES: OmcState[] = ["checking", "ready", "failed"];
@@ -63,11 +65,24 @@ export function TopBar({
   errors = 0,
   consoleShown = false,
   onConsole,
+  aboutShown = false,
+  onAbout,
 }: TopBarProps) {
   return (
     <header className="bar">
       <Wordmark running={running} />
-      <MenuBar commands={commands} />
+      <div className="menubar-group" data-own-keys>
+        <MenuBar commands={commands} />
+        <button
+          type="button"
+          className="menu-title"
+          aria-expanded={aboutShown}
+          title="About Squero Studio"
+          onClick={onAbout}
+        >
+          About
+        </button>
+      </div>
       {model && <ProjectLabel name={model} dirty={dirty} />}
       <span className="spacer" />
       <button type="button" className={`key small${errors ? " err" : ""}${consoleShown ? " on" : ""}`} aria-pressed={consoleShown} title="Open the Console" onClick={onConsole}>
