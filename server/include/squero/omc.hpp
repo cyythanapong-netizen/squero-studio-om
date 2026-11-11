@@ -50,6 +50,10 @@ class Omc {
   Omc(const Omc&) = delete;
   Omc& operator=(const Omc&) = delete;
 
+  /** Stop omc now, without waiting for the destructor: used on SIGTERM/SIGINT so a stopped
+      Studio does not leave its native process or container behind. */
+  void shutdown();
+
   // Evaluates one omc expression, e.g. `checkModel(M)`, and returns omc's answer as text
   // (`true`, `"…"`, `{…}`), without the trailing newline. Starts omc on first use. Throws
   // OmcError when omc can't start, or failed (OmcState::Failed).
@@ -102,8 +106,10 @@ struct OmcRuntime {
   std::string why;               // why not the better choice, or ""
 };
 OmcRuntime resolve_omc();
-// The argv that starts omc under `rt`, in `workdir`, with omc's own `args`.
-std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args);
+// The argv that starts omc under `rt`, in `workdir`, with omc's own `args`. `name` names the
+// container (podman/docker only), so a later `rm -f <name>` can stop it.
+std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args,
+                                    const std::string& name = {});
 
 // Whether `expr` may come from a Studio client over squero/0: one call to a function on the
 // allow-list (contracts §5), whose nested calls are allow-listed too or are annotation

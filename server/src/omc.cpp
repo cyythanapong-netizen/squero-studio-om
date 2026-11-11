@@ -153,12 +153,16 @@ struct Omc::Impl {
   void* ctx = nullptr;
   void* sock = nullptr;
   std::string session;
+  std::string container_name;  // a podman/docker run's name, for `rm -f` on stop
+  pid_t cleanup_pid = -1;      // the child that removes the container when we go, however we go
+  int cleanup_fd = -1;         // its pipe: closing it (even by SIGKILL) wakes it
   fs::path workdir;
   std::string version;
   OmcRuntime runtime;
   OmcState state = OmcState::Ready;
   int restarts = 0;  // in a row
   bool started_once = false;
+  bool shutting_down = false;  // a stop was asked for; never start again
   std::vector<std::string> replay;  // loadModel / loadFile calls that succeeded
   StatusFn status_fn;
   LogFn log_fn;
@@ -188,6 +192,72 @@ struct Omc::Impl {
     return {};
   }
 
+  // A podman/docker run's client can die with us and leave its container running (`--init`
+  // omc as PID 1). This child waits for our end of a pipe to close (a normal stop, SIGKILL,
+  // or a crash all close it) and then removes the container by name.
+  void start_cleaner() {
+    if (runtime.mode == "native" || container_name.empty()) return;
+    int fds[2];
+    if (pipe2(fds, O_CLOEXEC) != 0) return;
+    cleanup_pid = fork();
+    if (cleanup_pid == 0) {
+#ifdef __linux__
+      prctl(PR_SET_PDEATHSIG, 0);  // we must outlive the server to clean up after it
+#endif
+      // A terminal sends Ctrl-C (SIGINT) to the whole process group, and `kill` often does
+      // the same: ignore it here, or the cleaner would die before it removed the container.
+      struct sigaction ignore {};
+      ignore.sa_handler = SIG_IGN;
+      sigemptyset(&ignore.sa_mask);
+      sigaction(SIGINT, &ignore, nullptr);
+      sigaction(SIGTERM, &ignore, nullptr);
+      sigaction(SIGHUP, &ignore, nullptr);
+      close(fds[1]);
+      char buf[1];
+      while (read(fds[0], buf, 1) > 0) {
+      }
+      close(fds[0]);
+      execlp(runtime.exe.c_str(), runtime.exe.c_str(), "rm", "-f", "-t", "1", container_name.c_str(),
+             static_cast<char*>(nullptr));
+      _exit(127);
+    }
+    close(fds[0]);
+    if (cleanup_pid < 0) {
+      close(fds[1]);
+      return;
+    }
+    cleanup_fd = fds[1];
+  }
+
+  void remove_container() {
+    if (container_name.empty()) return;
+    if (cleanup_fd >= 0) {
+      close(cleanup_fd);  // wakes the cleaner: it runs `rm -f`
+      cleanup_fd = -1;
+    }
+    if (cleanup_pid > 0) {
+      // `podman rm -f -t 1` stops the container in a second or two; do not hang on a broken engine.
+      for (int i = 0; i < 300 && waitpid(cleanup_pid, nullptr, WNOHANG) == 0; ++i)
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      if (waitpid(cleanup_pid, nullptr, WNOHANG) == 0) {
+        kill(cleanup_pid, SIGKILL);
+        waitpid(cleanup_pid, nullptr, 0);
+      }
+      cleanup_pid = -1;
+      container_name.clear();
+      return;
+    }
+    // No cleaner (it could not be forked): remove the container here.
+    const std::string engine = runtime.exe;
+    const std::string name = std::exchange(container_name, {});
+    const pid_t child = fork();
+    if (child == 0) {
+      execlp(engine.c_str(), engine.c_str(), "rm", "-f", "-t", "1", name.c_str(), static_cast<char*>(nullptr));
+      _exit(127);
+    }
+    if (child > 0) waitpid(child, nullptr, 0);
+  }
+
   void stop() {
     const Zmq* z = nullptr;
     try {
@@ -206,6 +276,9 @@ struct Omc::Impl {
       }
       pid = -1;
     }
+    // A container's podman client can go while its container keeps running (`--init` omc as
+    // PID 1): remove it by name, so a stopped Studio leaves no omc behind.
+    remove_container();
     if (const fs::path f = port_file(); !f.empty()) fs::remove(f);
   }
 
@@ -216,12 +289,18 @@ struct Omc::Impl {
     fs::create_directories(workdir);
     const std::string zarg = "-z=" + session;
     if (runtime.mode.empty()) runtime = options.omc.empty() ? resolve_omc() : OmcRuntime{"native", options.omc, ""};
-    std::vector<std::string> command = omc_command(runtime, workdir.string(), {"--interactive=zmq", zarg});
+    if (runtime.mode != "native") container_name = "paperboat-omc-" + session;
+    start_cleaner();
+    std::vector<std::string> command = omc_command(runtime, workdir.string(), {"--interactive=zmq", zarg}, container_name);
     pid = fork();
     if (pid < 0) throw OmcError("cannot start omc: fork failed");
     if (pid == 0) {
 #ifdef __linux__
-      prctl(PR_SET_PDEATHSIG, SIGTERM);  // omc goes when we go, however we go
+      // A native omc can ignore SIGTERM; kill it outright when the server goes away, even if
+      // the server was stopped with SIGTERM and never ran its destructor. A container gets
+      // SIGTERM so podman can stop and --rm it.
+      prctl(PR_SET_PDEATHSIG, runtime.mode == "native" ? SIGKILL : SIGTERM);
+      if (getppid() == 1) _exit(127);  // the parent died before prctl took effect
 #endif
       if (chdir(workdir.c_str()) != 0) _exit(127);
       const int devnull = open("/dev/null", O_RDWR);
@@ -291,6 +370,7 @@ struct Omc::Impl {
 
   std::string call(std::string_view expr, std::chrono::milliseconds timeout) {
     std::lock_guard lock(mutex);
+    if (shutting_down) throw OmcError("omc is shutting down");
     if (state == OmcState::Failed) throw OmcError("omc failed: restarted " + std::to_string(restarts) + " times");
     set_state(OmcState::Checking);
     for (;;) {
@@ -357,6 +437,14 @@ Omc::~Omc() {
 
 std::string Omc::call(std::string_view expr) { return impl_->call(expr, impl_->options.timeout); }
 std::string Omc::call(std::string_view expr, std::chrono::milliseconds timeout) { return impl_->call(expr, timeout); }
+
+void Omc::shutdown() {
+  std::lock_guard lock(impl_->mutex);
+  impl_->shutting_down = true;
+  impl_->stop();
+  std::error_code ec;
+  if (!impl_->workdir.empty()) fs::remove_all(impl_->workdir, ec);
+}
 
 std::string Omc::errors() { return impl_->drain().first; }
 
@@ -437,7 +525,8 @@ OmcRuntime resolve_omc() {
   return {"native", native.empty() ? "omc" : native, sick + (native.empty() ? ", and no podman or docker to run it in" : "")};
 }
 
-std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args) {
+std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args,
+                                     const std::string& name) {
   std::vector<std::string> out;
   if (rt.mode == "native") {
     out.push_back(rt.exe);
@@ -447,6 +536,9 @@ std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& wo
     const std::string tmp = fs::temp_directory_path().string();
     out = {rt.exe, "run", "--rm", "-i", "--init", "--network=host", "--security-opt", "label=disable", "-e", "HOME=" + h,
            "-e", "USER=" + std::string(std::getenv("USER") ? std::getenv("USER") : "omc"), "-v", tmp + ":" + tmp, "-v", h + ":" + h, "-w", workdir};
+    // A stable name lets a stopping Studio remove the container even when podman's client is
+    // gone (omc is the init process inside, so SIGTERM to the client may not reach it).
+    if (!name.empty()) out.insert(out.begin() + 2, {"--name", name, "--label", "paperboat.omc=1"});
     // --init: omc as PID 1 ignores SIGTERM, so the container outlived us
     // files omc writes are the user's: podman maps the user in, docker runs as them
     if (rt.mode == "podman") out.insert(out.begin() + 2, "--userns=keep-id");

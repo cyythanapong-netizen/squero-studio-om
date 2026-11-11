@@ -3,6 +3,7 @@
 #include "squero/squero.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -39,6 +40,11 @@ namespace {
 
 namespace fs = std::filesystem;
 using nlohmann::json;
+
+// SIGTERM/SIGINT: a flag the serve loop polls, then stops omc. A handler cannot take locks or
+// talk to omc itself, and ixwebsocket's own handlers shouldn't decide when omc goes.
+std::atomic<bool> stop_requested{false};
+extern "C" void request_stop(int) { stop_requested.store(true, std::memory_order_relaxed); }
 
 std::string status(OmcState state, const std::string& version, const std::string& mode) {
   return json{{"op", "status"}, {"state", name(state)}, {"version", version}, {"mode", mode}}.dump();
@@ -1197,6 +1203,15 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
 
 int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::path& file) {
   ix::initNetSystem();
+  // SIGTERM (a closed terminal, `paperboat stop`, systemd) and SIGINT (Ctrl-C) both mean
+  // "stop": wake the loop below so omc is stopped on purpose, not just orphaned.
+  stop_requested.store(false, std::memory_order_relaxed);
+  struct sigaction sa {};
+  sa.sa_handler = request_stop;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;  // no SA_RESTART: a polled sleep returns early
+  sigaction(SIGTERM, &sa, nullptr);
+  sigaction(SIGINT, &sa, nullptr);
   Omc omc(std::move(options));
   // port 0: the first free one of SQR01..SQR99 (59201..59299)
   for (int p = 59201; port == 0 && p <= 59299; ++p)
@@ -1258,7 +1273,11 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
   } catch (const std::exception& e) {
     std::cerr << "omc: " << e.what() << '\n';
   }
-  for (;;) std::this_thread::sleep_for(std::chrono::hours(1));
+  // Wait for a stop signal (or forever), polling so the handler's flag is seen.
+  while (!stop_requested.load(std::memory_order_relaxed)) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  omc.shutdown();
+  server.stop();
+  return 0;
 }
 
 }  // namespace squero
