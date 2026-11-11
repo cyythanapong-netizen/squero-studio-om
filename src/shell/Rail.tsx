@@ -1,69 +1,11 @@
 // The left rail: Files (the model's folder, its packages and classes) or the Library (the
-// component browser). Both stay mounted, so the library keeps its search and chosen package when
-// the rail switches; only the visible one lays out.
-//
-// A quick model — a .mo outside a package — opens on Library, because there is no package tree
-// to read. Opening a folder or a package opens on Files. That is the whole difference between the
-// quick path and the authoring path; they are the same shell.
-
-import { useEffect, useState, type ReactNode } from "react";
+// component browser). The tree itself is @paperboat/shared/files, the same component MX uses;
+// this file only maps the workspace entries and the Studio actions.
+import { useRef, type ReactNode } from "react";
+import { FileTree, type FileEntry, type FileTreeHandle } from "@paperboat/shared/files";
 import { visibleEntries, workspaceName, type Workspace, type WorkspaceEntry } from "./workspace.ts";
 
 export type RailTab = "files" | "library";
-
-/** A 13px glyph per class kind, so the tree says what a file is without opening it. */
-function KindGlyph({ kind }: { kind: WorkspaceEntry["classKind"] }) {
-  const common = { viewBox: "0 0 16 16", "aria-hidden": true } as const;
-  switch (kind) {
-    case "package":
-      return (
-        <svg {...common}>
-          <path d="M1.5 4.5h4.7l1.3 1.8h7v7.2h-13z" />
-        </svg>
-      );
-    case "model":
-      return (
-        <svg {...common}>
-          <rect x="2.5" y="2.5" width="11" height="11" rx="1.2" />
-          <path d="M5.5 8h5" />
-        </svg>
-      );
-    case "block":
-      return (
-        <svg {...common}>
-          <rect x="2.5" y="3.5" width="8" height="9" rx="1.2" />
-          <path d="M10.5 8H14M12 6.5 14 8l-2 1.5" />
-        </svg>
-      );
-    case "connector":
-      return (
-        <svg {...common}>
-          <circle cx="8" cy="8" r="3.6" />
-          <circle cx="8" cy="8" r="1" />
-        </svg>
-      );
-    case "record":
-      return (
-        <svg {...common}>
-          <rect x="2.5" y="3" width="11" height="10" rx="1.2" />
-          <path d="M2.5 6.5h11M6.5 6.5V13" />
-        </svg>
-      );
-    case "function":
-      return (
-        <svg {...common}>
-          <path d="M9.5 3.5c-1.8 0-2.5 1-2.5 3v6M4.5 8h4M10 8h2.5" />
-        </svg>
-      );
-    default:
-      return (
-        <svg {...common}>
-          <path d="M4 2.5h6l2 2v9H4z" />
-          <path d="M10 2.5v2h2" />
-        </svg>
-      );
-  }
-}
 
 export function Rail({
   tab,
@@ -92,27 +34,17 @@ export function Rail({
   onMove: (source: WorkspaceEntry, target?: WorkspaceEntry) => void;
   children: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
-  const [menu, setMenu] = useState<{ entry?: WorkspaceEntry; x: number; y: number } | null>(null);
-  const [drop, setDrop] = useState<string | null>(null);
-  const DND = "application/x-squero-class";
-  const rows = workspace ? visibleEntries(workspace.entries, collapsed) : [];
-  const close = () => setMenu(null);
-
-  useEffect(() => {
-    if (!menu) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenu(null);
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [menu]);
-  const classes = rows.filter((entry) => entry.kind === "class").length;
-  const toggle = (path: string) =>
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
+  const tree = useRef<FileTreeHandle>(null);
+  const entries: FileEntry[] = visibleEntries(workspace?.entries ?? [], new Set()).map((entry) => ({
+    path: entry.path,
+    name: entry.name,
+    depth: entry.depth,
+    kind: entry.kind === "package" ? "folder" : "file",
+    icon: entry.kind === "package" ? "package" : (entry.classKind ?? "class"),
+    badge: entry.kind === "package" ? "package" : "",
+  }));
+  const find = (entry?: FileEntry) => (entry ? workspace?.entries.find((one) => one.path === entry.path) : undefined);
+  const classes = workspace?.entries.filter((entry) => entry.kind === "class").length ?? 0;
 
   return (
     <aside className={`rail rail-${tab}`} aria-label="Files and library">
@@ -130,7 +62,7 @@ export function Rail({
             title="New class or package"
             onClick={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
-              setMenu({ x: rect.left, y: rect.bottom + 4 });
+              tree.current?.openNewMenu(rect.left, rect.bottom + 4);
             }}
           >
             +
@@ -139,128 +71,39 @@ export function Rail({
       </div>
       <div className="rail-body">
         <div className="files-panel" hidden={tab !== "files"}>
-          <div
-            className="files-head"
-            onDragOver={(e) => {
-              if (e.dataTransfer.types.includes(DND)) {
-                e.preventDefault();
-                setDrop("root");
-              }
-            }}
-            onDragLeave={() => setDrop(null)}
-            onDrop={(e) => {
-              const path = e.dataTransfer.getData(DND);
-              const source = workspace?.entries.find((one) => one.path === path);
-              setDrop(null);
-              if (source) onMove(source);
-            }}
-          >
-            <span className="nm" title={workspace?.root}>
-              {workspaceName(workspace)}
-            </span>
+          <div className="files-head">
+            <span className="nm" title={workspace?.root}>{workspaceName(workspace)}</span>
             <span className="lbl">{workspace ? (workspace.package ? "package" : "quick") : ""}</span>
           </div>
-          {rows.length > 0 ? (
-            <div className="files-tree" role="tree" aria-label="Workspace">
-              {rows.map((entry) => {
-                const here = entry.path === active;
-                const open = entry.kind === "package" && !collapsed.has(entry.path);
-                return (
-                  <button
-                    key={entry.path}
-                    type="button"
-                    role="treeitem"
-                    aria-expanded={entry.kind === "package" ? open : undefined}
-                    aria-selected={entry.kind === "class" ? here : undefined}
-                    className={`file-row${here ? " on" : ""}${drop === entry.path ? " drop-target" : ""}`}
-                    style={{ paddingLeft: 8 + entry.depth * 14 }}
-                    title={entry.path}
-                    draggable={entry.kind === "class"}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData(DND, entry.path);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    onDragOver={(e) => {
-                      if (entry.kind !== "package" || !e.dataTransfer.types.includes(DND)) return;
-                      e.preventDefault();
-                      setDrop(entry.path);
-                    }}
-                    onDragLeave={() => setDrop((current) => (current === entry.path ? null : current))}
-                    onDrop={(e) => {
-                      if (entry.kind !== "package") return;
-                      e.preventDefault();
-                      const path = e.dataTransfer.getData(DND);
-                      const source = workspace?.entries.find((one) => one.path === path);
-                      setDrop(null);
-                      if (source) onMove(source, entry);
-                    }}
-                    onClick={() => (entry.kind === "package" ? toggle(entry.path) : onOpen(entry.path))}
-                    onKeyDown={(e) => {
-                      if (e.key === "Delete" || e.key === "Backspace") {
-                        e.preventDefault();
-                        onDelete(entry);
-                      }
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      setMenu({ entry, x: e.clientX, y: e.clientY });
-                    }}
-                  >
-                    <span className="caret">{entry.kind === "package" ? (open ? "▾" : "▸") : ""}</span>
-                    <span className="file-icon" title={entry.kind === "package" ? "package" : (entry.classKind ?? "class")}>
-                      <KindGlyph kind={entry.kind === "package" ? "package" : (entry.classKind ?? "class")} />
-                    </span>
-                    <span className="nm">{entry.name}</span>
-                    <span className="k">{entry.kind === "package" ? "package" : ""}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="files-empty">No .mo files here yet. Create a class with +.</p>
-          )}
-          <p className="files-foot">
-            {classes} {classes === 1 ? "class" : "classes"}
-          </p>
+          <FileTree
+            ref={tree}
+            entries={entries}
+            active={active}
+            ariaLabel="Workspace"
+            labels={{
+              newFile: "New class…",
+              newFolder: "New package…",
+              duplicate: "Duplicate…",
+              delete: "Delete…",
+              copyPath: "Copy path",
+              empty: "No .mo files here yet. Create a class with +.",
+            }}
+            actions={{
+              onOpen: (entry) => onOpen(entry.path),
+              onNewFile: (parent) => onNewClass(find(parent)),
+              onNewFolder: (parent) => onNewPackage(find(parent)),
+              onDuplicate: (entry) => { const one = find(entry); if (one) onDuplicate(one); },
+              onDelete: (entry) => { const one = find(entry); if (one) onDelete(one); },
+              onCopyPath: (entry) => { const one = find(entry); if (one) onCopyPath(one); },
+              onMove: (source, target) => { const one = find(source); if (one) onMove(one, find(target)); },
+            }}
+          />
+          <p className="files-foot">{classes} {classes === 1 ? "class" : "classes"}</p>
         </div>
         <div className="library-slot" hidden={tab !== "library"}>
           {children}
         </div>
       </div>
-      {menu && (
-        <>
-          <div className="file-menu-scrim" onPointerDown={close} />
-          <div className="file-menu" role="menu" aria-label="Workspace actions" style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 240) }}>
-            <button type="button" role="menuitem" onClick={() => { onNewClass(menu.entry); close(); }}>
-              New class…
-            </button>
-            <button type="button" role="menuitem" onClick={() => { onNewPackage(menu.entry); close(); }}>
-              New package…
-            </button>
-            {menu.entry && (
-              <>
-                <hr />
-                {menu.entry.kind === "class" && (
-                  <button type="button" role="menuitem" onClick={() => { onDuplicate(menu.entry!); close(); }}>
-                    Duplicate…
-                  </button>
-                )}
-                <button type="button" role="menuitem" className="danger" onClick={() => { onDelete(menu.entry!); close(); }}>
-                  Delete {menu.entry.kind === "package" ? "package" : ""}…
-                </button>
-              </>
-            )}
-            {menu.entry && (
-              <>
-                <hr />
-                <button type="button" role="menuitem" onClick={() => { onCopyPath(menu.entry!); close(); }}>
-                  Copy path
-                </button>
-              </>
-            )}
-          </div>
-        </>
-      )}
     </aside>
   );
 }
