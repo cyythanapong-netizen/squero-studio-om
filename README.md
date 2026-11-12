@@ -72,6 +72,12 @@ pulls it again). The container runs as you (rootless podman `--userns=keep-id`, 
 with your `/tmp` and `$HOME` at the same paths and no SELinux relabelling, so everything it writes
 (backends, FMUs, `~/.openmodelica/libraries`) is yours. `SQUERO_OMC=native|podman|docker` forces one.
 
+**Windows** runs omc natively only: `$SQUERO_OMC_BIN`, else `omc` on PATH, else
+`%OPENMODELICAHOME%\bin\omc.exe`, which the OpenModelica installer sets
+(`winget install OpenModelica.OpenModelica.Official`). Build the server from a Developer
+PowerShell for VS (`npm run build:server`); `paperboat start squero-studio-om` runs `bin/squero-om`
+through Git for Windows' bash.
+
 ## Check
 
 ```sh
