@@ -95,3 +95,90 @@ jobs:
           diff -u squero-studio-om/examples/dc-drive-cpp/domain/dc_drive.cpp /tmp/dc-drive-gen/domain/dc_drive.cpp
           diff -u squero-studio-om/examples/dc-drive-cpp/domain/dc_drive.hpp /tmp/dc-drive-gen/domain/dc_drive.hpp
           diff -u squero-studio-om/examples/dc-drive-cpp/CMakeLists.txt /tmp/dc-drive-gen/CMakeLists.txt
+
+      # `paperboat start squero-studio-om` as a user runs it, beside the paperboat checkout above.
+      - uses: actions/checkout@v4
+        with:
+          repository: paperboatlab/paperboat-shared
+          path: paperboat-shared
+          token: ${{ secrets.DOWNSTREAM_TOKEN || github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Launch through paperboat (the app, the CLI, start, check, stop)
+        run: |
+          (cd paperboat-shared && npm ci --no-audit --no-fund)
+          (cd squero-studio-om && npm ci --no-audit --no-fund && npm run build)
+          cmake -S paperboat/engine -B paperboat/engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build paperboat/engine/build --target paperboat
+          pb="$GITHUB_WORKSPACE/paperboat/engine/build/tools/paperboat"
+          cd "$RUNNER_TEMP"   # not the checkout: the app must find its own files
+          "$pb" start squero-studio-om --daemon
+          for i in $(seq 60); do curl -sf http://127.0.0.1:59201/ >/dev/null && break; sleep 1; done
+          node "$GITHUB_WORKSPACE/squero-studio-om/test/launch/check.mjs" 59201 || { cat /tmp/paperboat-squero-studio-om.log; exit 1; }
+          "$pb" stop squero-studio-om
+
+  # The server on Windows: omc natively from the OpenModelica installer, the same MSL as Linux, the
+  # tests, then the launch through paperboat (bin/squero-om through Git for Windows' bash).
+  windows:
+    name: Squero OM on Windows (OpenModelica, tests, launch)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      OPENMODELICAHOME: C:\Program Files\OpenModelica1.26.3-64bit
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: squero-studio-om
+      - uses: actions/checkout@v4
+        with:
+          repository: paperboatlab/paperboat
+          path: paperboat
+          token: ${{ secrets.DOWNSTREAM_TOKEN || github.token }}
+      - uses: actions/checkout@v4
+        with:
+          repository: paperboatlab/paperboat-shared
+          path: paperboat-shared
+          token: ${{ secrets.DOWNSTREAM_TOKEN || github.token }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install OpenModelica (official Windows installer, silent)
+        shell: pwsh
+        run: |
+          $installer = "$env:RUNNER_TEMP\openmodelica.exe"
+          Invoke-WebRequest https://build.openmodelica.org/omc/builds/windows/releases/1.26/3/64bit/OpenModelica-v1.26.3-64bit.exe -OutFile $installer
+          Start-Process $installer -ArgumentList "/S" -Wait
+          & "$env:OPENMODELICAHOME\bin\omc.exe" --version
+      - name: Cache OpenModelica MSL
+        id: cache-msl
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Roaming/.openmodelica
+          key: openmodelica-msl-${{ runner.os }}
+      - name: Preload Modelica Standard Library (4.1.0, as on Linux)
+        if: steps.cache-msl.outputs.cache-hit != 'true'
+        run: |
+          printf 'installPackage(Modelica, "4.1.0+maint.om", exactMatch=true);\nloadModel(Modelica);\ngetErrorString();\n' > preload.mos
+          "$OPENMODELICAHOME/bin/omc.exe" preload.mos
+      - name: Build the server and its tests
+        run: |
+          cmake -S squero-studio-om/server -B squero-studio-om/server/build -G "Visual Studio 17 2022" -A x64 -DSQUERO_BUILD_TESTS=ON
+          cmake --build squero-studio-om/server/build --config Release --parallel
+      - name: Test the server (omc bridge, squero/0, and importer)
+        run: squero-studio-om/server/build/Release/squero_tests.exe '[modelica],[squero]'
+      - name: Launch through paperboat (the app, the CLI, start, check, stop)
+        run: |
+          (cd paperboat-shared && npm ci --no-audit --no-fund)
+          (cd squero-studio-om && npm ci --no-audit --no-fund && npm run build)
+          cmake -S paperboat/engine -B paperboat/engine/build -G "Visual Studio 17 2022" -A x64
+          cmake --build paperboat/engine/build --config Release --target paperboat --parallel
+          pb="$GITHUB_WORKSPACE/paperboat/engine/build/tools/Release/paperboat.exe"
+          cd "$RUNNER_TEMP"
+          "$pb" start squero-studio-om --daemon
+          for i in $(seq 60); do curl -sf http://127.0.0.1:59201/ >/dev/null && break; sleep 1; done
+          node "$GITHUB_WORKSPACE/squero-studio-om/test/launch/check.mjs" 59201 || { cat /tmp/paperboat-squero-studio-om.log; exit 1; }
+          "$pb" stop squero-studio-om
