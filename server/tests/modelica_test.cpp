@@ -82,7 +82,9 @@ TEST_CASE("squero/0 passes only allow-listed calls", "[modelica]") {
   CHECK_FALSE(mo::allowed(R"(loadFile("unterminated))"));
 
   mo::Omc omc;  // never started: handle() refuses before calling it
-  CHECK(mo::handle(omc, R"j({"id": 7, "op": "omc", "expr": "system(\"ls\")"})j").find(R"("ok":false)") != std::string::npos);
+  // outside the macro: MSVC 2022 mis-stringizes a raw string holding \" inside CHECK(...)
+  const std::string system_call = R"j({"id": 7, "op": "omc", "expr": "system(\"ls\")"})j";
+  CHECK(mo::handle(omc, system_call).find(R"("ok":false)") != std::string::npos);
   CHECK(mo::handle(omc, R"({"id": 7, "op": "nope"})").find("unknown op") != std::string::npos);
 }
 
