@@ -70,8 +70,15 @@ std::string handle(Omc& omc, const std::string& message, const Session& session 
 // variable that drives it as `resolve` says (a cref → its series name, or a number when constant).
 nlohmann::json visual_shapes(const std::string& xml, const std::function<nlohmann::json(const std::string&)>& resolve);
 
+// The Studio's own folder: $SQUERO_OM_WORKSPACE, else ~/Documents/paperboat/squero/om.
+std::filesystem::path default_workspace();
+
+// What opens when no model is named: the first .mo in `dir` (not package.mo), else dir/Untitled.mo.
+// Creates `dir`; the model itself is created by `open` when it doesn't exist.
+std::filesystem::path default_file(const std::filesystem::path& dir = default_workspace());
+
 // Serves until killed. Returns 1 when the port can't be taken. port 0 = first free of 59201..59299. `file` is the .mo to open
-// (created as a stub model when it doesn't exist); empty = ./Untitled.mo.
+// (created as a stub model when it doesn't exist); empty = default_file().
 int serve_squero(int port, const std::filesystem::path& app = {}, Omc::Options options = {},
                  const std::filesystem::path& file = {});
 

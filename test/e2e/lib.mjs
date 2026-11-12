@@ -7,6 +7,8 @@ export async function open(url = "http://localhost:59201/") {
   const page = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   page.on("console", (m) => m.type() === "error" && console.log("console:", m.text()));
   await page.goto(url);
+  // The rail opens on files; the authoring scripts work from the library.
+  await page.getByRole("tab", { name: "library" }).click();
   await page.waitForSelector(".library");
   return { browser, page };
 }
