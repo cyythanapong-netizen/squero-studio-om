@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -871,4 +872,19 @@ TEST_CASE("visual_shapes reads omc's _visual.xml", "[squero]") {
   CHECK(shapes[0]["r"] == json({"body.r[1]", 0.0, -1.5}));
   CHECK(shapes[0]["length"] == 0.5);
   CHECK(shapes[0]["color"][0] == 255.0);
+}
+
+TEST_CASE("with no model named, the Studio opens its own folder", "[squero]") {
+  const auto dir = std::filesystem::temp_directory_path() / "squero-default-workspace-test";
+  std::filesystem::remove_all(dir);
+  // A fresh folder is created and opens a new Untitled model.
+  CHECK(squero::default_file(dir) == dir / "Untitled.mo");
+  CHECK(std::filesystem::is_directory(dir));
+  // Otherwise the first model in it, never its package.mo.
+  std::ofstream(dir / "package.mo") << "package P\nend P;\n";
+  std::ofstream(dir / "b.mo") << "model b\nend b;\n";
+  std::ofstream(dir / "a.mo") << "model a\nend a;\n";
+  CHECK(squero::default_file(dir) == dir / "a.mo");
+  std::filesystem::remove_all(dir);
+  CHECK(squero::default_workspace().filename() == (std::getenv("SQUERO_OM_WORKSPACE") ? squero::default_workspace().filename() : "om"));
 }

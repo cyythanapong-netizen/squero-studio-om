@@ -94,11 +94,11 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   // the workspace and its open documents (#43): the rail lists the folder, the tabs switch files
   const [docs, setDocs] = useState<Doc[]>([]);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  // The rail opens on the files of the Studio's folder, as MX does; the library is a click away.
   const [rail, setRail] = useState<RailTab>("files");
   const [newClassOpen, setNewClassOpen] = useState(false);
   const [newClassWithin, setNewClassWithin] = useState<string | undefined>(undefined);
   const [workspaceTick, setWorkspaceTick] = useState(0);
-  const railTouched = useRef(false);
   // Documents and their folder listings read once: switching back is a state restore, not omc again.
   const modelCache = useRef(new Map<string, StudioModel>());
   const workspaceCache = useRef(new Map<string, Workspace>());
@@ -215,21 +215,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     setWorkspaceTick((t) => t + 1);
   };
 
-  // A quick model — a .mo outside a package — is assembled from the library, so open on Library.
-  // A package opens on its own files. Once the user picks a tab, that choice wins.
-  useEffect(() => {
-    if (!workspace || railTouched.current) return;
-    setRail(workspace.package ? "files" : "library");
-  }, [workspace]);
-
   useEffect(() => {
     if (actions.notice) say(actions.notice);
   }, [actions.notice]);
-
-  const chooseRail = (tab: RailTab) => {
-    railTouched.current = true;
-    setRail(tab);
-  };
 
   const saveCurrent = async () => {
     const editor = editorHandle.current;
@@ -673,7 +661,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           <>
             <Rail
               tab={rail}
-              onTab={chooseRail}
+              onTab={setRail}
               workspace={workspace}
               active={model.file}
               onOpen={(file) => void openDocument(file)}

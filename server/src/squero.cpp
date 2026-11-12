@@ -16,6 +16,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 #include <cerrno>
 #include <csignal>
@@ -1201,8 +1202,27 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
   return out.dump();
 }
 
-int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::path& file) {
+fs::path default_workspace() {
+  if (const char* given = std::getenv("SQUERO_OM_WORKSPACE"); given && *given) return given;
+  const char* home = std::getenv("HOME");
+  if (!home || !*home) home = std::getenv("USERPROFILE");
+  return fs::path(home && *home ? home : ".") / "Documents" / "paperboat" / "squero" / "om";
+}
+
+fs::path default_file(const fs::path& dir) {
+  fs::create_directories(dir);
+  std::vector<fs::path> models;
+  for (const auto& entry : fs::directory_iterator(dir))
+    if (entry.is_regular_file() && entry.path().extension() == ".mo" && entry.path().filename() != "package.mo")
+      models.push_back(entry.path());
+  std::sort(models.begin(), models.end());
+  return models.empty() ? dir / "Untitled.mo" : models.front();
+}
+
+int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::path& given) {
   ix::initNetSystem();
+  // No model named: open the Studio's own folder, as Squero MX does, never the launch directory.
+  const fs::path file = given.empty() ? default_file() : given;
   // SIGTERM (a closed terminal, `paperboat stop`, systemd) and SIGINT (Ctrl-C) both mean
   // "stop": wake the loop below so omc is stopped on purpose, not just orphaned.
   stop_requested.store(false, std::memory_order_relaxed);
@@ -1266,7 +1286,8 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
   }
   server.start();
   std::cout << "squero studio OM server (squero/0) on ws://localhost:" << port
-            << (app.empty() ? std::string() : "  app: http://localhost:" + std::to_string(port) + "/") << std::endl;
+            << (app.empty() ? std::string() : "  app: http://localhost:" + std::to_string(port) + "/") << '\n'
+            << "opens " << fs::absolute(file).string() << std::endl;
   // Start omc now so the first status a client sees is real.
   try {
     omc.call("getVersion()");

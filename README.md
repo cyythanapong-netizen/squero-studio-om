@@ -16,9 +16,14 @@ The **Model** menu runs `checkModel` and shows its messages as cards in the Cons
 model's `.mo`, and the Console's **console** tab streams omc's own log as it works.
 
 The left rail switches between **files** — the model's folder as packages and classes, `package.order`
-included — and **library**, the MSL browser. Opening a `.mo` adds a tab above the stage. A model outside a
-package opens on **library**, so assembling something quick from the library needs no package at all; a
-class inside a package opens on **files**, with its package loaded first. The rail's **+** (or File ▸ New
+included — and **library**, the MSL browser. It opens on **files**. Opening a `.mo` adds a tab above the
+stage; a model outside a package needs no package at all, and a class inside a package is opened with its
+package loaded first.
+
+Started without a model, the Studio opens its own folder, `~/Documents/paperboat/squero/om` (created if
+missing; `SQUERO_OM_WORKSPACE` overrides it), as Squero MX opens `~/Documents/paperboat/squero-studio/mx`:
+the first `.mo` in it, or a new `Untitled.mo` there. It never writes into the directory it was launched
+from. The rail's **+** (or File ▸ New
 Class…) opens the New Class sheet: name, kind, package, an optional base class and a live skeleton. It
 writes the `.mo` and appends `package.order` when the class lands in a package.
 
@@ -53,6 +58,7 @@ npm install
 npm run build                       # builds dist/
 npm run build:server                # builds server/build/squero-om
 bin/squero-om [Model.mo]            # server + app on http://localhost:59201 (SQR01; the next free one up to 59299 if taken)
+                                    # no Model.mo: ~/Documents/paperboat/squero/om (SQUERO_OM_WORKSPACE)
 ```
 
 For the UI alone: `npm run dev` (Vite on :3048; start `bin/squero-om` for the server).
