@@ -1,5 +1,8 @@
 #include "squero/omc.hpp"
 
+#ifdef _WIN32
+#include "squero/win32.hpp"
+#else
 #include <dlfcn.h>
 #ifdef __linux__
 #include <sys/prctl.h>
@@ -8,6 +11,7 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -28,6 +32,9 @@ namespace {
 
 namespace fs = std::filesystem;
 using namespace std::chrono_literals;
+#ifdef _WIN32
+using pid_t = int;
+#endif
 
 // The few libzmq calls the bridge needs, resolved from libzmq.so.5 at run time. The ABI is
 // stable across libzmq 4.x: zmq_msg_t is 64 opaque bytes, the constants are fixed.
@@ -54,10 +61,27 @@ struct Zmq {
     static const Zmq zmq = [] {
       Zmq z;
       void* lib = nullptr;
+#ifdef _WIN32
+      // OpenModelica ships it next to omc.exe (libzmq.dll, or a versioned libzmq-*.dll).
+      std::vector<fs::path> dirs;
+      if (const std::string omc = resolve_omc().exe; fs::path(omc).has_parent_path()) dirs.push_back(fs::path(omc).parent_path());
+      if (const char* home = std::getenv("OPENMODELICAHOME"); home && *home) dirs.push_back(fs::path(home) / "bin");
+      for (const fs::path& dir : dirs) {
+        std::error_code ec;
+        for (const auto& e : fs::directory_iterator(dir, ec)) {
+          const std::string n = e.path().filename().string();
+          if (n.starts_with("libzmq") && e.path().extension() == ".dll" && (lib = win32::load_library(e.path()))) break;
+        }
+        if (lib) break;
+      }
+      if (!lib) return z;
+      auto sym = [&](auto& fn, const char* n) { fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(win32::symbol(lib, n)); };
+#else
       for (const char* name : {"libzmq.so.5", "libzmq.so", "libzmq.5.dylib", "libzmq.dylib"})
         if ((lib = dlopen(name, RTLD_NOW | RTLD_LOCAL))) break;
       if (!lib) return z;
       auto sym = [&](auto& fn, const char* n) { fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(dlsym(lib, n)); };
+#endif
       sym(z.ctx_new, "zmq_ctx_new");
       sym(z.ctx_term, "zmq_ctx_term");
       sym(z.socket, "zmq_socket");
@@ -72,7 +96,11 @@ struct Zmq {
       sym(z.msg_close, "zmq_msg_close");
       return z;
     }();
+#ifdef _WIN32
+    if (!zmq.msg_close) throw OmcError("libzmq*.dll not found next to omc.exe or in %OPENMODELICAHOME%\\bin (it comes with OpenModelica)");
+#else
     if (!zmq.msg_close) throw OmcError("libzmq.so.5 not found (it comes with OpenModelica)");
+#endif
     return zmq;
   }
 };
@@ -101,7 +129,11 @@ std::vector<OmcMessage> parse_messages(std::string_view raw) {
     if (line.front() == '[') {
       if (const std::size_t close = line.find(']'); close != std::string::npos) {
         const std::string inside = line.substr(1, close - 1);
-        if (const std::size_t colon = inside.find(':'); colon != std::string::npos) {
+        // A Windows path starts with its drive, `C:/Users/…/M.mo:18:5-…`: the file ends at the
+        // first colon after it.
+        const bool drive = inside.size() > 2 && std::isalpha(static_cast<unsigned char>(inside[0])) && inside[1] == ':' &&
+                           (inside[2] == '/' || inside[2] == '\\');
+        if (const std::size_t colon = inside.find(':', drive ? 2 : 0); colon != std::string::npos) {
           message.file = inside.substr(0, colon);
           std::size_t p = colon + 1;
           const auto number = [&](int& value) {
@@ -197,6 +229,9 @@ struct Omc::Impl {
   // or a crash all close it) and then removes the container by name.
   void start_cleaner() {
     if (runtime.mode == "native" || container_name.empty()) return;
+#ifdef _WIN32
+    // Windows runs omc natively only (resolve_omc); no container to clean up after.
+#else
     int fds[2];
     if (pipe2(fds, O_CLOEXEC) != 0) return;
     cleanup_pid = fork();
@@ -227,10 +262,14 @@ struct Omc::Impl {
       return;
     }
     cleanup_fd = fds[1];
+#endif
   }
 
   void remove_container() {
     if (container_name.empty()) return;
+#ifdef _WIN32
+    container_name.clear();
+#else
     if (cleanup_fd >= 0) {
       close(cleanup_fd);  // wakes the cleaner: it runs `rm -f`
       cleanup_fd = -1;
@@ -256,6 +295,7 @@ struct Omc::Impl {
       _exit(127);
     }
     if (child > 0) waitpid(child, nullptr, 0);
+#endif
   }
 
   void stop() {
@@ -268,12 +308,18 @@ struct Omc::Impl {
     if (z && ctx) z->ctx_term(ctx);
     sock = ctx = nullptr;
     if (pid > 0) {
+#ifdef _WIN32
+      // no SIGTERM to ask with: the ZeroMQ socket is closed, so end omc and what it started
+      win32::kill_tree(pid);
+      win32::wait(pid);
+#else
       kill(pid, SIGTERM);
       for (int i = 0; i < 20 && waitpid(pid, nullptr, WNOHANG) == 0; ++i) std::this_thread::sleep_for(25ms);
       if (waitpid(pid, nullptr, WNOHANG) == 0) {
         kill(pid, SIGKILL);
         waitpid(pid, nullptr, 0);
       }
+#endif
       pid = -1;
     }
     // A container's podman client can go while its container keeps running (`--init` omc as
@@ -284,7 +330,11 @@ struct Omc::Impl {
 
   void start() {
     const Zmq& z = Zmq::get();
+#ifdef _WIN32
+    session = "paperboat-" + std::to_string(win32::current_pid()) + "-" + std::to_string(sessions++);
+#else
     session = "paperboat-" + std::to_string(getpid()) + "-" + std::to_string(sessions++);
+#endif
     workdir = fs::temp_directory_path() / ("paperboat-omc-" + session);
     fs::create_directories(workdir);
     const std::string zarg = "-z=" + session;
@@ -292,6 +342,11 @@ struct Omc::Impl {
     if (runtime.mode != "native") container_name = "paperboat-omc-" + session;
     start_cleaner();
     std::vector<std::string> command = omc_command(runtime, workdir.string(), {"--interactive=zmq", zarg}, container_name);
+#ifdef _WIN32
+    // In a job that ends with this process, however it ends (PR_SET_PDEATHSIG on Linux).
+    pid = win32::spawn(command, workdir, {}, win32::Err::Inherit, true);
+    if (pid < 0) throw OmcError("cannot start omc (`" + runtime.exe + "`" + (runtime.why.empty() ? "" : "; " + runtime.why) + ")");
+#else
     pid = fork();
     if (pid < 0) throw OmcError("cannot start omc: fork failed");
     if (pid == 0) {
@@ -317,11 +372,17 @@ struct Omc::Impl {
       execvp(argv[0], argv.data());
       _exit(127);
     }
+#endif
     fs::path file;
     // up to 20 s; a container's first start pulls the image, so minutes
     const int tries = runtime.mode == "native" ? 400 : 20 * 60 * 10;
     for (int i = 0; i < tries && (file = port_file()).empty(); ++i) {
+#ifdef _WIN32
+      if (!win32::running(pid)) {
+        win32::wait(pid);
+#else
       if (waitpid(pid, nullptr, WNOHANG) == pid) {
+#endif
         pid = -1;
         throw OmcError("omc exited at start (" + runtime.mode + ": `" + runtime.exe + "`" + (runtime.why.empty() ? "" : "; " + runtime.why) + ")");
       }
@@ -483,6 +544,10 @@ std::string Omc::mode() const { return impl_->runtime.mode; }
 namespace {
 // `name` on PATH (or a path that exists), else "".
 std::string which(const std::string& name) {
+#ifdef _WIN32
+  if (name.find_first_of("/\\") != std::string::npos) return fs::exists(name) ? name : "";
+  return win32::which(name);
+#else
   if (name.find('/') != std::string::npos) return fs::exists(name) ? name : "";
   const char* path = std::getenv("PATH");
   std::string_view rest = path ? path : "";
@@ -493,11 +558,16 @@ std::string which(const std::string& name) {
     rest = colon == std::string_view::npos ? "" : rest.substr(colon + 1);
   }
   return "";
+#endif
 }
 
 // Why a native omc can't build FMUs, or "": every file of its FMU build project must be
 // readable (OpenModelica nightlies have shipped config.guess and config.sub root-only).
 std::string unhealthy(const std::string& omc) {
+#ifdef _WIN32
+  (void)omc;  // the root-only files are a Linux nightly's packaging; the Windows installer's are readable
+  return "";
+#else
   std::error_code ec;
   const fs::path project = fs::canonical(omc, ec).parent_path().parent_path() / "share/omc/runtime/c/fmi/buildproject";
   if (ec || !fs::is_directory(project, ec)) return "";
@@ -505,6 +575,7 @@ std::string unhealthy(const std::string& omc) {
     if (e.is_regular_file() && access(e.path().c_str(), R_OK) != 0)
       return e.path().string() + " is not readable, so omc can't build FMUs";
   return "";
+#endif
 }
 }  // namespace
 
@@ -512,6 +583,16 @@ OmcRuntime resolve_omc() {
   const auto env = [](const char* k) { const char* v = std::getenv(k); return std::string(v ? v : ""); };
   for (const char* k : {"SQUERO_OMC_BIN", "PAPERBOAT_OMC_BIN"})
     if (!env(k).empty()) return {"native", env(k), ""};
+#ifdef _WIN32
+  // Native only: the container modes mount the host's /tmp and $HOME at the same paths and run as
+  // its uid, which a Windows host has none of. The OpenModelica installer sets OPENMODELICAHOME.
+  if (const std::string native = which("omc"); !native.empty()) return {"native", native, ""};
+  if (const std::string home = env("OPENMODELICAHOME"); !home.empty()) {
+    const fs::path omc = fs::path(home) / "bin" / "omc.exe";
+    if (fs::is_regular_file(omc)) return {"native", omc.string(), ""};
+  }
+  return {"native", "omc", "no omc on PATH and no OPENMODELICAHOME: install OpenModelica (podman and docker are not used on Windows)"};
+#else
   const std::string force = env("SQUERO_OMC");
   const std::string native = which("omc");
   const std::string engine = force == "docker" ? which("docker") : force == "podman" ? which("podman")
@@ -523,6 +604,7 @@ OmcRuntime resolve_omc() {
   if (!native.empty() && sick.empty()) return {"native", native, ""};
   if (!engine.empty()) return {engine_mode, engine, sick};
   return {"native", native.empty() ? "omc" : native, sick + (native.empty() ? ", and no podman or docker to run it in" : "")};
+#endif
 }
 
 std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& workdir, const std::vector<std::string>& args,
@@ -542,7 +624,9 @@ std::vector<std::string> omc_command(const OmcRuntime& rt, const std::string& wo
     // --init: omc as PID 1 ignores SIGTERM, so the container outlived us
     // files omc writes are the user's: podman maps the user in, docker runs as them
     if (rt.mode == "podman") out.insert(out.begin() + 2, "--userns=keep-id");
+#ifndef _WIN32  // never reached on Windows: resolve_omc is native there
     else out.insert(out.begin() + 2, {"--user", std::to_string(getuid()) + ":" + std::to_string(getgid())});
+#endif
     if (tmp != "/tmp") out.insert(out.end() - 2, {"-v", "/tmp:/tmp"});
     out.push_back(kImage);
     out.push_back("omc");

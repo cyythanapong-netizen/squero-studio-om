@@ -26,6 +26,23 @@ namespace mo = squero;
 namespace fs = std::filesystem;
 using nlohmann::json;
 
+// A file's text, with the file closed again: Windows will not remove or replace a file a test
+// still holds open, which an ifstream left in scope does.
+static std::string read_text(const fs::path& file) {
+  std::ifstream in(file);
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+// A native omc the tests can drive. Windows has no `command -v`: ask the server's own lookup
+// (PATH, then %OPENMODELICAHOME%\bin), which is native-only there.
+static bool have_omc() {
+#ifdef _WIN32
+  return mo::resolve_omc().why.empty();
+#else
+  return std::system("command -v omc >/dev/null 2>&1") == 0;
+#endif
+}
+
 #ifndef PAPERBOAT_TEST_DATA
 #ifdef SQUERO_TEST_DATA
 #define PAPERBOAT_TEST_DATA SQUERO_TEST_DATA
@@ -65,7 +82,9 @@ TEST_CASE("squero/0 passes only allow-listed calls", "[modelica]") {
   CHECK_FALSE(mo::allowed(R"(loadFile("unterminated))"));
 
   mo::Omc omc;  // never started: handle() refuses before calling it
-  CHECK(mo::handle(omc, R"j({"id": 7, "op": "omc", "expr": "system(\"ls\")"})j").find(R"("ok":false)") != std::string::npos);
+  // outside the macro: MSVC 2022 mis-stringizes a raw string holding \" inside CHECK(...)
+  const std::string system_call = R"j({"id": 7, "op": "omc", "expr": "system(\"ls\")"})j";
+  CHECK(mo::handle(omc, system_call).find(R"("ok":false)") != std::string::npos);
   CHECK(mo::handle(omc, R"({"id": 7, "op": "nope"})").find("unknown op") != std::string::npos);
 }
 
@@ -91,7 +110,7 @@ TEST_CASE("backend names come from the class's short name", "[modelica]") {
 }
 
 TEST_CASE("generate picks the ODE path when it can and says why when it can't", "[modelica][omc]") {
-  if (std::system("command -v omc >/dev/null 2>&1") != 0) SKIP("omc not installed");
+  if (!have_omc()) SKIP("omc not installed");
   const fs::path dir = fs::temp_directory_path() / "paperboat-modelica-test";
   fs::remove_all(dir);
   fs::create_directories(dir);
@@ -386,7 +405,7 @@ TEST_CASE("Icon(graphics) quantiser maps primitives, drops Bitmap/DynamicSelect,
 }
 
 TEST_CASE("live omc importer matches MSL goldens and resolves array, if, and fallback connectors", "[modelica][omc]") {
-  if (std::system("command -v omc >/dev/null 2>&1") != 0) SKIP("omc not installed");
+  if (!have_omc()) SKIP("omc not installed");
   mo::Omc omc;
 
   const std::pair<const char*, const char*> msl_cases[] = {
@@ -448,8 +467,6 @@ end CustomThermal;
 
 namespace {
 
-bool have_omc() { return std::system("command -v omc >/dev/null 2>&1") == 0; }
-
 json op(mo::Omc& omc, json request, const mo::Session& session = {}) {
   return json::parse(mo::handle(omc, request.dump(), session));
 }
@@ -498,8 +515,7 @@ TEST_CASE("set_icon round-trips the Wave 2 icon goldens through omc", "[squero][
     CHECK(back.value("w", 1) == golden.value("w", 1));
     CHECK(back.value("h", 1) == golden.value("h", 1));
     CHECK(op(omc, {{"id", 3}, {"op", "save"}, {"model", model}})["ok"] == true);
-    std::ifstream saved(file);
-    CHECK_THAT(std::string(std::istreambuf_iterator<char>(saved), {}), Catch::Matchers::ContainsSubstring("Icon("));
+    CHECK_THAT(read_text(file), Catch::Matchers::ContainsSubstring("Icon("));
     fs::remove(file);
   }
 }
@@ -654,14 +670,11 @@ TEST_CASE("create_class writes a class and keeps package.order in step", "[squer
   INFO(made.dump());
   REQUIRE(made["ok"] == true);
   CHECK(made["result"]["model"] == "Pkg.B");
-  std::ifstream body(dir / "Pkg" / "B.mo");
-  const std::string text((std::istreambuf_iterator<char>(body)), std::istreambuf_iterator<char>());
+  const std::string text = read_text(dir / "Pkg" / "B.mo");
   CHECK_THAT(text, Catch::Matchers::ContainsSubstring("within Pkg;"));
   CHECK_THAT(text, Catch::Matchers::ContainsSubstring("block B"));
   CHECK_THAT(text, Catch::Matchers::ContainsSubstring("extends Modelica.Blocks.Icons.Block;"));
-  std::ifstream order(dir / "Pkg" / "package.order");
-  const std::string listed((std::istreambuf_iterator<char>(order)), std::istreambuf_iterator<char>());
-  CHECK(listed == "A\nB\n");
+  CHECK(read_text(dir / "Pkg" / "package.order") == "A\nB\n");
 
   // A name that is taken, a bad name, and a bad kind are refused without touching the disk.
   CHECK(op(omc, {{"op", "create_class"}, {"file", (dir / "Pkg" / "A.mo").string()}, {"name", "A"}, {"kind", "model"}, {"within", "Pkg"}})["ok"] == false);
@@ -672,9 +685,7 @@ TEST_CASE("create_class writes a class and keeps package.order in step", "[squer
   const json quick = op(omc, {{"op", "create_class"}, {"file", (dir / "Q.mo").string()}, {"name", "Q"}, {"kind", "function"}});
   REQUIRE(quick["ok"] == true);
   CHECK(quick["result"]["model"] == "Q");
-  std::ifstream quick_body(dir / "Q.mo");
-  const std::string quick_text((std::istreambuf_iterator<char>(quick_body)), std::istreambuf_iterator<char>());
-  CHECK_THAT(quick_text, Catch::Matchers::StartsWith("function Q"));
+  CHECK_THAT(read_text(dir / "Q.mo"), Catch::Matchers::StartsWith("function Q"));
   CHECK_FALSE(fs::exists(dir / "package.order"));
 
   fs::remove_all(dir);
@@ -699,13 +710,10 @@ TEST_CASE("packages and class files can be created, duplicated and deleted", "[s
   INFO(dup.dump());
   REQUIRE(dup["ok"] == true);
   CHECK(dup["result"]["model"] == "Pkg.B");
-  std::ifstream made(dir / "Pkg" / "B.mo");
-  const std::string text((std::istreambuf_iterator<char>(made)), std::istreambuf_iterator<char>());
+  const std::string text = read_text(dir / "Pkg" / "B.mo");
   CHECK_THAT(text, Catch::Matchers::ContainsSubstring("model B"));
   CHECK_THAT(text, Catch::Matchers::ContainsSubstring("end B;"));
-  std::ifstream order(dir / "Pkg" / "package.order");
-  const std::string listed((std::istreambuf_iterator<char>(order)), std::istreambuf_iterator<char>());
-  CHECK(listed == "A\nB\n");
+  CHECK(read_text(dir / "Pkg" / "package.order") == "A\nB\n");
 
   // Read the file's own text, then move it to another package and rewrite its within.
   const json read = op(omc, {{"op", "read_file"}, {"file", (dir / "Pkg" / "A.mo").string()}});
@@ -719,21 +727,13 @@ TEST_CASE("packages and class files can be created, duplicated and deleted", "[s
   REQUIRE(moved["ok"] == true);
   CHECK(moved["result"]["model"] == "Pkg.Sub.A");
   CHECK_FALSE(fs::exists(dir / "Pkg" / "A.mo"));
-  std::ifstream moved_text(dir / "Sub" / "A.mo");
-  const std::string moved_src((std::istreambuf_iterator<char>(moved_text)), std::istreambuf_iterator<char>());
-  CHECK_THAT(moved_src, Catch::Matchers::ContainsSubstring("within Pkg.Sub;"));
-  std::ifstream target_order(dir / "Sub" / "package.order");
-  const std::string target_listed((std::istreambuf_iterator<char>(target_order)), std::istreambuf_iterator<char>());
-  CHECK(target_listed == "A\n");
-  std::ifstream source_order(dir / "Pkg" / "package.order");
-  const std::string source_listed((std::istreambuf_iterator<char>(source_order)), std::istreambuf_iterator<char>());
-  CHECK(source_listed == "B\n");
+  CHECK_THAT(read_text(dir / "Sub" / "A.mo"), Catch::Matchers::ContainsSubstring("within Pkg.Sub;"));
+  CHECK(read_text(dir / "Sub" / "package.order") == "A\n");
+  CHECK(read_text(dir / "Pkg" / "package.order") == "B\n");
 
   CHECK(op(omc, {{"op", "delete_class"}, {"file", (dir / "Pkg" / "B.mo").string()}, {"name", "B"}})["ok"] == true);
   CHECK_FALSE(fs::exists(dir / "Pkg" / "B.mo"));
-  std::ifstream after(dir / "Pkg" / "package.order");
-  const std::string left((std::istreambuf_iterator<char>(after)), std::istreambuf_iterator<char>());
-  CHECK(left == "");
+  CHECK(read_text(dir / "Pkg" / "package.order") == "");
 
   // A package goes with everything under it, but never the workspace root or a folder outside it.
   CHECK(op(omc, {{"op", "delete_package"}, {"dir", dir.string()}, {"root", dir.string()}})["ok"] == false);

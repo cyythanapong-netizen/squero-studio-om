@@ -44,6 +44,13 @@ target_link_libraries(squero_lib
   PUBLIC nlohmann_json::nlohmann_json
   PRIVATE ixwebsocket tomlplusplus::tomlplusplus squero_warnings ${CMAKE_DL_LIBS}
 )
+if(WIN32)
+  # processes, LoadLibrary and the environment on Windows; the POSIX code stays in place
+  target_sources(squero_lib PRIVATE src/win32.cpp)
+  target_link_libraries(squero_lib PRIVATE ws2_32)
+  # std::getenv and friends: the server reads, never keeps, what they return
+  target_compile_definitions(squero_lib PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
 
 add_executable(squero-om src/main.cpp)
 target_compile_definitions(squero-om PRIVATE SQUERO_VERSION="${PROJECT_VERSION}")
