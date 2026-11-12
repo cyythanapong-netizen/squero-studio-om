@@ -129,7 +129,11 @@ std::vector<OmcMessage> parse_messages(std::string_view raw) {
     if (line.front() == '[') {
       if (const std::size_t close = line.find(']'); close != std::string::npos) {
         const std::string inside = line.substr(1, close - 1);
-        if (const std::size_t colon = inside.find(':'); colon != std::string::npos) {
+        // A Windows path starts with its drive, `C:/Users/…/M.mo:18:5-…`: the file ends at the
+        // first colon after it.
+        const bool drive = inside.size() > 2 && std::isalpha(static_cast<unsigned char>(inside[0])) && inside[1] == ':' &&
+                           (inside[2] == '/' || inside[2] == '\\');
+        if (const std::size_t colon = inside.find(':', drive ? 2 : 0); colon != std::string::npos) {
           message.file = inside.substr(0, colon);
           std::size_t p = colon + 1;
           const auto number = [&](int& value) {
