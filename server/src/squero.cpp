@@ -23,11 +23,23 @@
 #include <cstdio>
 #include <cstring>
 
+#ifdef _WIN32
+#define NOMINMAX  // windows.h's min/max macros would break std::max
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>  // before anything pulls in windows.h
+#include <ws2tcpip.h>
+
+#include <array>
+#include <cstdio>
+
+#include "squero/win32.hpp"
+#else
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 #include <ixwebsocket/IXHttpServer.h>
 #include <ixwebsocket/IXNetSystem.h>
@@ -41,6 +53,15 @@ namespace {
 
 namespace fs = std::filesystem;
 using nlohmann::json;
+
+#ifdef _WIN32
+using pid_t = int;
+using socklen_t = int;
+void close_socket(SOCKET s) { closesocket(s); }
+#else
+using SOCKET = int;
+void close_socket(int fd) { close(fd); }
+#endif
 
 // SIGTERM/SIGINT: a flag the serve loop polls, then stops omc. A handler cannot take locks or
 // talk to omc itself, and ixwebsocket's own handlers shouldn't decide when omc goes.
@@ -443,6 +464,7 @@ json op_move_class(const json& in) {
   if (fs::exists(target)) throw std::runtime_error(target.string() + " already exists");
   std::ifstream source(file);
   std::string text((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+  source.close();  // Windows will not remove a file that is still open (below)
   static const std::regex within_line(R"(^\s*within\s+[^;]+;\s*\n?)");
   text = std::regex_replace(text, within_line, "", std::regex_constants::format_first_only);
   // Drop a blank line left at the very top by the within line.
@@ -561,13 +583,18 @@ json op_generate(Omc& omc, const json& in, const Session& session) {
 
 // A free TCP port: bind to 0 and read back what the kernel chose.
 int free_port() {
-  const int fd = socket(AF_INET, SOCK_STREAM, 0);
+  const SOCKET fd = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef _WIN32
+  const bool valid = fd != INVALID_SOCKET;
+#else
+  const bool valid = fd >= 0;
+#endif
   sockaddr_in a{};
   a.sin_family = AF_INET;
   a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   socklen_t n = sizeof a;
-  const bool ok = fd >= 0 && bind(fd, reinterpret_cast<sockaddr*>(&a), n) == 0 && getsockname(fd, reinterpret_cast<sockaddr*>(&a), &n) == 0;
-  if (fd >= 0) close(fd);
+  const bool ok = valid && bind(fd, reinterpret_cast<sockaddr*>(&a), n) == 0 && getsockname(fd, reinterpret_cast<sockaddr*>(&a), &n) == 0;
+  if (valid) close_socket(fd);
   if (!ok) throw std::runtime_error("no free port");
   return ntohs(a.sin_port);
 }
@@ -590,6 +617,19 @@ std::string base64(const std::string& in) {
 std::string paperboat_bin() {
   const char* e = std::getenv("PAPERBOAT_BIN");
   if (e && *e) return e;
+#ifdef _WIN32
+  // the sibling checkout's build: <repo>/paperboat/engine/build/tools/<config>/paperboat.exe
+  // (bin/paperboat is a bash script, which CreateProcess cannot run)
+  const fs::path exe = win32::exe_path();
+  for (fs::path d = exe.parent_path(); d.has_parent_path() && d != d.root_path(); d = d.parent_path()) {
+    for (const char* config : {"Release", "RelWithDebInfo", "Debug", "."}) {
+      const fs::path c = d.parent_path() / "paperboat" / "engine" / "build" / "tools" / config / "paperboat.exe";
+      std::error_code missing;
+      if (fs::is_regular_file(c, missing)) return fs::weakly_canonical(c, missing).string();
+    }
+  }
+  return "paperboat";
+#else
   // the sibling checkout: <repo>/squero-studio-om/server/build/squero-om -> <repo>/paperboat/bin/paperboat
   std::error_code ec;
   const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
@@ -599,18 +639,29 @@ std::string paperboat_bin() {
     if (fs::is_regular_file(c, missing)) return c.string();
   }
   return "paperboat";
+#endif
 }
 
 // The installed paperboat's version, or "" when it can't be run. Cached: About asks once.
 std::string paperboat_version() {
   static const std::string version = [] {
     std::string out;
+#ifdef _WIN32
+    // _popen runs `cmd /c <cmd>`, which strips one outer pair of quotes: hence the extra pair.
+    const std::string cmd = "\"\"" + paperboat_bin() + "\" --version 2>NUL\"";
+    if (FILE* p = _popen(cmd.c_str(), "r")) {
+      char line[512];
+      while (std::fgets(line, sizeof line, p)) out += line;
+      _pclose(p);
+    }
+#else
     const std::string cmd = "\"" + paperboat_bin() + "\" --version 2>/dev/null";
     if (FILE* p = popen(cmd.c_str(), "r")) {
       char line[512];
       while (std::fgets(line, sizeof line, p)) out += line;
       pclose(p);
     }
+#endif
     const auto first = out.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return std::string();
     const auto end = out.find_first_of("\r\n", first);
@@ -624,6 +675,14 @@ std::string paperboat_version() {
 // Spawns paperboat in its own session, stdout and stderr to `log`; returns its pid.
 pid_t spawn_paperboat(const std::vector<std::string>& args, const fs::path& log) {
   const std::string bin = paperboat_bin();
+#ifdef _WIN32
+  // its own job (setsid's session): serve_stop ends it and what it started
+  std::vector<std::string> argv{bin};
+  argv.insert(argv.end(), args.begin(), args.end());
+  const int pid = win32::spawn(argv, {}, log, win32::Err::Same, false);
+  if (pid < 0) throw std::runtime_error("cannot run " + bin + " (writing " + log.string() + ")");
+  return pid;
+#else
   std::vector<char*> argv{const_cast<char*>(bin.c_str())};
   for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
   argv.push_back(nullptr);
@@ -646,20 +705,48 @@ pid_t spawn_paperboat(const std::vector<std::string>& args, const fs::path& log)
   close(fd);
   if (pid < 0) throw std::runtime_error("fork failed");
   return pid;
+#endif
 }
 
 // Runs paperboat to the end; its exit code (127: it could not be started).
 int run_paperboat(const std::vector<std::string>& args, const fs::path& log) {
   const pid_t pid = spawn_paperboat(args, log);
+#ifdef _WIN32
+  return win32::wait(pid);
+#else
   int st = 0;
   waitpid(pid, &st, 0);
   return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+#endif
 }
 
 // Runs a program with its output going to `log` and to `on_line` as it arrives, so a slow build
 // shows why it is slow while it runs (a packed archive reports its progress too).
 int run_process_streaming(const std::string& bin, const std::vector<std::string>& args, const fs::path& log,
                           const std::function<void(const std::string&)>& on_line) {
+#ifdef _WIN32
+  std::vector<std::string> command{bin};
+  command.insert(command.end(), args.begin(), args.end());
+  void* pipe = nullptr;
+  const int pid = win32::spawn_piped(command, &pipe);
+  if (pid < 0) return 127;  // could not be started, as exec failing in the child
+  std::ofstream out(log, std::ios::binary | std::ios::trunc);
+  std::string pending;
+  for (std::string chunk; win32::read_pipe(pipe, chunk);) {
+    out.write(chunk.data(), static_cast<std::streamsize>(chunk.size()));
+    out.flush();
+    pending += chunk;
+    for (std::size_t at; (at = pending.find('\n')) != std::string::npos;) {
+      std::string line = pending.substr(0, at);
+      if (!line.empty() && line.back() == '\r') line.pop_back();
+      on_line(line);
+      pending.erase(0, at + 1);
+    }
+  }
+  win32::close_pipe(pipe);
+  if (!pending.empty()) on_line(pending);
+  return win32::wait(pid);
+#else
   std::vector<char*> argv{const_cast<char*>(bin.c_str())};
   for (const auto& a : args) argv.push_back(const_cast<char*>(a.c_str()));
   argv.push_back(nullptr);
@@ -699,6 +786,7 @@ int run_process_streaming(const std::string& bin, const std::vector<std::string>
   int st = 0;
   waitpid(pid, &st, 0);
   return WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+#endif
 }
 
 int run_paperboat_streaming(const std::vector<std::string>& args, const fs::path& log,
@@ -714,6 +802,25 @@ void ensure_engine_sdk(const Session& session) {
   std::error_code ec;
   const fs::path bin = fs::canonical(paperboat_bin(), ec);
   if (ec || !fs::is_regular_file(bin)) return;
+#ifdef _WIN32
+  // <repo>/paperboat/engine/build/tools/Release/paperboat.exe -> <repo>/paperboat/engine/build
+  fs::path engine;
+  for (fs::path d = bin.parent_path(); d.has_parent_path() && d != d.root_path(); d = d.parent_path())
+    if (d.filename() == "engine" && fs::is_regular_file(d / "CMakeLists.txt", ec)) {
+      engine = d;
+      break;
+    }
+  if (engine.empty()) return;
+  const fs::path build = engine / "build";
+  fs::path core;
+  for (const char* config : {"Release", "RelWithDebInfo", "Debug"})
+    if (fs::is_regular_file(build / "core" / config / "paperboat_core.lib", ec)) {
+      core = build / "core" / config / "paperboat_core.lib";
+      break;
+    }
+  if (core.empty()) return;
+  const std::string config_name = core.parent_path().filename().string();
+#else
   // <repo>/paperboat/bin/paperboat -> <repo>/paperboat/engine/build/dev
   const fs::path engine = bin.parent_path().parent_path() / "engine";
   fs::path build;
@@ -725,6 +832,7 @@ void ensure_engine_sdk(const Session& session) {
     }
   }
   if (build.empty()) return;
+#endif
   const fs::path sdk = engine / "build" / "sdk";
   fs::path config;
   const auto find_config = [&] {
@@ -733,16 +841,24 @@ void ensure_engine_sdk(const Session& session) {
     return fs::path{};
   };
   config = find_config();
+#ifndef _WIN32
   const fs::path core = fs::is_regular_file(build / "core" / "libpaperboat_core.a", ec) ? build / "core" / "libpaperboat_core.a"
                                                                                         : build / "libpaperboat_core.a";
+#endif
   if (config.empty() || fs::last_write_time(config / "PaperboatConfig.cmake", ec) < fs::last_write_time(core, ec)) {
     const auto say = [&](const std::string& line) {
       if (session.push && !line.empty()) session.push(json{{"op", "log"}, {"level", "info"}, {"text", line}}.dump());
     };
     say(config.empty() ? "installing the engine SDK once (every backend build reuses it)…" : "refreshing the engine SDK…");
     const fs::path log = fs::temp_directory_path() / "ssom_sdk.log";
+#ifdef _WIN32
+    // a multi-config build: install the configuration the library was built in
+    const int code = run_process_streaming(
+        "cmake", {"--install", build.string(), "--config", config_name, "--prefix", sdk.string(), "--component", "dev"}, log, say);
+#else
     const int code = run_process_streaming(
         "cmake", {"--install", build.string(), "--prefix", sdk.string(), "--component", "dev"}, log, say);
+#endif
     if (code != 0) {
       say("engine SDK install failed; the backend will build the engine from source (slow)");
       return;
@@ -750,7 +866,11 @@ void ensure_engine_sdk(const Session& session) {
     config = find_config();
     if (config.empty()) return;
   }
+#ifdef _WIN32
+  win32::set_env("PAPERBOAT_SDK_DIR", config.string());
+#else
   setenv("PAPERBOAT_SDK_DIR", config.c_str(), 1);
+#endif
 }
 
 // The last lines of a log, for an error the user can act on.
@@ -771,13 +891,18 @@ std::runtime_error paperboat_failed(const std::string& what, int code, const fs:
 }
 
 bool listening(int port) {
-  const int fd = socket(AF_INET, SOCK_STREAM, 0);
+  const SOCKET fd = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef _WIN32
+  const bool valid = fd != INVALID_SOCKET;
+#else
+  const bool valid = fd >= 0;
+#endif
   sockaddr_in a{};
   a.sin_family = AF_INET;
   a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   a.sin_port = htons(static_cast<uint16_t>(port));
-  const bool ok = fd >= 0 && connect(fd, reinterpret_cast<sockaddr*>(&a), sizeof a) == 0;
-  if (fd >= 0) close(fd);
+  const bool ok = valid && connect(fd, reinterpret_cast<sockaddr*>(&a), sizeof a) == 0;
+  if (valid) close_socket(fd);
   return ok;
 }
 
@@ -792,9 +917,14 @@ json serve_status(int port, std::size_t offset) {
   const auto it = served.find(port);
   if (it == served.end()) throw std::runtime_error("no backend started on port " + std::to_string(port));
   const auto [pid, log] = it->second;
-  int st = 0;
   std::string state = listening(port) ? "running" : "building";
+#ifdef _WIN32
+  if (!win32::running(pid)) {
+    win32::wait(pid);
+#else
+  int st = 0;
   if (waitpid(pid, &st, WNOHANG) == pid) {
+#endif
     state = "exited";
     served.erase(it);
   }
@@ -826,8 +956,13 @@ json serve_stop(int port) {
       throw paperboat_failed("stop " + std::to_string(port), code, log);
   std::lock_guard lock(served_mutex);
   if (const auto it = served.find(port); it != served.end()) {
+#ifdef _WIN32
+    win32::kill_tree(it->second.first);  // its job: the build or backend it started too
+    win32::wait(it->second.first);
+#else
     kill(-it->second.first, SIGTERM);
     waitpid(it->second.first, nullptr, 0);
+#endif
     served.erase(it);
   }
   return json{{"port", port}, {"state", "stopped"}};
@@ -1226,12 +1361,20 @@ int serve_squero(int port, const fs::path& app, Omc::Options options, const fs::
   // SIGTERM (a closed terminal, `paperboat stop`, systemd) and SIGINT (Ctrl-C) both mean
   // "stop": wake the loop below so omc is stopped on purpose, not just orphaned.
   stop_requested.store(false, std::memory_order_relaxed);
+#ifdef _WIN32
+  // Ctrl-C and Ctrl-Break arrive as SIGINT/SIGBREAK. `paperboat stop` ends the process outright,
+  // and omc's job (kill on close) takes omc with it.
+  std::signal(SIGINT, request_stop);
+  std::signal(SIGBREAK, request_stop);
+  std::signal(SIGTERM, request_stop);
+#else
   struct sigaction sa {};
   sa.sa_handler = request_stop;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;  // no SA_RESTART: a polled sleep returns early
   sigaction(SIGTERM, &sa, nullptr);
   sigaction(SIGINT, &sa, nullptr);
+#endif
   Omc omc(std::move(options));
   // port 0: the first free one of SQR01..SQR99 (59201..59299)
   for (int p = 59201; port == 0 && p <= 59299; ++p)
