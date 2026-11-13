@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { MenuBar, StatusPill, ThemeToggle, type Theme } from "@paperboat/shared/components";
 import type { Command } from "@paperboat/shared";
 import { chip, type OmcState, type OmcStatus } from "../omc/omc.ts";
-import { SqueroLogo } from "./SqueroLogo.tsx";
+import { SqueroLogo } from "@paperboat/shared/squero";
 
 export function Wordmark({ running = false }: { running?: boolean }) {
   return (
