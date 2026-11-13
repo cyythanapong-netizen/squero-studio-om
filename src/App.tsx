@@ -96,6 +96,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   // The rail opens on the files of the Studio's folder, as MX does; the library is a click away.
   const [rail, setRail] = useState<RailTab>("files");
+  const [railHidden, setRailHidden] = useState(false);
   const [newClassOpen, setNewClassOpen] = useState(false);
   const [newClassWithin, setNewClassWithin] = useState<string | undefined>(undefined);
   const [workspaceTick, setWorkspaceTick] = useState(0);
@@ -610,6 +611,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       // View menu
       { id: "view.search", label: "Command search…", menu: "view", group: "search", shortcut: "Ctrl+K", chord: SEARCH_CHORD, quiet: true, run: () => setSearchOpen(true) },
       { id: "solver", label: "Solver settings…", menu: "run", group: "solver", run: () => (setSide(true), window.dispatchEvent(new Event("squero:solver"))) },
+      { id: "rail", label: "Files and library", menu: "view", group: "panes", checked: !railHidden, run: () => setRailHidden((v) => !v) },
       { id: "side", label: "Source and Simulate", menu: "view", group: "panes", checked: side, run: () => setSide((s) => !s) },
       ...stageOptions.map((option): Command => ({ id: `stage-${option.value}`, label: option.label, menu: "view", group: "stage", checked: stageView === option.value, run: () => setStageView(option.value) })),
       { id: "flat", label: "flat model", menu: "view", group: "source", checked: view === "flat", run: () => (setView("flat"), setSide(true)) },
@@ -620,7 +622,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
       { id: "about", label: "About Squero Studio", menu: "view", group: "about", run: () => setAboutOpen(true) },
     ],
-    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy],
+    [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, railHidden, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy],
   );
   useShortcuts(commands);
 
@@ -662,6 +664,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
             <Rail
               tab={rail}
               onTab={setRail}
+              collapsed={railHidden}
+              onToggle={() => setRailHidden((v) => !v)}
               workspace={workspace}
               active={model.file}
               onOpen={(file) => void openDocument(file)}

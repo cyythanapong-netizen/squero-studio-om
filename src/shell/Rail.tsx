@@ -1,8 +1,8 @@
 // The left rail: Files (the model's folder, its packages and classes) or the Library (the
-// component browser). The tree itself is @paperboat/shared/files, the same component MX uses;
-// this file only maps the workspace entries and the Studio actions.
+// component browser). The rail and tree are @paperboat/shared/files (FileRail, FileTree), the same
+// as MX; this file only maps the workspace entries and the Studio actions.
 import { useRef, type ReactNode } from "react";
-import { FileTree, type FileEntry, type FileTreeHandle } from "@paperboat/shared/files";
+import { FileRail, FileTree, type FileEntry, type FileTreeHandle } from "@paperboat/shared/files";
 import { visibleEntries, workspaceName, type Workspace, type WorkspaceEntry } from "./workspace.ts";
 
 export type RailTab = "files" | "library";
@@ -19,6 +19,8 @@ export function Rail({
   onDelete,
   onCopyPath,
   onMove,
+  collapsed,
+  onToggle,
   children,
 }: {
   tab: RailTab;
@@ -32,6 +34,9 @@ export function Rail({
   onDelete: (entry: WorkspaceEntry) => void;
   onCopyPath: (entry: WorkspaceEntry) => void;
   onMove: (source: WorkspaceEntry, target?: WorkspaceEntry) => void;
+  /** Folded to a standing tab. */
+  collapsed?: boolean;
+  onToggle?: () => void;
   children: ReactNode;
 }) {
   const tree = useRef<FileTreeHandle>(null);
@@ -47,63 +52,49 @@ export function Rail({
   const classes = workspace?.entries.filter((entry) => entry.kind === "class").length ?? 0;
 
   return (
-    <aside className={`rail rail-${tab}`} aria-label="Files and library">
-      <div className="rail-tabs" role="tablist" aria-label="Rail">
-        <button type="button" role="tab" aria-selected={tab === "files"} className={`rail-tab${tab === "files" ? " on" : ""}`} onClick={() => onTab("files")}>
-          files
-        </button>
-        <button type="button" role="tab" aria-selected={tab === "library"} className={`rail-tab${tab === "library" ? " on" : ""}`} onClick={() => onTab("library")}>
-          library
-        </button>
-        {tab === "files" && (
-          <button
-            type="button"
-            className="key small rail-add"
-            title="New class or package"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              tree.current?.openNewMenu(rect.left, rect.bottom + 4);
-            }}
-          >
-            +
-          </button>
-        )}
+    <FileRail
+      label="Files and library"
+      className={`rail-${tab}`}
+      tabs={["files", "library"]}
+      tab={tab}
+      onTab={(next) => onTab(next as RailTab)}
+      onAdd={(x, y) => tree.current?.openNewMenu(x, y)}
+      addTitle="New class or package"
+      name={workspaceName(workspace)}
+      nameTitle={workspace?.root}
+      badge={workspace ? (workspace.package ? "package" : "quick") : ""}
+      foot={`${classes} ${classes === 1 ? "class" : "classes"}`}
+      collapsed={collapsed}
+      onToggle={onToggle}
+      tree={
+        <FileTree
+          ref={tree}
+          entries={entries}
+          active={active}
+          ariaLabel="Workspace"
+          labels={{
+            newFile: "New class…",
+            newFolder: "New package…",
+            duplicate: "Duplicate…",
+            delete: "Delete…",
+            copyPath: "Copy path",
+            empty: "No .mo files here yet. Create a class with +.",
+          }}
+          actions={{
+            onOpen: (entry) => onOpen(entry.path),
+            onNewFile: (parent) => onNewClass(find(parent)),
+            onNewFolder: (parent) => onNewPackage(find(parent)),
+            onDuplicate: (entry) => { const one = find(entry); if (one) onDuplicate(one); },
+            onDelete: (entry) => { const one = find(entry); if (one) onDelete(one); },
+            onCopyPath: (entry) => { const one = find(entry); if (one) onCopyPath(one); },
+            onMove: (source, target) => { const one = find(source); if (one) onMove(one, find(target)); },
+          }}
+        />
+      }
+    >
+      <div className="library-slot" hidden={tab !== "library"}>
+        {children}
       </div>
-      <div className="rail-body">
-        <div className="files-panel" hidden={tab !== "files"}>
-          <div className="files-head">
-            <span className="nm" title={workspace?.root}>{workspaceName(workspace)}</span>
-            <span className="lbl">{workspace ? (workspace.package ? "package" : "quick") : ""}</span>
-          </div>
-          <FileTree
-            ref={tree}
-            entries={entries}
-            active={active}
-            ariaLabel="Workspace"
-            labels={{
-              newFile: "New class…",
-              newFolder: "New package…",
-              duplicate: "Duplicate…",
-              delete: "Delete…",
-              copyPath: "Copy path",
-              empty: "No .mo files here yet. Create a class with +.",
-            }}
-            actions={{
-              onOpen: (entry) => onOpen(entry.path),
-              onNewFile: (parent) => onNewClass(find(parent)),
-              onNewFolder: (parent) => onNewPackage(find(parent)),
-              onDuplicate: (entry) => { const one = find(entry); if (one) onDuplicate(one); },
-              onDelete: (entry) => { const one = find(entry); if (one) onDelete(one); },
-              onCopyPath: (entry) => { const one = find(entry); if (one) onCopyPath(one); },
-              onMove: (source, target) => { const one = find(source); if (one) onMove(one, find(target)); },
-            }}
-          />
-          <p className="files-foot">{classes} {classes === 1 ? "class" : "classes"}</p>
-        </div>
-        <div className="library-slot" hidden={tab !== "library"}>
-          {children}
-        </div>
-      </div>
-    </aside>
+    </FileRail>
   );
 }
