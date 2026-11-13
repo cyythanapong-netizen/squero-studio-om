@@ -1,13 +1,12 @@
 // The stage's Text view: the model's whole .mo, editable. It reads the file (not omc's list(),
 // which is the class body) so `within` and annotations are exactly what Save writes back.
-// It is the shared Studio editor (@paperboat/shared/editor) with Modelica; read is the same editor,
-// read-only. A message selects its line. The App routes Save and document switches through the
+// It is the shared Studio editor (@paperboat/shared/editor) with Modelica, always editable. A
+// message selects its line. The App routes Save and document switches through the
 // registered handle.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { Switch } from "@paperboat/shared/components";
 import { CodeEditor, DEFAULT_EDITOR_SETTINGS, EditorSettingsKey, type EditorSettings } from "@paperboat/shared/editor";
 import type { StudioModel } from "../model/types.ts";
 import { modelica } from "../split/modelica.ts";
@@ -40,7 +39,6 @@ export function TextStage({
 }) {
   const [text, setText] = useState<string | null>(null);
   const [saved, setSaved] = useState("");
-  const [editing, setEditing] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState<EditorView | null>(null);
@@ -99,7 +97,6 @@ export function TextStage({
 
   // Ctrl+S saves the buffer, not the stale omc model: capture it before the app's shortcut.
   useEffect(() => {
-    if (!editing) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
@@ -109,7 +106,7 @@ export function TextStage({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [editing]);
+  }, []);
 
   // A message's line: select it and bring it to the middle.
   useEffect(() => {
@@ -126,15 +123,6 @@ export function TextStage({
       <header className="code-head">
         <b>{name}</b>
         <span className="lbl">· {model.name}</span>
-        <Switch<"read" | "edit">
-          label=""
-          value={editing ? "edit" : "read"}
-          onChange={(choice) => setEditing(choice === "edit")}
-          options={[
-            { value: "read", label: "read" },
-            { value: "edit", label: "edit" },
-          ]}
-        />
         <span className="spacer" />
         {dirty && <span className="lbl">unsaved</span>}
         <EditorSettingsKey settings={settings} onSettings={setSettings} />
@@ -159,7 +147,6 @@ export function TextStage({
             appTheme={theme}
             ariaLabel="Modelica source editor"
             language={modelica}
-            readOnly={!editing}
             base={base}
             onView={setView}
           />
