@@ -362,7 +362,7 @@ export function Simulate({
         canRun={phase.state !== "running"}
         whyNot="simulating"
         running={phase.state === "running"}
-        status={phase.state === "running" ? "running" : phase.state === "failed" ? "failed" : "done"}
+        status={phase.state === "idle" ? undefined : phase.state === "running" ? "running" : phase.state === "failed" ? "failed" : "done"}
         statusText={status}
         optionsSlot={
           <>
