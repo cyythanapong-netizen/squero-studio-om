@@ -1,13 +1,22 @@
 // The stage's Text view: the model's whole .mo, editable. It reads the file (not omc's list(),
 // which is the class body) so `within` and annotations are exactly what Save writes back.
-// A read view keeps syntax highlighting; edit is a plain code buffer with line selection from a
-// message. The App routes Save and document switches through the registered handle.
+// It is the shared Studio editor (@paperboat/shared/editor) with Modelica, always editable. A
+// message selects its line. The App routes Save and document switches through the
+// registered handle.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Switch } from "@paperboat/shared/components";
+import { EditorSelection } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
+import { CodeEditor, DEFAULT_EDITOR_SETTINGS, EditorSettingsKey, type EditorSettings } from "@paperboat/shared/editor";
 import type { StudioModel } from "../model/types.ts";
-import { CodeView } from "../split/CodeView.tsx";
+import { modelica } from "../split/modelica.ts";
 import type { Actions } from "../store/index.tsx";
+
+const SETTINGS_KEY = "om.editor";
+const loadSettings = (): EditorSettings => {
+  try { return { ...DEFAULT_EDITOR_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") }; }
+  catch { return DEFAULT_EDITOR_SETTINGS; }
+};
 
 export type TextEditorHandle = { dirty: boolean; save: () => Promise<void> };
 
@@ -15,19 +24,26 @@ export function TextStage({
   model,
   actions,
   line,
+  theme,
+  base,
   onEditor,
 }: {
   model: StudioModel;
   actions: Actions;
   line?: number;
+  /** The app's shown theme, for the editor's "ui" setting. */
+  theme: "light" | "dark";
+  /** HEAD's copy of the file for the git gutter; null when untracked or outside a repository. */
+  base?: string | null;
   onEditor?: (handle: TextEditorHandle | null) => void;
 }) {
   const [text, setText] = useState<string | null>(null);
   const [saved, setSaved] = useState("");
-  const [editing, setEditing] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const area = useRef<HTMLTextAreaElement>(null);
+  const [view, setView] = useState<EditorView | null>(null);
+  const [settings, setSettings] = useState(loadSettings);
+  useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
   const read = useRef(actions.fileText);
   read.current = actions.fileText;
   const write = useRef(actions.saveText);
@@ -81,7 +97,6 @@ export function TextStage({
 
   // Ctrl+S saves the buffer, not the stale omc model: capture it before the app's shortcut.
   useEffect(() => {
-    if (!editing) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         e.preventDefault();
@@ -91,19 +106,16 @@ export function TextStage({
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [editing]);
+  }, []);
 
+  // A message's line: select it and bring it to the middle.
   useEffect(() => {
-    const el = area.current;
-    if (!editing || !line || !el || text === null) return;
-    const rows = text.split("\n");
-    const at = Math.min(Math.max(line - 1, 0), rows.length - 1);
-    const start = rows.slice(0, at).reduce((n, row) => n + row.length + 1, 0);
-    el.focus();
-    el.setSelectionRange(start, start + rows[at].length);
-    const lh = Number.parseFloat(getComputedStyle(el).lineHeight) || 18;
-    el.scrollTop = Math.max(0, at * lh - el.clientHeight / 2);
-  }, [line, editing, text]);
+    if (!view || !line) return;
+    const doc = view.state.doc;
+    const at = doc.line(Math.min(Math.max(line, 1), doc.lines));
+    view.dispatch({ selection: EditorSelection.range(at.from, at.to), effects: EditorView.scrollIntoView(at.from, { y: "center" }) });
+    view.focus();
+  }, [line, view]);
 
   const name = model.file ? model.file.split(/[\\/]/).pop() : `${model.name}.mo`;
   return (
@@ -111,17 +123,9 @@ export function TextStage({
       <header className="code-head">
         <b>{name}</b>
         <span className="lbl">· {model.name}</span>
-        <Switch<"read" | "edit">
-          label=""
-          value={editing ? "edit" : "read"}
-          onChange={(choice) => setEditing(choice === "edit")}
-          options={[
-            { value: "read", label: "read" },
-            { value: "edit", label: "edit" },
-          ]}
-        />
         <span className="spacer" />
         {dirty && <span className="lbl">unsaved</span>}
+        <EditorSettingsKey settings={settings} onSettings={setSettings} />
         {text !== null && (
           <button type="button" className="key small" onClick={() => void navigator.clipboard?.writeText(text)}>
             Copy
@@ -131,21 +135,23 @@ export function TextStage({
           {busy ? "saving…" : "Save"}
         </button>
       </header>
-      {editing ? (
-        <textarea
-          ref={area}
-          className="code-editor"
-          aria-label="Modelica source editor"
-          value={text ?? ""}
-          placeholder={text === null ? "reading…" : ""}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          onChange={(e) => setText(e.target.value)}
-        />
-      ) : (
-        <CodeView code={text ?? (error || "reading…")} lang="mo" ariaLabel="Modelica source" line={line} />
-      )}
+      <div className="code-editor">
+        {text === null ? (
+          <p className="code-reading">{error || "reading…"}</p>
+        ) : (
+          <CodeEditor
+            key={model.file}
+            value={text}
+            onChange={setText}
+            settings={settings}
+            appTheme={theme}
+            ariaLabel="Modelica source editor"
+            language={modelica}
+            base={base}
+            onView={setView}
+          />
+        )}
+      </div>
       {error && (
         <p className="studio-var-error code-error" role="alert">
           {error}

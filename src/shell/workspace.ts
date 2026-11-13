@@ -23,6 +23,13 @@ export type Workspace = {
   entries: WorkspaceEntry[];
 };
 
+/** The server's `git` op: HEAD's copy of each tracked .mo, and the ones new or changed; null outside a repository. */
+export type GitState = { head: Record<string, string>; untracked: string[]; modified: string[] };
+
+/** The rail's mark for a class file: M changed since HEAD, U not in HEAD. */
+export const gitMark = (git: GitState | null | undefined, path: string): string =>
+  git?.modified.includes(path) ? "M" : git?.untracked.includes(path) ? "U" : "";
+
 /** One open document: the .mo on disk and the class it holds. */
 export type Doc = { file: string; name: string };
 

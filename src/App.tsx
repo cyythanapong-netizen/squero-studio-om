@@ -29,7 +29,7 @@ import { Rail, type RailTab } from "./shell/Rail.tsx";
 import { TextStage, type TextEditorHandle } from "./shell/TextStage.tsx";
 import { NewClassSheet } from "./shell/NewClassSheet.tsx";
 import type { NewClassSpec } from "./shell/newClass.ts";
-import { closeDoc, neighbour, openDoc, type Doc, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
+import { closeDoc, neighbour, openDoc, type Doc, type GitState, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
 import { packageName } from "./shell/newClass.ts";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
@@ -210,6 +210,24 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     };
   }, [omc, model?.file, workspaceTick]);
 
+  // Git, for the Text view's gutter and the rail's M/U: read again when the folder or what is saved
+  // changes, and when the window regains focus (a commit in a terminal, say).
+  const [git, setGit] = useState<GitState | null>(null);
+  const [gitTick, setGitTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setGitTick((n) => n + 1);
+    window.addEventListener("focus", bump);
+    return () => window.removeEventListener("focus", bump);
+  }, []);
+  const gitRoot = workspace?.root;
+  const savedState = `${actions.dirty}|${textDirty}`;
+  useEffect(() => {
+    if (!gitRoot) { setGit(null); return; }
+    let live = true;
+    omc.op<GitState | null>("git", { root: gitRoot }).then((next) => live && setGit(next ?? null), () => live && setGit(null));
+    return () => { live = false; };
+  }, [omc, gitRoot, workspaceTick, gitTick, savedState]);
+
   /** A create/delete/duplicate changed the folder: forget every listing and read the active one again. */
   const refreshWorkspace = () => {
     workspaceCache.current.clear();
@@ -330,6 +348,33 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
           await openDocument(made.file);
           refreshWorkspace();
           say(`Duplicated ${entry.name} as ${made.model}`);
+        } catch (err) {
+          fail(err as Error);
+        }
+      },
+    });
+  };
+
+  const rename = (entry: WorkspaceEntry) => {
+    if (entry.kind !== "class") {
+      say("Studio renames classes; rename a package folder outside it for now", "error");
+      return;
+    }
+    setPromptModal({
+      title: `Rename ${entry.name}`,
+      label: "New class name",
+      value: entry.name,
+      confirmLabel: "Rename",
+      onConfirm: async (name) => {
+        if (name === entry.name) return;
+        try {
+          const made = await actions.renameClass({ file: entry.path, name: entry.name, newName: name, within: withinOf(entry) });
+          modelCache.current.delete(entry.path);
+          modelCache.current.delete(made.file);
+          setDocs((list) => list.map((doc) => (doc.file === entry.path ? { file: made.file, name: made.model } : doc)));
+          if (entry.path === model?.file) await openDocument(made.file);
+          refreshWorkspace();
+          say(`Renamed ${entry.name} to ${made.model}; classes that use it are not changed`);
         } catch (err) {
           fail(err as Error);
         }
@@ -667,11 +712,13 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               collapsed={railHidden}
               onToggle={() => setRailHidden((v) => !v)}
               workspace={workspace}
+              git={git}
               active={model.file}
               onOpen={(file) => void openDocument(file)}
               onNewClass={openNewClass}
               onNewPackage={newPackage}
               onDuplicate={duplicate}
+              onRename={rename}
               onDelete={(entry) => (entry.kind === "package" ? removePackage(entry) : removeClass(entry))}
               onMove={(source, target) => void moveEntry(source, target)}
               onCopyPath={(entry) => {
@@ -707,6 +754,8 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                     model={model}
                     actions={actions}
                     line={sourceLine}
+                    theme={shown}
+                    base={model.file ? git?.head[model.file] ?? null : null}
                     onEditor={(handle) => {
                       editorHandle.current = handle;
                       setTextDirty(handle?.dirty ?? false);
