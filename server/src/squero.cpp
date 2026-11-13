@@ -12,6 +12,7 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -265,6 +266,86 @@ json op_workspace(const json& in) {
           {"entries", entries}};
 }
 
+// `git -C <root> <args>`, run without a shell: its stdout, or nullopt when git is missing, the
+// folder is no repository, or the call fails.
+std::optional<std::string> run_git(const fs::path& root, const std::vector<std::string>& args) {
+  std::vector<std::string> argv = {"git", "-C", root.string()};
+  argv.insert(argv.end(), args.begin(), args.end());
+  std::string out;
+#ifdef _WIN32
+  void* pipe = nullptr;
+  const int pid = win32::spawn_piped(argv, &pipe);
+  if (pid < 0) return std::nullopt;
+  std::string chunk;
+  while (win32::read_pipe(pipe, chunk)) out += chunk;
+  win32::close_pipe(pipe);
+  if (win32::wait(pid) != 0) return std::nullopt;
+#else
+  int fds[2];
+  if (::pipe(fds) != 0) return std::nullopt;
+  const pid_t pid = fork();
+  if (pid < 0) { close(fds[0]); close(fds[1]); return std::nullopt; }
+  if (pid == 0) {
+    dup2(fds[1], STDOUT_FILENO);
+    const int nul = open("/dev/null", O_WRONLY);
+    if (nul >= 0) dup2(nul, STDERR_FILENO);
+    close(fds[0]);
+    close(fds[1]);
+    setenv("GIT_OPTIONAL_LOCKS", "0", 1);  // a status read takes no lock
+    std::vector<char*> cargv;
+    for (std::string& a : argv) cargv.push_back(a.data());
+    cargv.push_back(nullptr);
+    execvp("git", cargv.data());
+    _exit(127);
+  }
+  close(fds[1]);
+  char buf[8192];
+  for (ssize_t n; (n = read(fds[0], buf, sizeof buf)) > 0 || (n < 0 && errno == EINTR);)
+    if (n > 0) out.append(buf, static_cast<size_t>(n));
+  close(fds[0]);
+  int status = 0;
+  while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return std::nullopt;
+#endif
+  return out;
+}
+
+std::vector<std::string> nul_split(const std::string& z) {
+  std::vector<std::string> out;
+  std::string::size_type at = 0;
+  for (auto end = z.find('\0'); end != std::string::npos; at = end + 1, end = z.find('\0', at))
+    if (end > at) out.push_back(z.substr(at, end - at));
+  if (at < z.size()) out.push_back(z.substr(at));
+  return out;
+}
+
+// The git gutter (the same shape as MX's /__mx/workspace/git): HEAD's copy of each tracked .mo
+// under the workspace root (`head`), the .mo files HEAD lacks (`untracked`: untracked, or staged
+// but not committed), and the ones that differ from HEAD on disk (`modified`). Paths are absolute,
+// as the workspace entries are. null outside a git repository.
+json op_git(const json& in) {
+  const std::string root_name = in.value("root", "");
+  std::error_code ec;
+  const fs::path root = fs::weakly_canonical(fs::absolute(root_name), ec);
+  if (root_name.empty() || ec || !fs::is_directory(root, ec)) throw std::runtime_error("git needs the workspace root");
+  const auto tracked = run_git(root, {"ls-files", "-z", "--", "*.mo"});
+  if (!tracked) return nullptr;
+  json head = json::object();
+  json untracked = json::array();
+  const auto others = run_git(root, {"ls-files", "-z", "--others", "--exclude-standard", "--", "*.mo"});
+  for (const std::string& rel : nul_split(others.value_or(""))) untracked.push_back((root / fs::path(rel)).lexically_normal().string());
+  // ponytail: one `git show` per tracked file; batch through `git cat-file --batch` if packages grow to hundreds of classes.
+  for (const std::string& rel : nul_split(*tracked)) {
+    const std::string path = (root / fs::path(rel)).lexically_normal().string();
+    if (const auto text = run_git(root, {"show", "HEAD:./" + rel})) head[path] = *text;
+    else untracked.push_back(path);
+  }
+  json modified = json::array();
+  const auto changed = run_git(root, {"diff", "--relative", "--name-only", "-z", "HEAD", "--", "*.mo"});
+  for (const std::string& rel : nul_split(changed.value_or(""))) modified.push_back((root / fs::path(rel)).lexically_normal().string());
+  return {{"head", head}, {"untracked", untracked}, {"modified", modified}};
+}
+
 // A Modelica identifier, or a dotted qualified name (Pkg.Sub).
 bool identifier(std::string_view text) {
   if (text.empty() || !(std::isalpha(static_cast<unsigned char>(text.front())) || text.front() == '_')) return false;
@@ -371,6 +452,26 @@ void order_remove(const fs::path& dir, const std::string& name) {
   for (const auto& line : lines) out << line << '\n';
 }
 
+// Put `to` where `from` stood in a package.order (append it when `from` is not listed).
+void order_rename(const fs::path& dir, const std::string& from, const std::string& to) {
+  const fs::path order_file = dir / "package.order";
+  std::vector<std::string> lines;
+  bool found = false;
+  if (fs::exists(order_file)) {
+    std::ifstream in(order_file);
+    for (std::string line; std::getline(in, line);) {
+      const std::size_t first = line.find_first_not_of(" \t\r");
+      if (first == std::string::npos) continue;
+      std::string one = line.substr(first, line.find_last_not_of(" \t\r") - first + 1);
+      if (one == from) { one = to; found = true; }
+      lines.push_back(one);
+    }
+  }
+  if (!found) lines.push_back(to);
+  std::ofstream out(order_file);
+  for (const auto& line : lines) out << line << '\n';
+}
+
 json op_new_package(const json& in) {
   const std::string name = in.value("name", "");
   const std::string parent = in.value("parent", "");
@@ -404,6 +505,29 @@ json op_duplicate_class(const json& in) {
   const std::regex word("\\b" + name + "\\b");
   std::ofstream(target) << std::regex_replace(text, word, new_name);
   if (fs::exists(file.parent_path() / "package.mo")) order_add(file.parent_path(), new_name);
+  return {{"file", target.string()}, {"model", within.empty() ? new_name : within + "." + new_name}};
+}
+
+// Rename a class: the file (Name.mo), the class name inside it (as duplicate does: every whole
+// word), and its line in package.order, keeping its place. Other classes that use it are not edited.
+json op_rename_class(const json& in) {
+  const std::string file_name = in.value("file", "");
+  const std::string name = in.value("name", "");
+  const std::string new_name = in.value("newName", "");
+  const std::string within = in.value("within", "");
+  if (!identifier(name) || !identifier(new_name)) throw std::runtime_error("both names must be Modelica identifiers");
+  if (name == new_name) throw std::runtime_error("the new name is the same");
+  if (file_name.empty()) throw std::runtime_error("rename_class needs a file");
+  const fs::path file = fs::absolute(file_name);
+  if (!fs::is_regular_file(file) || file.extension() != ".mo") throw std::runtime_error("no .mo file " + file.string());
+  const fs::path target = file.parent_path() / (new_name + ".mo");
+  if (fs::exists(target)) throw std::runtime_error(target.string() + " already exists");
+  std::ifstream source(file);
+  const std::string text((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+  source.close();
+  { std::ofstream(target) << std::regex_replace(text, std::regex("\\b" + name + "\\b"), new_name); }
+  fs::remove(file);
+  if (fs::exists(file.parent_path() / "package.mo")) order_rename(file.parent_path(), name, new_name);
   return {{"file", target.string()}, {"model", within.empty() ? new_name : within + "." + new_name}};
 }
 
@@ -1280,6 +1404,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_open(omc, in, session);
     } else if (op == "workspace") {
       out["result"] = op_workspace(in);
+    } else if (op == "git") {
+      out["result"] = op_git(in);
     } else if (op == "about") {
       const std::string version = paperboat_version();
       out["result"] = json{{"paperboat", version.empty() ? json(nullptr) : json(version)}};
@@ -1289,6 +1415,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_new_package(in);
     } else if (op == "duplicate_class") {
       out["result"] = op_duplicate_class(in);
+    } else if (op == "rename_class") {
+      out["result"] = op_rename_class(in);
     } else if (op == "delete_class") {
       out["result"] = op_delete_class(in);
     } else if (op == "move_class") {
