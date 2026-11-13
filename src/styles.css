@@ -128,60 +128,12 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
-.rail-tabs {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: var(--panel-head-height);
-  padding: 0 var(--space-3);
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-raised);
-}
-.rail-tab { border: 0; background: none; padding: 0; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-muted); cursor: pointer; }
-.rail-tab:hover { color: var(--text); }
-.rail-tab.on { color: var(--text); font-weight: 500; }
-.rail-tab.on::before { content: "[ "; }
-.rail-tab.on::after { content: " ]"; }
-.rail-add { margin-left: auto; height: 20px; padding: 0 6px; }
-.rail-body { flex: 1; min-height: 0; display: flex; min-width: 0; }
-.rail-body > [hidden] { display: none; }
-.files-panel { width: 244px; min-height: 0; display: flex; flex-direction: column; }
-.files-head { display: flex; align-items: baseline; gap: var(--space-2); padding: 8px var(--space-3) 4px; border-bottom: 1px solid var(--line); }
-.files-head .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 var(--size-xs) var(--font-mono); }
-.files-head .lbl { margin-left: auto; white-space: nowrap; }
-.files-tree { flex: 1; min-height: 0; overflow: auto; padding: 4px 0; }
-.file-row {
-  display: flex; align-items: center; gap: 4px;
-  width: 100%; height: 25px; padding: 0 var(--space-2) 0 8px;
-  border: 0; border-radius: 0; background: none; color: var(--text-muted); text-align: left;
-  font: 400 var(--size-xs) var(--font-mono); cursor: pointer;
-}
-.file-row:hover { background: var(--surface-sunken); color: var(--text); }
-.file-row:focus-visible { outline-offset: -2px; }
-.file-row.on { background: var(--surface-raised); color: var(--text); box-shadow: inset 2px 0 0 var(--line-ink); }
-.file-row.on .nm { font-weight: 500; }
-.file-row.drop-target { background: var(--surface-sunken); box-shadow: inset 0 0 0 1px var(--line-ink); }
-.file-row .caret { width: 12px; flex: none; text-align: center; opacity: .7; }
-.file-row .file-icon { width: 14px; height: 14px; flex: none; display: inline-grid; place-items: center; color: var(--text-muted); }
-.file-row .file-icon svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
-.file-row:hover .file-icon, .file-row.on .file-icon { color: var(--text); }
-.file-row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-row .k { font-size: 10px; opacity: .55; }
-.files-empty { margin: 0; padding: var(--space-3); font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
-.files-foot { margin: 0; padding: 6px var(--space-3); border-top: 1px solid var(--line); font: 400 11px var(--font-mono); color: var(--text-muted); }
+/* Rail, tabs, head, tree and foot: @paperboat/shared/files.css. Studio sets the width, and folds to a standing tab. */
+.files-panel { width: 244px; }
+.rail.collapsed { width: 30px; }
 .library-slot { flex: 1; min-width: 0; display: flex; }
 .library-slot > .library { flex: 1; min-height: 0; border: 0; border-radius: 0; background: none; }
 
-.file-menu-scrim { position: fixed; inset: 0; z-index: 119; }
-.file-menu {
-  position: fixed; z-index: 120; min-width: 200px; padding: 5px;
-  display: flex; flex-direction: column;
-  background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: var(--radius-md);
-  box-shadow: var(--shadow-1);
-}
-.file-menu button { border: 0; background: none; padding: 7px 9px; border-radius: var(--radius-sm); text-align: left; font: 400 var(--size-xs) var(--font-sans); color: var(--text); cursor: pointer; }
-.file-menu button:hover { background: var(--surface-sunken); }
-.file-menu hr { border: 0; border-top: 1px solid var(--line); margin: 5px 4px; }
 
 /* ---- Document tabs above the stage (#43) -------------------------------------------- */
 .docbar { display: flex; align-items: flex-end; gap: 2px; min-height: 31px; border-bottom: 1px solid var(--line); }
