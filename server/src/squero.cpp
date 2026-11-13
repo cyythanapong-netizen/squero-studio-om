@@ -12,6 +12,7 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <regex>
 #include <set>
 #include <sstream>
@@ -263,6 +264,86 @@ json op_workspace(const json& in) {
           {"file", file.string()},
           {"package", fs::exists(file.parent_path() / "package.mo")},
           {"entries", entries}};
+}
+
+// `git -C <root> <args>`, run without a shell: its stdout, or nullopt when git is missing, the
+// folder is no repository, or the call fails.
+std::optional<std::string> run_git(const fs::path& root, const std::vector<std::string>& args) {
+  std::vector<std::string> argv = {"git", "-C", root.string()};
+  argv.insert(argv.end(), args.begin(), args.end());
+  std::string out;
+#ifdef _WIN32
+  void* pipe = nullptr;
+  const int pid = win32::spawn_piped(argv, &pipe);
+  if (pid < 0) return std::nullopt;
+  std::string chunk;
+  while (win32::read_pipe(pipe, chunk)) out += chunk;
+  win32::close_pipe(pipe);
+  if (win32::wait(pid) != 0) return std::nullopt;
+#else
+  int fds[2];
+  if (::pipe(fds) != 0) return std::nullopt;
+  const pid_t pid = fork();
+  if (pid < 0) { close(fds[0]); close(fds[1]); return std::nullopt; }
+  if (pid == 0) {
+    dup2(fds[1], STDOUT_FILENO);
+    const int nul = open("/dev/null", O_WRONLY);
+    if (nul >= 0) dup2(nul, STDERR_FILENO);
+    close(fds[0]);
+    close(fds[1]);
+    setenv("GIT_OPTIONAL_LOCKS", "0", 1);  // a status read takes no lock
+    std::vector<char*> cargv;
+    for (std::string& a : argv) cargv.push_back(a.data());
+    cargv.push_back(nullptr);
+    execvp("git", cargv.data());
+    _exit(127);
+  }
+  close(fds[1]);
+  char buf[8192];
+  for (ssize_t n; (n = read(fds[0], buf, sizeof buf)) > 0 || (n < 0 && errno == EINTR);)
+    if (n > 0) out.append(buf, static_cast<size_t>(n));
+  close(fds[0]);
+  int status = 0;
+  while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return std::nullopt;
+#endif
+  return out;
+}
+
+std::vector<std::string> nul_split(const std::string& z) {
+  std::vector<std::string> out;
+  std::string::size_type at = 0;
+  for (auto end = z.find('\0'); end != std::string::npos; at = end + 1, end = z.find('\0', at))
+    if (end > at) out.push_back(z.substr(at, end - at));
+  if (at < z.size()) out.push_back(z.substr(at));
+  return out;
+}
+
+// The git gutter (the same shape as MX's /__mx/workspace/git): HEAD's copy of each tracked .mo
+// under the workspace root (`head`), the .mo files HEAD lacks (`untracked`: untracked, or staged
+// but not committed), and the ones that differ from HEAD on disk (`modified`). Paths are absolute,
+// as the workspace entries are. null outside a git repository.
+json op_git(const json& in) {
+  const std::string root_name = in.value("root", "");
+  std::error_code ec;
+  const fs::path root = fs::weakly_canonical(fs::absolute(root_name), ec);
+  if (root_name.empty() || ec || !fs::is_directory(root, ec)) throw std::runtime_error("git needs the workspace root");
+  const auto tracked = run_git(root, {"ls-files", "-z", "--", "*.mo"});
+  if (!tracked) return nullptr;
+  json head = json::object();
+  json untracked = json::array();
+  const auto others = run_git(root, {"ls-files", "-z", "--others", "--exclude-standard", "--", "*.mo"});
+  for (const std::string& rel : nul_split(others.value_or(""))) untracked.push_back((root / fs::path(rel)).lexically_normal().string());
+  // ponytail: one `git show` per tracked file; batch through `git cat-file --batch` if packages grow to hundreds of classes.
+  for (const std::string& rel : nul_split(*tracked)) {
+    const std::string path = (root / fs::path(rel)).lexically_normal().string();
+    if (const auto text = run_git(root, {"show", "HEAD:./" + rel})) head[path] = *text;
+    else untracked.push_back(path);
+  }
+  json modified = json::array();
+  const auto changed = run_git(root, {"diff", "--relative", "--name-only", "-z", "HEAD", "--", "*.mo"});
+  for (const std::string& rel : nul_split(changed.value_or(""))) modified.push_back((root / fs::path(rel)).lexically_normal().string());
+  return {{"head", head}, {"untracked", untracked}, {"modified", modified}};
 }
 
 // A Modelica identifier, or a dotted qualified name (Pkg.Sub).
@@ -1280,6 +1361,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_open(omc, in, session);
     } else if (op == "workspace") {
       out["result"] = op_workspace(in);
+    } else if (op == "git") {
+      out["result"] = op_git(in);
     } else if (op == "about") {
       const std::string version = paperboat_version();
       out["result"] = json{{"paperboat", version.empty() ? json(nullptr) : json(version)}};

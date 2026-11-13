@@ -26,6 +26,7 @@ export function TextStage({
   actions,
   line,
   theme,
+  base,
   onEditor,
 }: {
   model: StudioModel;
@@ -33,6 +34,8 @@ export function TextStage({
   line?: number;
   /** The app's shown theme, for the editor's "ui" setting. */
   theme: "light" | "dark";
+  /** HEAD's copy of the file for the git gutter; null when untracked or outside a repository. */
+  base?: string | null;
   onEditor?: (handle: TextEditorHandle | null) => void;
 }) {
   const [text, setText] = useState<string | null>(null);
@@ -157,6 +160,7 @@ export function TextStage({
             ariaLabel="Modelica source editor"
             language={modelica}
             readOnly={!editing}
+            base={base}
             onView={setView}
           />
         )}

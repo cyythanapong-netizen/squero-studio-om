@@ -29,7 +29,7 @@ import { Rail, type RailTab } from "./shell/Rail.tsx";
 import { TextStage, type TextEditorHandle } from "./shell/TextStage.tsx";
 import { NewClassSheet } from "./shell/NewClassSheet.tsx";
 import type { NewClassSpec } from "./shell/newClass.ts";
-import { closeDoc, neighbour, openDoc, type Doc, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
+import { closeDoc, neighbour, openDoc, type Doc, type GitState, type Workspace, type WorkspaceEntry } from "./shell/workspace.ts";
 import { packageName } from "./shell/newClass.ts";
 import { freeSpot } from "./store/plans.ts";
 import { useStudioStore } from "./store/index.tsx";
@@ -209,6 +209,24 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       live = false;
     };
   }, [omc, model?.file, workspaceTick]);
+
+  // Git, for the Text view's gutter and the rail's M/U: read again when the folder or what is saved
+  // changes, and when the window regains focus (a commit in a terminal, say).
+  const [git, setGit] = useState<GitState | null>(null);
+  const [gitTick, setGitTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setGitTick((n) => n + 1);
+    window.addEventListener("focus", bump);
+    return () => window.removeEventListener("focus", bump);
+  }, []);
+  const gitRoot = workspace?.root;
+  const savedState = `${actions.dirty}|${textDirty}`;
+  useEffect(() => {
+    if (!gitRoot) { setGit(null); return; }
+    let live = true;
+    omc.op<GitState | null>("git", { root: gitRoot }).then((next) => live && setGit(next ?? null), () => live && setGit(null));
+    return () => { live = false; };
+  }, [omc, gitRoot, workspaceTick, gitTick, savedState]);
 
   /** A create/delete/duplicate changed the folder: forget every listing and read the active one again. */
   const refreshWorkspace = () => {
@@ -667,6 +685,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               collapsed={railHidden}
               onToggle={() => setRailHidden((v) => !v)}
               workspace={workspace}
+              git={git}
               active={model.file}
               onOpen={(file) => void openDocument(file)}
               onNewClass={openNewClass}
@@ -708,6 +727,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                     actions={actions}
                     line={sourceLine}
                     theme={shown}
+                    base={model.file ? git?.head[model.file] ?? null : null}
                     onEditor={(handle) => {
                       editorHandle.current = handle;
                       setTextDirty(handle?.dirty ?? false);

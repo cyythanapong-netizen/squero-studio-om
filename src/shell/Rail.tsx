@@ -3,7 +3,7 @@
 // as MX; this file only maps the workspace entries and the Studio actions.
 import { useRef, type ReactNode } from "react";
 import { FileRail, FileTree, type FileEntry, type FileTreeHandle } from "@paperboat/shared/files";
-import { visibleEntries, workspaceName, type Workspace, type WorkspaceEntry } from "./workspace.ts";
+import { gitMark, visibleEntries, workspaceName, type GitState, type Workspace, type WorkspaceEntry } from "./workspace.ts";
 
 export type RailTab = "files" | "library";
 
@@ -11,6 +11,7 @@ export function Rail({
   tab,
   onTab,
   workspace,
+  git,
   active,
   onOpen,
   onNewClass,
@@ -26,6 +27,8 @@ export function Rail({
   tab: RailTab;
   onTab: (tab: RailTab) => void;
   workspace: Workspace | null;
+  /** M/U marks on class rows. */
+  git?: GitState | null;
   active?: string;
   onOpen: (file: string) => void;
   onNewClass: (entry?: WorkspaceEntry) => void;
@@ -46,7 +49,7 @@ export function Rail({
     depth: entry.depth,
     kind: entry.kind === "package" ? "folder" : "file",
     icon: entry.kind === "package" ? "package" : (entry.classKind ?? "class"),
-    badge: entry.kind === "package" ? "package" : "",
+    badge: entry.kind === "package" ? "package" : gitMark(git, entry.path),
   }));
   const find = (entry?: FileEntry) => (entry ? workspace?.entries.find((one) => one.path === entry.path) : undefined);
   const classes = workspace?.entries.filter((entry) => entry.kind === "class").length ?? 0;
