@@ -707,6 +707,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                     model={model}
                     actions={actions}
                     line={sourceLine}
+                    theme={shown}
                     onEditor={(handle) => {
                       editorHandle.current = handle;
                       setTextDirty(handle?.dirty ?? false);

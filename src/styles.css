@@ -4,6 +4,7 @@
 @import "@paperboat/shared/plates.css";
 @import "@paperboat/shared/files.css";
 @import "@paperboat/shared/squero.css";
+@import "@paperboat/shared/editor.css";
 
 
 
@@ -157,16 +158,14 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 
 /* The stage's Text view: the .mo, read-only for now. The floating Run dock is a diagram control,
    so it steps aside while the code is being read. */
-.stage-text { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
-.stage-text .code-head { flex: none; }
+.stage-text { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+.stage-text .code-head { flex: none; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); min-height: var(--panel-head-height); }
+.stage-text .code-head .spacer { flex: 1; }
 .stage-text .code-view { flex: 1; min-height: 0; }
-.code-editor {
-  flex: 1; min-height: 0; width: 100%; resize: none; border: 0; outline: none;
-  background: var(--surface-screen); color: var(--text-on-screen);
-  font: 400 var(--size-2xs) / 1.65 var(--font-mono); padding: 8px 12px; tab-size: 2;
-  white-space: pre; overflow: auto;
-}
-.code-editor::selection { background: rgb(255 255 255 / .2); }
+/* The shared Studio editor (@paperboat/shared/editor.css) fills the Text view; its settings
+   popover hangs from the view's head. */
+.code-editor { flex: 1; min-height: 0; background: var(--surface-screen); }
+.code-reading { margin: 0; padding: 8px 12px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-on-screen); }
 .code-error { margin: 0; border-radius: 0; }
 .studio.no-dock .dock { display: none; }
 
