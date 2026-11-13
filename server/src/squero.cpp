@@ -452,6 +452,26 @@ void order_remove(const fs::path& dir, const std::string& name) {
   for (const auto& line : lines) out << line << '\n';
 }
 
+// Put `to` where `from` stood in a package.order (append it when `from` is not listed).
+void order_rename(const fs::path& dir, const std::string& from, const std::string& to) {
+  const fs::path order_file = dir / "package.order";
+  std::vector<std::string> lines;
+  bool found = false;
+  if (fs::exists(order_file)) {
+    std::ifstream in(order_file);
+    for (std::string line; std::getline(in, line);) {
+      const std::size_t first = line.find_first_not_of(" \t\r");
+      if (first == std::string::npos) continue;
+      std::string one = line.substr(first, line.find_last_not_of(" \t\r") - first + 1);
+      if (one == from) { one = to; found = true; }
+      lines.push_back(one);
+    }
+  }
+  if (!found) lines.push_back(to);
+  std::ofstream out(order_file);
+  for (const auto& line : lines) out << line << '\n';
+}
+
 json op_new_package(const json& in) {
   const std::string name = in.value("name", "");
   const std::string parent = in.value("parent", "");
@@ -485,6 +505,29 @@ json op_duplicate_class(const json& in) {
   const std::regex word("\\b" + name + "\\b");
   std::ofstream(target) << std::regex_replace(text, word, new_name);
   if (fs::exists(file.parent_path() / "package.mo")) order_add(file.parent_path(), new_name);
+  return {{"file", target.string()}, {"model", within.empty() ? new_name : within + "." + new_name}};
+}
+
+// Rename a class: the file (Name.mo), the class name inside it (as duplicate does: every whole
+// word), and its line in package.order, keeping its place. Other classes that use it are not edited.
+json op_rename_class(const json& in) {
+  const std::string file_name = in.value("file", "");
+  const std::string name = in.value("name", "");
+  const std::string new_name = in.value("newName", "");
+  const std::string within = in.value("within", "");
+  if (!identifier(name) || !identifier(new_name)) throw std::runtime_error("both names must be Modelica identifiers");
+  if (name == new_name) throw std::runtime_error("the new name is the same");
+  if (file_name.empty()) throw std::runtime_error("rename_class needs a file");
+  const fs::path file = fs::absolute(file_name);
+  if (!fs::is_regular_file(file) || file.extension() != ".mo") throw std::runtime_error("no .mo file " + file.string());
+  const fs::path target = file.parent_path() / (new_name + ".mo");
+  if (fs::exists(target)) throw std::runtime_error(target.string() + " already exists");
+  std::ifstream source(file);
+  const std::string text((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+  source.close();
+  { std::ofstream(target) << std::regex_replace(text, std::regex("\\b" + name + "\\b"), new_name); }
+  fs::remove(file);
+  if (fs::exists(file.parent_path() / "package.mo")) order_rename(file.parent_path(), name, new_name);
   return {{"file", target.string()}, {"model", within.empty() ? new_name : within + "." + new_name}};
 }
 
@@ -1372,6 +1415,8 @@ std::string handle(Omc& omc, const std::string& message, const Session& session)
       out["result"] = op_new_package(in);
     } else if (op == "duplicate_class") {
       out["result"] = op_duplicate_class(in);
+    } else if (op == "rename_class") {
+      out["result"] = op_rename_class(in);
     } else if (op == "delete_class") {
       out["result"] = op_delete_class(in);
     } else if (op == "move_class") {
