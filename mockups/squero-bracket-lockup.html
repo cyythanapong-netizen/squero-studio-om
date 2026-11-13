@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>squero [om] · squero [mx] · bracket lockup</title>
+<style>
+  /* ---------------------------------------------------------------------------------
+     Squero lockup v2: "squero" + W3 water, product in the system's own brackets.
+     Drops "studio" and the B3 ink tile. Same module (m = 13 units, Geist 600 stem at
+     100 units), same water, same ripple as paperboat-shared/src/squero.
+     Tokens copied from @paperboat/shared/src/tokens.css; nothing here is a new value.
+     --------------------------------------------------------------------------------- */
+  @font-face { font-family: "Geist Sans"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-sans/files/geist-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Geist Sans"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
+  @font-face { font-family: "Geist Mono"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "Geist Mono"; src: url("../../paperboat-shared/node_modules/@fontsource/geist-mono/files/geist-mono-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
+
+  .light {
+    color-scheme: light;
+    --surface-ground: #dcdcd8; --surface-panel: #eaeae6; --surface-raised: #f2f2ef;
+    --text: #161616; --text-muted: #55554f;
+    --line: #cfcfca; --line-strong: #9d9d97; --line-ink: #161616;
+    --signal: #ff5a1f;
+  }
+  .dark {
+    color-scheme: dark;
+    --surface-ground: #111111; --surface-panel: #1a1a1a; --surface-raised: #222222;
+    --text: #e9e9e4; --text-muted: #a3a39d;
+    --line: #2e2e2e; --line-strong: #4a4a4a; --line-ink: #e9e9e4;
+    --signal: #ff6a30;
+  }
+  .light, .dark { color: var(--text); }
+  :root {
+    --font-sans: "Geist Sans", system-ui, sans-serif;
+    --font-mono: "Geist Mono", ui-monospace, monospace;
+    --ease: cubic-bezier(.65, 0, .25, 1);
+    --gutter: 14px; --pad: 16px;
+  }
+
+  * { box-sizing: border-box; min-width: 0; }
+  body { margin: 0; padding: var(--gutter); background: var(--surface-ground); color: var(--text);
+    font: 400 13px/1.5 var(--font-sans); }
+  main { max-width: 1180px; margin: 0 auto; display: grid; gap: var(--gutter); }
+  h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; margin: 0 0 8px; }
+  h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  p { margin: 0; max-width: 72ch; }
+  code, .mono { font-family: var(--font-mono); font-size: 12.5px; }
+  .muted { color: var(--text-muted); }
+
+  .panel { background: var(--surface-panel); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; }
+  .pad { padding: var(--pad); }
+  .head { display: flex; align-items: baseline; gap: 12px; padding: 9px var(--pad); border-bottom: 1px solid var(--line); }
+  .head .note { margin-left: auto; font-size: 12px; color: var(--text-muted); }
+
+  /* Choice switches, as in the app: the chosen option in bold ink brackets. */
+  .controls { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px 28px;
+    padding: 10px var(--pad); background: var(--surface-ground); border-bottom: 1px solid var(--line-strong); }
+  .choice { display: flex; gap: 2px; align-items: center; font: 12.5px var(--font-mono); }
+  .choice > span { color: var(--text-muted); margin-right: 6px; font-family: var(--font-sans); font-size: 12px; }
+  .choice button { font: inherit; color: var(--text-muted); background: none; border: 0; padding: 3px 2px; cursor: pointer; }
+  .choice button::before { content: "[ "; visibility: hidden; }
+  .choice button::after { content: " ]"; visibility: hidden; }
+  .choice button[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+  .choice button[aria-pressed="true"]::before, .choice button[aria-pressed="true"]::after { visibility: visible; }
+  button:focus-visible { outline: 2px solid var(--line-ink); outline-offset: 2px; }
+
+  .hero { display: grid; grid-template-columns: 1fr 1fr; }
+  .hero > div { display: grid; place-items: center; gap: 28px; padding: 56px 24px; background: var(--surface-panel); }
+  .hero > div + div { border-left: 1px solid var(--line); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gutter); }
+  table { border-collapse: collapse; width: 100%; }
+  th { font: 400 12px var(--font-sans); color: var(--text-muted); text-align: left; padding: 8px var(--pad); border-bottom: 1px solid var(--line); }
+  td { padding: 10px var(--pad); border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { font: 12.5px var(--font-mono); color: var(--text-muted); width: 1%; }
+
+  .bars { display: grid; gap: var(--gutter); padding: var(--pad); }
+  .bar { display: flex; align-items: center; gap: 18px; height: 44px; padding: 0 14px; overflow: hidden;
+    background: var(--surface-panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
+  .bar .menus { display: flex; gap: 14px; font-size: 13px; }
+  .bar .proj { margin: 0 auto; font: 12.5px var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+  .bar .pill { font: 12px var(--font-mono); color: var(--text-muted); white-space: nowrap;
+    border: 1px solid var(--line-strong); border-radius: 999px; padding: 3px 10px; }
+
+  .construct { padding: 40px 130px 28px var(--pad); display: grid; place-items: center; }
+  .spec { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 32px; padding: var(--pad); border-top: 1px solid var(--line); }
+  .spec dt { font-size: 12px; color: var(--text-muted); }
+  .spec dd { margin: 0 0 6px; }
+
+  /* The lockup. Roles match paperboat-shared/src/squero/squero.css. */
+  .lockup { display: block; overflow: visible; flex: none; }
+  .lockup .word { font-family: var(--font-sans); font-weight: 600; }
+  .lockup .tag { font-family: var(--font-mono); }
+  .lockup .ink { fill: var(--text); }
+  .lockup .mut { fill: var(--text-muted); }
+  .lockup .water { fill: var(--signal); }
+  .lockup .w { transform-box: fill-box; transform-origin: center; }
+  .idle .lockup .w { animation: ripple-idle 5s var(--ease) infinite; }
+  .idle .lockup .w2 { animation-delay: .2s; } .idle .lockup .w3 { animation-delay: .4s; }
+  .idle .lockup .w4 { animation-delay: .6s; } .idle .lockup .w5 { animation-delay: .8s; }
+  .live .lockup .w { animation: ripple-live 1.4s var(--ease) infinite; }
+  .live .lockup .w2 { animation-delay: .12s; } .live .lockup .w3 { animation-delay: .24s; }
+  .live .lockup .w4 { animation-delay: .36s; } .live .lockup .w5 { animation-delay: .48s; }
+  @keyframes ripple-idle { 0%, 25%, 100% { transform: translateY(0); } 12.5% { transform: translateY(-13.065px); } }
+  @keyframes ripple-live { 0% { transform: translateY(0); } 30% { transform: translateY(-19.5px); }
+    60% { transform: translateY(6.435px); } 100% { transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { .lockup .w { animation: none !important; } }
+
+  /* Construction overlay. */
+  .guide { fill: none; stroke: var(--signal); stroke-width: 1.2; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+  .dim { font: 400 9px var(--font-mono); fill: var(--text-muted); }
+
+  @media (max-width: 860px) {
+    .hero, .grid2, .spec { grid-template-columns: 1fr; }
+    .hero > div + div { border-left: 0; border-top: 1px solid var(--line); }
+    .bar .menus { display: none; }
+  }
+</style>
+</head>
+<body class="light idle">
+<main>
+  <header class="pad">
+    <h1>squero [om] · squero [mx]</h1>
+    <p class="muted">The lockup gets shorter: "studio" goes, the ink tile goes. What stays is "squero" over its
+      five water dots, and the product is named the way the app names a chosen option, in bold ink brackets:
+      <code>[om]</code>, <code>[mx]</code>. Same module, same water, same ripple as today.</p>
+  </header>
+
+  <nav class="controls panel" aria-label="Preview controls">
+    <div class="choice" data-k="theme"><span>theme</span><button data-v="light">light</button><button data-v="dark">dark</button></div>
+    <div class="choice" data-k="motion"><span>water</span><button data-v="idle">idle</button><button data-v="live">live</button><button data-v="still">still</button></div>
+    <div class="choice" data-k="br"><span>brackets</span><button data-v="ink">ink</button><button data-v="mut">grey</button></div>
+  </nav>
+
+  <section class="panel hero" id="hero" aria-label="Lockups, large"></section>
+
+  <section class="panel">
+    <div class="head"><h2>In the top bar</h2><span class="note">20px tall, as <code>SqueroLogo height={20}</code></span></div>
+    <div class="bars" id="bars"></div>
+  </section>
+
+  <section class="grid2" id="ladders"></section>
+
+  <section class="panel">
+    <div class="head"><h2>Before and after</h2><span class="note">both at 20px</span></div>
+    <table id="compare"></table>
+  </section>
+
+  <section class="panel">
+    <div class="head"><h2>Construction</h2><span class="note">units at font-size 100 · m = 13</span></div>
+    <div class="construct" id="construct"></div>
+    <dl class="spec">
+      <div><dt>Wordmark</dt><dd><code>squero</code> Geist Sans 600, ink, at x 0, baseline 0. Advance 333.</dd></div>
+      <div><dt>Water</dt><dd>Unchanged: five 1.5m (19.5) squares in <code>--signal</code>, x = 0 … 313.5 step 78.375, top 35.565.
+        Clears the "q" (descender 15) even at the live crest (−19.5 → 16).</dd></div>
+      <div><dt>Product</dt><dd><code>[om]</code> / <code>[mx]</code> Geist Mono 600, lowercase, font-size 100, same baseline.
+        Mono and Sans share an x-height (55), so "om" sits exactly on "squero"'s x-line.</dd></div>
+      <div><dt>Gap</dt><dd>One Geist word space after "squero" (x 357). The "[" ink starts 3m (40) after the "o" ink, the same
+        gap the old badge kept after "studio".</dd></div>
+      <div><dt>Block</dt><dd>Top of "[" (−75) to bottom of the water (55.065): viewBox <code>0 −75 585 130.1</code>.
+        Width 585 against 811.2 before: 28% shorter, 90px instead of 128px in the bar.</dd></div>
+      <div><dt>Colour</dt><dd>Brackets and code in <code>--text</code>, bold, as the design rule for a chosen option
+        ("a chosen option sits in brackets in bold ink"). Signal stays on the water only. Nothing is filled, so nothing inverts with the theme.</dd></div>
+    </dl>
+  </section>
+</main>
+
+<script>
+// Geometry in font units (size 100). See the Construction panel.
+const TOP = -75, BOT = 55.065, H = BOT - TOP, TAG_X = 357, W = 585;
+const DOTS = [0, 78.375, 156.75, 235.125, 313.5], WY = 35.565, D = 19.5;
+const state = { theme: "light", motion: "idle", br: "ink" };
+
+const water = () => `<g class="water" shape-rendering="crispEdges">${DOTS.map((x, i) =>
+  `<g class="w w${i + 1}"><rect x="${x}" y="${WY}" width="${D}" height="${D}"/></g>`).join("")}</g>`;
+
+function lockup(code, height, extra = "") {
+  const c = code.toLowerCase(), b = state.br;
+  return `<svg class="lockup" role="img" aria-label="Squero Studio ${code}" height="${height}"
+    width="${(height * W / H).toFixed(1)}" viewBox="0 ${TOP} ${W} ${H.toFixed(3)}">
+    <text x="0" y="0" font-size="100" class="word ink">squero</text>${water()}
+    <text x="${TAG_X}" y="0" font-size="100" font-weight="600" class="tag ink"><tspan class="${b}">[</tspan>${c}<tspan class="${b}">]</tspan></text>
+    ${extra}</svg>`;
+}
+
+// Today's lockup (W3 + B3 tile), for comparison only.
+function today(code, height) {
+  const W0 = 811.2, H0 = 127.1;
+  return `<svg class="lockup" role="img" aria-label="today" height="${height}" width="${(height * W0 / H0).toFixed(1)}" viewBox="0 -72 ${W0} ${H0}">
+    <text x="0" y="0" font-size="100" class="word ink">squero</text>
+    <text x="358.2" y="0" font-size="100" class="word mut" font-weight="400">studio</text>${water()}
+    <rect x="684.1" y="-72" width="127.1" height="127.1" rx="13" class="ink"/>
+    <text x="713.3" y="12.1" font-size="57.18" font-weight="600" class="tag" style="fill:var(--surface-panel)">${code}</text></svg>`;
+}
+
+const bar = (code, theme, proj, pill) => `<div class="bar ${theme}">${lockup(code, 20)}
+  <div class="menus"><span>File</span><span>Edit</span><span>View</span><span>Run</span><span>About</span></div>
+  <span class="proj">${proj}</span><span class="pill">${pill}</span></div>`;
+
+const ladder = (theme) => `<div class="panel ${theme}"><div class="head"><h2>Sizes · ${theme}</h2></div><table>
+  ${[48, 32, 24, 20, 16, 14].map((h) => `<tr><td>${h}px</td><td>${lockup("OM", h)}</td><td>${lockup("MX", h)}</td></tr>`).join("")}
+</table></div>`;
+
+function construction() {
+  const g = (y, label) => `<line x1="-20" x2="${W + 20}" y1="${y}" y2="${y}" class="guide"/><text x="${W + 28}" y="${y + 3}" class="dim">${label}</text>`;
+  const v = (x) => `<line x1="${x}" x2="${x}" y1="${TOP - 14}" y2="${BOT + 14}" class="guide"/>`;
+  const extra = g(TOP, "−75 top of [") + g(-55, "−55 x-height") + g(0, "0 baseline") + g(15, "15 q") +
+    g(WY, "35.6 water") + g(BOT, "55.1 bottom") + v(329) + v(369) +
+    `<text x="349" y="${TOP - 20}" class="dim" text-anchor="middle">3m</text>`;
+  return lockup("OM", 190, extra);
+}
+
+function render() {
+  document.body.className = `${state.theme} ${state.motion}`;
+  document.getElementById("hero").innerHTML = ["light", "dark"].map((t) =>
+    `<div class="${t}">${lockup("OM", 96)}${lockup("MX", 96)}</div>`).join("");
+  document.getElementById("bars").innerHTML =
+    bar("OM", "light", "DoublePendulum.mo", "omc 1.25.4 · ready") + bar("OM", "dark", "DoublePendulum.mo", "omc 1.25.4 · ready") +
+    bar("MX", "light", "lorenz.jl", "julia 1.11 · ready") + bar("MX", "dark", "lorenz.jl", "julia 1.11 · ready");
+  document.getElementById("ladders").innerHTML = ladder("light") + ladder("dark");
+  document.getElementById("compare").innerHTML = `<tr><th></th><th>OM</th><th>MX</th></tr>
+    <tr><td>today</td><td>${today("OM", 20)}</td><td>${today("MX", 20)}</td></tr>
+    <tr><td>new</td><td>${lockup("OM", 20)}</td><td>${lockup("MX", 20)}</td></tr>`;
+  document.getElementById("construct").innerHTML = construction();
+  document.querySelectorAll(".choice").forEach((c) => c.querySelectorAll("button").forEach((b) =>
+    b.setAttribute("aria-pressed", String(state[c.dataset.k] === b.dataset.v))));
+}
+
+document.querySelectorAll(".choice").forEach((c) => c.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  state[c.dataset.k] = b.dataset.v; render();
+}));
+document.fonts.ready.then(render); render();
+</script>
+</body>
+</html>
