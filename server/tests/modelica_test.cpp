@@ -691,6 +691,30 @@ TEST_CASE("create_class writes a class and keeps package.order in step", "[squer
   fs::remove_all(dir);
 }
 
+TEST_CASE("rename_class renames the file and the class and keeps its package.order place", "[squero]") {
+  const fs::path dir = fs::temp_directory_path() / "paperboat-squero-rename";
+  fs::remove_all(dir);
+  fs::create_directories(dir / "Pkg");
+  std::ofstream(dir / "Pkg" / "package.mo") << "package Pkg\nend Pkg;\n";
+  std::ofstream(dir / "Pkg" / "package.order") << "A\nB\nC\n";
+  std::ofstream(dir / "Pkg" / "B.mo") << "within Pkg;\nmodel B\n  Real x;\nend B;\n";
+  std::ofstream(dir / "Pkg" / "C.mo") << "within Pkg;\nmodel C\nend C;\n";
+
+  mo::Omc omc;  // never started: rename_class writes files
+  const json made = op(omc, {{"op", "rename_class"}, {"file", (dir / "Pkg" / "B.mo").string()}, {"name", "B"}, {"newName", "Bee"}, {"within", "Pkg"}});
+  INFO(made.dump());
+  REQUIRE(made["ok"] == true);
+  CHECK(made["result"]["model"] == "Pkg.Bee");
+  CHECK_FALSE(fs::exists(dir / "Pkg" / "B.mo"));
+  CHECK(read_text(dir / "Pkg" / "Bee.mo") == "within Pkg;\nmodel Bee\n  Real x;\nend Bee;\n");
+  CHECK(read_text(dir / "Pkg" / "package.order") == "A\nBee\nC\n");
+
+  // A taken name is refused without touching the disk.
+  CHECK(op(omc, {{"op", "rename_class"}, {"file", (dir / "Pkg" / "Bee.mo").string()}, {"name", "Bee"}, {"newName", "C"}, {"within", "Pkg"}})["ok"] == false);
+  CHECK(fs::exists(dir / "Pkg" / "Bee.mo"));
+  fs::remove_all(dir);
+}
+
 TEST_CASE("packages and class files can be created, duplicated and deleted", "[squero]") {
   const fs::path dir = fs::temp_directory_path() / "paperboat-squero-package-ops";
   fs::remove_all(dir);

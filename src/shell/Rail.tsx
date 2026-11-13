@@ -17,6 +17,7 @@ export function Rail({
   onNewClass,
   onNewPackage,
   onDuplicate,
+  onRename,
   onDelete,
   onCopyPath,
   onMove,
@@ -34,6 +35,7 @@ export function Rail({
   onNewClass: (entry?: WorkspaceEntry) => void;
   onNewPackage: (entry?: WorkspaceEntry) => void;
   onDuplicate: (entry: WorkspaceEntry) => void;
+  onRename: (entry: WorkspaceEntry) => void;
   onDelete: (entry: WorkspaceEntry) => void;
   onCopyPath: (entry: WorkspaceEntry) => void;
   onMove: (source: WorkspaceEntry, target?: WorkspaceEntry) => void;
@@ -78,6 +80,7 @@ export function Rail({
           labels={{
             newFile: "New class…",
             newFolder: "New package…",
+            rename: "Rename…",
             duplicate: "Duplicate…",
             delete: "Delete…",
             copyPath: "Copy path",
@@ -87,6 +90,7 @@ export function Rail({
             onOpen: (entry) => onOpen(entry.path),
             onNewFile: (parent) => onNewClass(find(parent)),
             onNewFolder: (parent) => onNewPackage(find(parent)),
+            onRename: (entry) => { const one = find(entry); if (one) onRename(one); },
             onDuplicate: (entry) => { const one = find(entry); if (one) onDuplicate(one); },
             onDelete: (entry) => { const one = find(entry); if (one) onDelete(one); },
             onCopyPath: (entry) => { const one = find(entry); if (one) onCopyPath(one); },

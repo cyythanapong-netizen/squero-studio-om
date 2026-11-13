@@ -64,6 +64,7 @@ export type Actions = {
   createClass(spec: { file: string; name: string; kind: string; within: string; base?: string }): Promise<{ file: string; model: string }>;
   newPackage(parent: string, name: string, within: string): Promise<{ path: string; name: string }>;
   duplicateClass(spec: { file: string; name: string; newName: string; within: string }): Promise<{ file: string; model: string }>;
+  renameClass(spec: { file: string; name: string; newName: string; within: string }): Promise<{ file: string; model: string }>;
   deleteClass(spec: { file: string; name: string }): Promise<void>;
   deletePackage(spec: { dir: string; root: string }): Promise<void>;
   moveClass(spec: { file: string; targetDir: string; within: string }): Promise<{ file: string; model: string }>;
@@ -385,6 +386,9 @@ export function useStudioStore(omc: OmcClient, status: OmcStatus): { api: Studio
       },
       duplicateClass(spec) {
         return enqueue(() => omc.op<{ file: string; model: string }>("duplicate_class", spec));
+      },
+      renameClass(spec) {
+        return enqueue(() => omc.op<{ file: string; model: string }>("rename_class", spec));
       },
       deleteClass(spec) {
         return enqueue(() => omc.op<void>("delete_class", spec));

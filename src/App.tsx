@@ -355,6 +355,33 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
     });
   };
 
+  const rename = (entry: WorkspaceEntry) => {
+    if (entry.kind !== "class") {
+      say("Studio renames classes; rename a package folder outside it for now", "error");
+      return;
+    }
+    setPromptModal({
+      title: `Rename ${entry.name}`,
+      label: "New class name",
+      value: entry.name,
+      confirmLabel: "Rename",
+      onConfirm: async (name) => {
+        if (name === entry.name) return;
+        try {
+          const made = await actions.renameClass({ file: entry.path, name: entry.name, newName: name, within: withinOf(entry) });
+          modelCache.current.delete(entry.path);
+          modelCache.current.delete(made.file);
+          setDocs((list) => list.map((doc) => (doc.file === entry.path ? { file: made.file, name: made.model } : doc)));
+          if (entry.path === model?.file) await openDocument(made.file);
+          refreshWorkspace();
+          say(`Renamed ${entry.name} to ${made.model}; classes that use it are not changed`);
+        } catch (err) {
+          fail(err as Error);
+        }
+      },
+    });
+  };
+
   const removeClass = (entry: WorkspaceEntry) => {
     if (entry.kind !== "class") return;
     const next = neighbour(docs, entry.path)?.file ?? workspace?.entries.find((one) => one.kind === "class" && one.path !== entry.path)?.path;
@@ -691,6 +718,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               onNewClass={openNewClass}
               onNewPackage={newPackage}
               onDuplicate={duplicate}
+              onRename={rename}
               onDelete={(entry) => (entry.kind === "package" ? removePackage(entry) : removeClass(entry))}
               onMove={(source, target) => void moveEntry(source, target)}
               onCopyPath={(entry) => {
