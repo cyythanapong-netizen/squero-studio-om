@@ -7,16 +7,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { CodeEditor, DEFAULT_EDITOR_SETTINGS, EditorSettingsKey, type EditorSettings } from "@paperboat/shared/editor";
+import { CodeEditor, EditorSettingsKey, type ConfigFile, type EditorSettings } from "@paperboat/shared/editor";
 import type { StudioModel } from "../model/types.ts";
 import { modelica } from "../split/modelica.ts";
 import type { Actions } from "../store/index.tsx";
-
-const SETTINGS_KEY = "om.editor";
-const loadSettings = (): EditorSettings => {
-  try { return { ...DEFAULT_EDITOR_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") }; }
-  catch { return DEFAULT_EDITOR_SETTINGS; }
-};
 
 export type TextEditorHandle = { dirty: boolean; save: () => Promise<void> };
 
@@ -25,6 +19,9 @@ export function TextStage({
   actions,
   line,
   theme,
+  settings,
+  onSettings,
+  configFile,
   base,
   onEditor,
 }: {
@@ -33,6 +30,10 @@ export function TextStage({
   line?: number;
   /** The app's shown theme, for the editor's "ui" setting. */
   theme: "light" | "dark";
+  /** The editor settings (the App keeps them in squero.toml) and the file they live in. */
+  settings: EditorSettings;
+  onSettings: (next: EditorSettings) => void;
+  configFile?: ConfigFile;
   /** HEAD's copy of the file for the git gutter; null when untracked or outside a repository. */
   base?: string | null;
   onEditor?: (handle: TextEditorHandle | null) => void;
@@ -42,8 +43,6 @@ export function TextStage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [view, setView] = useState<EditorView | null>(null);
-  const [settings, setSettings] = useState(loadSettings);
-  useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
   const read = useRef(actions.fileText);
   read.current = actions.fileText;
   const write = useRef(actions.saveText);
@@ -125,7 +124,6 @@ export function TextStage({
         <span className="lbl">· {model.name}</span>
         <span className="spacer" />
         {dirty && <span className="lbl">unsaved</span>}
-        <EditorSettingsKey settings={settings} onSettings={setSettings} />
         {text !== null && (
           <button type="button" className="key small" onClick={() => void navigator.clipboard?.writeText(text)}>
             Copy
@@ -134,6 +132,7 @@ export function TextStage({
         <button type="button" className="key small ink" disabled={!dirty || busy} onClick={() => void save()}>
           {busy ? "saving…" : "Save"}
         </button>
+        <EditorSettingsKey settings={settings} onSettings={onSettings} file={configFile} />
       </header>
       <div className="code-editor">
         {text === null ? (

@@ -5,8 +5,7 @@ import { test } from "node:test";
 
 test("shell components: SqueroLogo and TopBar wire correctly", () => {
   const topBarSource = fs.readFileSync(path.resolve(import.meta.dirname, "../src/shell/TopBar.tsx"), "utf-8");
-  assert.ok(topBarSource.includes('aria-label="Squero Studio: OpenModelica"'), "Wordmark keeps accessibility aria-label");
-  assert.ok(topBarSource.includes("<SqueroLogo"), "Wordmark mounts SqueroLogo");
+  assert.ok(topBarSource.includes('<SqueroWordmark product="OM" name="OpenModelica"'), "the shared wordmark, named Squero Studio: OpenModelica");
   assert.ok(topBarSource.includes("running = false"), "TopBar accepts running state and passes to Wordmark");
 
   const appSource = fs.readFileSync(path.resolve(import.meta.dirname, "../src/App.tsx"), "utf-8");

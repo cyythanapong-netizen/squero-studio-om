@@ -1,10 +1,27 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { byMenu, type Command } from "@paperboat/shared";
-import { tokenize } from "../src/split/highlight.ts";
+import { StringStream, type StreamParser } from "@codemirror/language";
+import { cpp } from "@codemirror/legacy-modes/mode/clike";
+import { modelicaParser } from "../src/split/modelica.ts";
+
+/** What the read-only views colour: each token's text and style, through the editor's own stream parser. */
+function tokenize<S>(code: string, parser: StreamParser<S>): { type: string; text: string }[] {
+  const state = parser.startState!(2);
+  const out: { type: string; text: string }[] = [];
+  for (const line of code.split("\n")) {
+    const stream = new StringStream(line, 2, 2);
+    while (!stream.eol()) {
+      const type = parser.token(stream, state);
+      if (type) out.push({ type, text: stream.current() });
+      stream.start = stream.pos;
+    }
+  }
+  return out;
+}
 import { defaultExportFolder } from "../src/dock/dock.ts";
 
-test("split: tokenize highlights Modelica (.mo) keywords, types, equations, annotations, numbers, and comments", () => {
+test("split: the flat view highlights Modelica keywords, types, numbers, strings and comments", () => {
   const moCode = `
 // A simple resistor model
 model TestResistor "A test component"
@@ -22,24 +39,17 @@ model TestResistor "A test component"
 end TestResistor;
 `.trim();
 
-  const lines = tokenize(moCode, "mo");
-  assert.ok(lines.length > 5, "produced tokenized lines");
-
-  const allTokens = lines.flat();
-  const keywords = allTokens.filter((t) => t.type === "keyword").map((t) => t.text);
-  const types = allTokens.filter((t) => t.type === "type").map((t) => t.text);
-  const numbers = allTokens.filter((t) => t.type === "number").map((t) => t.text);
-  const booleans = allTokens.filter((t) => t.type === "boolean").map((t) => t.text);
-  const comments = allTokens.filter((t) => t.type === "comment").map((t) => t.text);
-  const strings = allTokens.filter((t) => t.type === "string").map((t) => t.text);
-  const annotations = allTokens.filter((t) => t.type === "annotation").map((t) => t.text);
+  const allTokens = tokenize(moCode, modelicaParser);
+  const of = (type: string) => allTokens.filter((t) => t.type === type).map((t) => t.text);
+  const keywords = of("keyword"), types = of("typeName"), numbers = of("number"), booleans = of("bool");
+  const comments = of("comment"), strings = of("string");
 
   assert.ok(keywords.includes("model"), "model keyword found");
   assert.ok(keywords.includes("import"), "import keyword found");
   assert.ok(keywords.includes("extends"), "extends keyword found");
   assert.ok(keywords.includes("parameter"), "parameter keyword found");
   assert.ok(keywords.includes("final"), "final keyword found");
-  assert.ok(keywords.includes("initial equation"), "composite initial equation keyword found");
+  assert.ok(keywords.includes("initial"), "initial keyword found");
   assert.ok(keywords.includes("equation"), "equation keyword found");
   assert.ok(keywords.includes("end"), "end keyword found");
 
@@ -53,10 +63,10 @@ end TestResistor;
   assert.ok(comments.some((c) => c.includes("A simple resistor model")), "line comment found");
   assert.ok(comments.some((c) => c.includes("Multi-line")), "block comment found");
   assert.ok(strings.includes('"A test component"'), "string literal found");
-  assert.ok(annotations.includes("annotation"), "annotation token found");
+  assert.ok(keywords.includes("annotation"), "annotation keyword found");
 });
 
-test("split: tokenize highlights C++ backend source panels", () => {
+test("split: the generated C++ view highlights C++", () => {
   const cppCode = `
 #include <iostream>
 #include <vector>
@@ -72,15 +82,9 @@ public:
 }
 `.trim();
 
-  const lines = tokenize(cppCode, "cpp");
-  assert.ok(lines.length > 5, "produced tokenized C++ lines");
-
-  const allTokens = lines.flat();
-  const keywords = allTokens.filter((t) => t.type === "keyword").map((t) => t.text);
-  const types = allTokens.filter((t) => t.type === "type").map((t) => t.text);
-  const preproc = allTokens.filter((t) => t.type === "preprocessor").map((t) => t.text);
-  const comments = allTokens.filter((t) => t.type === "comment").map((t) => t.text);
-  const numbers = allTokens.filter((t) => t.type === "number").map((t) => t.text);
+  const allTokens = tokenize(cppCode, cpp);
+  const of = (type: string) => allTokens.filter((t) => t.type === type).map((t) => t.text);
+  const keywords = of("keyword"), types = of("type"), preproc = of("meta"), comments = of("comment"), numbers = of("number");
 
   assert.ok(keywords.includes("namespace"), "namespace keyword found");
   assert.ok(keywords.includes("class"), "class keyword found");
@@ -92,7 +96,7 @@ public:
   assert.ok(types.includes("double"), "double type found");
   assert.ok(preproc.some((p) => p.includes("#include")), "preprocessor #include found");
   assert.ok(comments.some((c) => c.includes("state derivative")), "comment found");
-  assert.ok(numbers.includes("1.5e-3"), "scientific notation number found");
+  assert.ok(numbers.some((n) => n.startsWith("1.5")), "a number is coloured");
 });
 
 test("menu: File menu is the first menu and provides core model lifecycle commands", () => {

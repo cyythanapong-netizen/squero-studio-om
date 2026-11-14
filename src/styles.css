@@ -3,63 +3,9 @@
 @import "@paperboat/shared/tokens.css";
 @import "@paperboat/shared/plates.css";
 @import "@paperboat/shared/files.css";
+@import "@paperboat/shared/packages.css";
 @import "@paperboat/shared/squero.css";
 @import "@paperboat/shared/editor.css";
-
-
-
-/* ---- base --------------------------------------------------------------------------- */
-
-* { box-sizing: border-box; }
-html, body, #root { margin: 0; height: 100%; }
-body {
-  font: 400 var(--size-sm) / 1.45 var(--font-sans);
-  color: var(--text);
-  background: var(--surface-ground);
-  -webkit-font-smoothing: antialiased;
-}
-[hidden] { display: none !important; }
-h2 { margin: 0; }
-:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-
-/* A label: small, grey, sentence case. Names things; never says what is selected. */
-.lbl, .muted { font: 400 var(--size-2xs) var(--font-sans); color: var(--text-muted); }
-.mono { font-family: var(--font-mono); }
-
-/* Keys: flat and outlined. Every button is one. */
-button {
-  font: 500 var(--size-xs) var(--font-sans);
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  padding: 4px 10px;
-  cursor: pointer;
-}
-button:hover:not(:disabled) { border-color: var(--line-ink); }
-button:active:not(:disabled) { background: var(--surface-panel); }
-button:disabled { color: var(--text-muted); opacity: 0.55; cursor: default; }
-.key { height: 30px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; flex: none; }
-.key.small { height: 24px; padding: 0 10px; font-size: var(--size-2xs); }
-.key.run { font-weight: 600; border-color: var(--line-ink); }
-
-input, select {
-  font: 400 var(--size-xs) var(--font-mono);
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  padding: 2px 6px;
-}
-input:focus, select:focus { outline: none; border-color: var(--line-ink); box-shadow: 0 0 0 1px var(--line-ink); }
-
-.well { background: var(--surface-well); box-shadow: var(--well-shadow); color: var(--text); border-radius: var(--radius-md); }
-.well input, .well select { background: transparent; border: 0; color: var(--text); box-shadow: none; }
-
-.react-flow { background: transparent; --xy-background-pattern-dots-color-default: var(--dots); --xy-edge-stroke-default: var(--line-ink); }
-.react-flow__minimap { background: var(--surface-sunken); border: 1px solid var(--line-strong); border-radius: var(--radius-md); overflow: hidden; }
-.react-flow__attribution { background: transparent !important; }
-.react-flow__attribution a { color: var(--text-muted) !important; }
 
 /* ---- Studio ------------------------------------------------------------------------ */
 .studio { --side-w: 0px; height: 100%; display: grid; gap: var(--gutter); padding: var(--gutter); grid-template-columns: auto minmax(0, 1fr) var(--side-w) auto; grid-template-rows: var(--bar-height) minmax(0, 1fr) auto; grid-template-areas: "bar bar bar bar" "library canvas side sheet" "dock dock dock dock"; background: var(--surface-ground); transition: grid-template-columns var(--slide); }
@@ -68,8 +14,6 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .studio > .side { overflow: hidden; margin-left: calc(var(--gutter) * -1); opacity: 0; pointer-events: none; transition: opacity var(--slide), margin var(--slide); }
 .studio.with-side > .side { margin-left: 0; opacity: 1; pointer-events: auto; }
 .side > * { min-width: 320px; }
-.bar-focus { display: inline-flex; overflow: hidden; padding: 4px; margin: -4px; max-width: 320px; transition: max-width var(--slide), opacity var(--slide); }
-.bar-focus.off { max-width: 0; padding: 4px 0; opacity: 0; pointer-events: none; }
 .studio > .bar { grid-area: bar; }
 .studio > .library { grid-area: library; }
 .studio > .stage { grid-area: canvas; }
@@ -87,9 +31,7 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .opening .hint { margin-top: var(--space-3); font-size: var(--size-2xs); max-width: 44ch; }
 /* The opening wait: the shared busy wave (squero.css), larger. */
 .opening .wave { --wave-dot: 8px; }
-@media (prefers-reduced-motion: reduce) { .studio, .studio > .side, .bar-focus { transition: none; } .split, .simulate { transition: none; } }
-
-
+@media (prefers-reduced-motion: reduce) { .studio, .studio > .side { transition: none; } .split, .simulate { transition: none; } }
 
 .bar {
   grid-column: 1 / -1;
@@ -104,16 +46,6 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
 }
-.bar > * { flex: none; }
-.bar > .spacer { flex: 1 1 auto; }
-.bar > .proj {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  display: inline-flex; align-items: center; gap: var(--space-2); max-width: min(320px, 26vw);
-  font: 400 var(--size-xs) var(--font-mono); color: var(--text-muted); pointer-events: auto; cursor: default;
-}
-@media (max-width: 1600px) { .bar > .proj { position: static; transform: none; min-width: 0; flex: 0 1 auto; } }
-.proj-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.proj .dirty { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
 
 
 /* ---- The rail (#43): Files | Library ------------------------------------------------ */
@@ -134,7 +66,6 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .rail.collapsed { width: 30px; }
 .library-slot { flex: 1; min-width: 0; display: flex; }
 .library-slot > .library { flex: 1; min-height: 0; border: 0; border-radius: 0; background: none; }
-
 
 /* ---- Document tabs above the stage (#43) -------------------------------------------- */
 .docbar { display: flex; align-items: flex-end; gap: 2px; min-height: 31px; border-bottom: 1px solid var(--line); }
@@ -168,7 +99,6 @@ input:focus, select:focus { outline: none; border-color: var(--line-ink); box-sh
 .code-reading { margin: 0; padding: 8px 12px; font: 400 var(--size-2xs) var(--font-mono); color: var(--text-on-screen); }
 .code-error { margin: 0; border-radius: 0; }
 .studio.no-dock .dock { display: none; }
-
 
 /* ---- Icon view (#43): draw the look and place connectors on the stage --------------------- */
 .icon-view { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; background: var(--surface-panel); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; container-type: inline-size; }
@@ -625,82 +555,11 @@ body.dragging-card .library {
 .simulate { flex: 45 1 0; overflow: auto; margin-top: var(--gutter); }
 .split > header, .simulate > header { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); min-height: var(--panel-head-height); }
 /* ---- Syntax Highlighting & Code View (#6) ------------------------------------------- */
-.code-view {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  overflow: auto;
-  background: var(--surface-screen);
-  color: var(--text-on-screen);
-  font: 400 var(--size-2xs) / 1.5 var(--font-mono);
-  tab-size: 2;
-}
-.code-container {
-  margin: 0;
-  padding: var(--space-2) 0;
-  font: inherit;
-  white-space: pre;
-}
-.code-row {
-  display: flex;
-  min-width: fit-content;
-  padding: 0 var(--space-3);
-  line-height: 1.5;
-}
-.code-row:hover {
-  background: rgb(255 255 255 / 0.04);
-}
-.code-row.hit {
-  background: rgb(255 255 255 / 0.07);
-}
-.code-ln {
-  flex: none;
-  width: 34px;
-  margin-right: var(--space-3);
-  text-align: right;
-  color: var(--text-on-screen-muted);
-  user-select: none;
-  -webkit-user-select: none;
-  opacity: 0.6;
-}
-.code-content {
-  flex: 1;
-  white-space: pre;
-}
+/* A read-only view is the shared editor (CodeView.tsx): it scrolls and draws itself. */
+.code-view { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface-screen); }
+.code-view > .cm-host { flex: 1; min-height: 0; }
 
 /* Syntax token colors mapped to Paperboat tokens */
-.tok-keyword {
-  color: #c792ea;
-  font-weight: 500;
-}
-.tok-type {
-  color: #4ec9b0;
-  font-weight: 500;
-}
-.tok-comment {
-  color: var(--text-on-screen-muted);
-  font-style: italic;
-}
-.tok-string {
-  color: #98c379;
-}
-.tok-number {
-  color: #e5c07b;
-}
-.tok-boolean {
-  color: #e5c07b;
-  font-weight: 500;
-}
-.tok-operator {
-  color: #abb2bf;
-}
-.tok-preprocessor {
-  color: #e06c75;
-}
-.tok-annotation {
-  color: #d19a66;
-  font-style: italic;
-}
 .code-about { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); font: 400 var(--size-xs) var(--font-sans); color: var(--text-muted); }
 .code-about b { color: var(--text); font: 600 var(--size-xs) var(--font-mono); }
 .files { display: flex; gap: 2px; padding: 0 var(--space-2); overflow-x: auto; border-bottom: 1px solid var(--line); }
@@ -819,22 +678,9 @@ body.dragging-card .library {
   font-size: var(--size-xs);
   font-family: var(--font-mono);
 }
-.status-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.status-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--size-xs);
-}
-.status-table td:first-child {
-  width: 90px;
-}
 .key.err { color: var(--danger); }
 
 .lib-filter::-webkit-search-cancel-button { display: none; }
-.react-flow__minimap { background: var(--surface-sunken); border: 1px solid var(--line-strong); border-radius: var(--radius-md); overflow: hidden; }
 
 /* The 3D view of a MultiBody run (#44) */
 .viewport3d { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; outline: none; }
@@ -845,4 +691,3 @@ body.dragging-card .library {
 .viewport3d-scrub { flex: 1; min-width: 60px; }
 
 /* The bar's menus and the About title sit as one row, the same 2px apart. */
-.menubar-group { display: flex; align-items: center; gap: 2px; }
