@@ -121,7 +121,6 @@ export function TextStage({
         <span className="lbl">· {model.name}</span>
         <span className="spacer" />
         {dirty && <span className="lbl">unsaved</span>}
-        <EditorSettingsKey settings={settings} onSettings={setSettings} file={configFile} />
         {text !== null && (
           <button type="button" className="key small" onClick={() => void navigator.clipboard?.writeText(text)}>
             Copy
@@ -130,6 +129,7 @@ export function TextStage({
         <button type="button" className="key small ink" disabled={!dirty || busy} onClick={() => void save()}>
           {busy ? "saving…" : "Save"}
         </button>
+        <EditorSettingsKey settings={settings} onSettings={setSettings} file={configFile} />
       </header>
       <div className="code-editor">
         {text === null ? (
