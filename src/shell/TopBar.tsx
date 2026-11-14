@@ -1,4 +1,4 @@
-// The top bar: squero studio [ Om ], the menus and the model title on the left; on the right
+// The top bar: squero [om], the menus and the model title on the left; on the right
 // only three quiet controls: the side-pane toggle, the OMC status pill and a theme cycle (both
 // from @paperboat/shared, the same as Paperboat's top bar).
 // The source view and Export live in the side pane, the footer and the menus.
