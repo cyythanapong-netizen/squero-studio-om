@@ -59,16 +59,28 @@ int cmd_doctor() {
   }
 }
 
-// Pulls the pinned omc image (container mode only; a native omc updates with its package manager).
+// Pulls the pinned omc image (container mode) and ensures the Modelica Standard Library is installed.
 int cmd_update_omc() {
   const mo::OmcRuntime rt = mo::resolve_omc();
   if (rt.mode == "native") {
     std::cout << "omc is native (" << rt.exe << "): update it with your package manager\n";
-    return 0;
+  } else {
+    const std::string cmd = rt.exe + " pull " + mo::kImage;
+    std::cout << cmd << '\n';
+    if (std::system(cmd.c_str()) != 0) return 1;
   }
-  const std::string cmd = rt.exe + " pull " + mo::kImage;
-  std::cout << cmd << '\n';
-  return std::system(cmd.c_str()) == 0 ? 0 : 1;
+  try {
+    mo::Omc omc;
+    if (omc.call("loadModel(Modelica)", std::chrono::minutes(10)) == "true") return 0;
+    std::cout << "installing Modelica Standard Library (4.1.0)…\n";
+    omc.call("installPackage(Modelica, \"4.1.0+maint.om\", exactMatch=true)", std::chrono::minutes(10));
+    if (omc.call("loadModel(Modelica)", std::chrono::minutes(10)) == "true") return 0;
+    std::cerr << "error: cannot load Modelica Standard Library: " << omc.errors() << '\n';
+    return 1;
+  } catch (const std::exception& e) {
+    std::cerr << "error: " << e.what() << '\n';
+    return 1;
+  }
 }
 
 int cmd_icon(const std::vector<std::string_view>& args) {
