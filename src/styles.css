@@ -820,18 +820,6 @@ body.dragging-card .library {
   font-size: var(--size-xs);
   font-family: var(--font-mono);
 }
-.status-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.status-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--size-xs);
-}
-.status-table td:first-child {
-  width: 90px;
-}
 .key.err { color: var(--danger); }
 
 .lib-filter::-webkit-search-cancel-button { display: none; }
