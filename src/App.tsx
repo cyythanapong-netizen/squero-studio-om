@@ -224,7 +224,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   useEffect(() => {
     if (!gitRoot) { setGit(null); return; }
     let live = true;
-    omc.op<GitState | null>("git", { root: gitRoot }).then((next) => live && setGit(next ?? null), () => live && setGit(null));
+    omc.op<GitState | null>("git", { root: gitRoot }).then((next) => live && setGit(next || null), () => live && setGit(null));
     return () => { live = false; };
   }, [omc, gitRoot, workspaceTick, gitTick, savedState]);
 
