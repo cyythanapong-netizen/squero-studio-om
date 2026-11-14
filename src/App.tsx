@@ -699,7 +699,6 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               ]}
             />
           }
-          showFocus={side}
           errors={errors}
           consoleShown={consoleShown}
           onConsole={toggleConsole}
