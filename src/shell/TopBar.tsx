@@ -4,7 +4,7 @@
 // The source view and Export live in the side pane, the footer and the menus.
 
 import type { ReactNode } from "react";
-import { BarEnd, MenuBar, ProjectLabel, StatusPill, type Theme } from "@paperboat/shared/components";
+import { AppBar, BarEnd, StatusPill, type Theme } from "@paperboat/shared/components";
 import type { Command } from "@paperboat/shared";
 import { chip, type OmcState, type OmcStatus } from "../omc/omc.ts";
 import { SqueroWordmark } from "@paperboat/shared/squero";
@@ -51,21 +51,12 @@ export function TopBar({
   onAbout,
 }: TopBarProps) {
   return (
-    <header className="bar">
-      <SqueroWordmark product="OM" name="OpenModelica" running={running} />
-      <div className="menubar-group" data-own-keys>
-        <MenuBar commands={commands} />
-        <button
-          type="button"
-          className="menu-title"
-          aria-expanded={aboutShown}
-          title="About Squero Studio"
-          onClick={onAbout}
-        >
-          About
-        </button>
-      </div>
-      {model && <ProjectLabel name={model} dirty={dirty} />}
+    <AppBar
+      brand={<SqueroWordmark product="OM" name="OpenModelica" running={running} />}
+      commands={commands}
+      about={{ title: "About Squero Studio", shown: aboutShown, onOpen: () => onAbout?.() }}
+      project={model ? { name: model, dirty } : undefined}
+    >
       <BarEnd
         keys={
           <button type="button" className={`key small${errors ? " err" : ""}${consoleShown ? " on" : ""}`} aria-pressed={consoleShown} title="Open the Console" onClick={onConsole}>
@@ -85,6 +76,6 @@ export function TopBar({
         theme={theme}
         onTheme={onTheme}
       />
-    </header>
+    </AppBar>
   );
 }

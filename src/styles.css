@@ -691,4 +691,3 @@ body.dragging-card .library {
 .viewport3d-scrub { flex: 1; min-width: 60px; }
 
 /* The bar's menus and the About title sit as one row, the same 2px apart. */
-.menubar-group { display: flex; align-items: center; gap: 2px; }
