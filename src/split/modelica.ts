@@ -1,4 +1,4 @@
-// Modelica for the shared editor: a CodeMirror stream parser with the same rules as highlight.ts
+// Modelica for the shared editor: a CodeMirror stream parser
 // (keywords, the four builtin types, // and /* */ comments, strings, numbers, true/false).
 import { StreamLanguage, type StreamParser } from "@codemirror/language";
 
@@ -50,4 +50,5 @@ const parser: StreamParser<State> = {
   languageData: { commentTokens: { line: "//", block: { open: "/*", close: "*/" } } },
 };
 
+export const modelicaParser = parser;
 export const modelica = StreamLanguage.define(parser);

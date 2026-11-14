@@ -1,4 +1,6 @@
+// The Studio's small dialogs, each the shared Modal (Esc, a press outside, focus back to the opener).
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Modal } from "@paperboat/shared/components";
 
 export function PromptModal({
   title,
@@ -33,14 +35,7 @@ export function PromptModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-head">
-          <h3>{title}</h3>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </header>
+    <Modal title={title} onClose={onClose}>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
             <label>
@@ -50,7 +45,6 @@ export function PromptModal({
                 value={val}
                 placeholder={placeholder}
                 onChange={(e) => setVal(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && onClose()}
               />
             </label>
           </div>
@@ -63,8 +57,7 @@ export function PromptModal({
             </button>
           </footer>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -84,14 +77,7 @@ export function ConfirmModal({
   const cancel = useRef<HTMLButtonElement>(null);
   useEffect(() => cancel.current?.focus(), []);
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-head">
-          <h3>{title}</h3>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </header>
+    <Modal title={title} onClose={onClose}>
         <div className="modal-body">
           <p className="lbl">{body}</p>
         </div>
@@ -110,8 +96,7 @@ export function ConfirmModal({
             {confirmLabel}
           </button>
         </footer>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -141,14 +126,7 @@ export function LibraryModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Load Modelica Library">
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-head">
-          <h3>Load Modelica Library</h3>
-          <button type="button" className="modal-close" onClick={onClose} aria-label="Close">
-            ×
-          </button>
-        </header>
+    <Modal title="Load Modelica Library" onClose={onClose}>
         <div className="modal-body">
           <p className="lbl">Standard Modelica Libraries:</p>
           <div className="lib-quick-list">
@@ -176,7 +154,6 @@ export function LibraryModal({
                 value={custom}
                 placeholder="e.g. MyLib or /path/to/package.mo"
                 onChange={(e) => setCustom(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && onClose()}
               />
             </label>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
@@ -189,7 +166,6 @@ export function LibraryModal({
             </div>
           </form>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

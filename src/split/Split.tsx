@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import type { StudioModel } from "../model/types.ts";
 import type { Actions } from "../store/index.tsx";
 import { CodeView } from "./CodeView.tsx";
+import type { EditorSettings } from "@paperboat/shared/editor";
 
 export type View = "flat" | "cpp";
 const OPTIONS: { value: View; label: string }[] = [
@@ -43,11 +44,16 @@ export function Split({
   actions,
   view,
   onView,
+  settings,
+  appTheme,
 }: {
   model: StudioModel;
   actions: Actions;
   view: View;
   onView: (v: View) => void;
+  /** The editor settings, so the read-only views read like the text editor. */
+  settings: EditorSettings;
+  appTheme: "light" | "dark";
 }) {
   const flat = useLater<string>(model, actions.flatModel, view === "flat");
   const cpp = useLater<Preview>(model, actions.preview, view === "cpp");
@@ -81,7 +87,7 @@ export function Split({
               </button>
             )}
           </p>
-          <CodeView code={flat.value ?? (flat.error || "flattening…")} lang="mo" ariaLabel="Flat Modelica" />
+          <CodeView code={flat.value ?? (flat.error || "flattening…")} lang="mo" ariaLabel="Flat Modelica" settings={settings} appTheme={appTheme} />
         </>
       ) : (
         <>
@@ -101,6 +107,8 @@ export function Split({
             code={shown ? (cpp.value?.files[shown] ?? "") : cpp.value && !names.length ? (cpp.value.notices[0] ?? "") : ""}
             lang="cpp"
             ariaLabel="Generated C++"
+            settings={settings}
+            appTheme={appTheme}
           />
         </>
       )}

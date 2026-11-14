@@ -4,27 +4,10 @@
 // The source view and Export live in the side pane, the footer and the menus.
 
 import type { ReactNode } from "react";
-import { BarEnd, MenuBar, StatusPill, type Theme } from "@paperboat/shared/components";
+import { BarEnd, MenuBar, ProjectLabel, StatusPill, type Theme } from "@paperboat/shared/components";
 import type { Command } from "@paperboat/shared";
 import { chip, type OmcState, type OmcStatus } from "../omc/omc.ts";
-import { SqueroLogo } from "@paperboat/shared/squero";
-
-export function Wordmark({ running = false }: { running?: boolean }) {
-  return (
-    <span className="wordmark" aria-label="Squero Studio: OpenModelica">
-      <SqueroLogo product="OM" height={20} running={running} />
-    </span>
-  );
-}
-
-export function ProjectLabel({ name, dirty }: { name: string; dirty?: boolean }) {
-  return (
-    <span className="proj" title={dirty ? `${name}: unsaved changes (Ctrl+S saves)` : name}>
-      <span className="proj-name">{name}</span>
-      {dirty && <i className="dirty" role="img" aria-label="Unsaved changes" />}
-    </span>
-  );
-}
+import { SqueroWordmark } from "@paperboat/shared/squero";
 
 export type TopBarProps = {
   status: OmcStatus;
@@ -69,7 +52,7 @@ export function TopBar({
 }: TopBarProps) {
   return (
     <header className="bar">
-      <Wordmark running={running} />
+      <SqueroWordmark product="OM" name="OpenModelica" running={running} />
       <div className="menubar-group" data-own-keys>
         <MenuBar commands={commands} />
         <button

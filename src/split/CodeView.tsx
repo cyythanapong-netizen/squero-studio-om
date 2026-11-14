@@ -1,47 +1,23 @@
-import { useEffect, useMemo, useRef } from "react";
-import { tokenize } from "./highlight.ts";
+// A read-only code view (the flat model, the generated C++): the shared Studio editor, so it
+// follows the user's editor theme and font, with Modelica or C++ highlighting.
+import { StreamLanguage } from "@codemirror/language";
+import { cpp } from "@codemirror/legacy-modes/mode/clike";
+import { CodeEditor, type EditorSettings } from "@paperboat/shared/editor";
+import { modelica } from "./modelica.ts";
 
-export function CodeView({
-  code,
-  lang,
-  ariaLabel,
-  line,
-}: {
+const LANGUAGES = { mo: modelica, cpp: StreamLanguage.define(cpp) };
+
+export function CodeView({ code, lang, ariaLabel, settings, appTheme }: {
   code: string;
   lang: "mo" | "cpp";
   ariaLabel: string;
-  /** A 1-based line to bring into view (a message's source). */
-  line?: number;
+  settings: EditorSettings;
+  appTheme: "light" | "dark";
 }) {
-  const lines = useMemo(() => tokenize(code, lang), [code, lang]);
-  const hit = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    hit.current?.scrollIntoView({ block: "center" });
-  }, [line, code]);
-
   return (
     <div className="code-view" role="region" aria-label={ariaLabel}>
-      <pre className="code-container">
-        {lines.map((lineTokens, i) => (
-          <div key={i} className={`code-row${line === i + 1 ? " hit" : ""}`} ref={line === i + 1 ? hit : undefined}>
-            <span className="code-ln" aria-hidden="true">
-              {i + 1}
-            </span>
-            <span className="code-content">
-              {lineTokens.map((t, j) =>
-                t.type === "plain" ? (
-                  t.text
-                ) : (
-                  <span key={j} className={`tok-${t.type}`}>
-                    {t.text}
-                  </span>
-                ),
-              )}
-            </span>
-          </div>
-        ))}
-      </pre>
+      {/* The editor owns its text after mount: a new text is a new view. */}
+      <CodeEditor key={code} value={code} settings={settings} appTheme={appTheme} ariaLabel={ariaLabel} language={LANGUAGES[lang]} readOnly />
     </div>
   );
 }

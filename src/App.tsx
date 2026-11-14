@@ -5,7 +5,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { CommandSearch, Switch } from "@paperboat/shared/components";
 import { SEARCH_CHORD, useShortcuts, type Command } from "@paperboat/shared";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import type { ConfigStore } from "@paperboat/shared/editor";
+import { useSqueroConfig, type ConfigStore } from "@paperboat/shared/editor";
 import { Canvas } from "./canvas/Canvas.tsx";
 import { runBackendExport } from "./dock/dock.ts";
 import { StudioDock } from "./dock/index.tsx";
@@ -21,7 +21,7 @@ import { IconView } from "./icon/IconView.tsx";
 import { AboutModal } from "./shell/AboutModal.tsx";
 import { ConfirmModal, LibraryModal, PromptModal } from "./shell/Dialogs.tsx";
 import { TopBar } from "./shell/TopBar.tsx";
-import { useTheme, type Theme } from "@paperboat/shared/components";
+import { THEMES, useTheme } from "@paperboat/shared/components";
 import { Opening } from "./shell/Opening.tsx";
 import { Simulate } from "./simulate/Simulate.tsx";
 import { Viewport3D, type ShapeRun } from "./viewport3d/Viewport3D.tsx";
@@ -46,12 +46,6 @@ function serverUrl(): string {
   return location.port === "3048" || !location.host ? "ws://localhost:59201" : `ws://${location.host}`;
 }
 
-/** The theme pick, remembered; the shared hook applies it and resolves "auto". */
-function useThemeChoice(): [Theme, (t: Theme) => void, "light" | "dark"] {
-  const [theme, set] = useState<Theme>(() => (localStorage.getItem("studio-theme") as Theme | null) ?? "auto");
-  useEffect(() => localStorage.setItem("studio-theme", theme), [theme]);
-  return [theme, set, useTheme(theme)];
-}
 
 export function App() {
   const [status, setStatus] = useState<OmcStatus>({ state: "checking", version: "" });
@@ -112,7 +106,10 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
   const modelCache = useRef(new Map<string, StudioModel>());
   const workspaceCache = useRef(new Map<string, Workspace>());
   const [shapeRun, setShapeRun] = useState<ShapeRun | null>(null);
-  const [theme, setTheme, shown] = useThemeChoice();
+  // The app theme and the editor settings, from the user's squero.toml (shared with MX).
+  const settings = useSqueroConfig(config, { editor: "om.editor", theme: "studio-theme" });
+  const { theme, setTheme } = settings;
+  const shown = useTheme(theme);
   const [promptModal, setPromptModal] = useState<PromptSpec | null>(null);
   const [confirmModal, setConfirmModal] = useState<ConfirmSpec | null>(null);
   const [libraryModalOpen, setLibraryModalOpen] = useState(false);
@@ -672,7 +669,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
       ...(["code", "split", "scopes"] as Focus[]).map((f): Command => ({ id: `focus-${f}`, label: f === "split" ? "Code and scopes" : f === "code" ? "Focus code" : "Focus scopes", menu: "view", group: "focus", checked: focus === f, run: () => (setFocus(f), setSide(true)) })),
       { id: "console", label: "Console", menu: "view", group: "sheet", checked: consoleShown, run: toggleConsole },
       { id: "sheet", label: "Interface sheet", menu: "view", group: "sheet", shortcut: "Alt+V", chord: { key: "v", alt: true }, run: () => setSheet((s) => !s) },
-      ...(["auto", "light", "dark"] as Theme[]).map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
+      ...THEMES.map((t): Command => ({ id: `theme-${t}`, label: t, menu: "view", group: "theme", checked: theme === t, run: () => setTheme(t) })),
       { id: "about", label: "About Squero Studio", menu: "view", group: "about", run: () => setAboutOpen(true) },
     ],
     [actions.canUndo, actions.canRedo, actions.undo, actions.redo, actions.newModel, actions.openFile, actions.save, actions.saveAs, side, railHidden, view, stageView, stageOptions, focus, theme, setTheme, model, api, consoleShown, consoleTab, messages.length, runCheck, openConsole, toggleConsole, saveCurrent, exportReady, exportWhy],
@@ -762,7 +759,9 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                     actions={actions}
                     line={sourceLine}
                     theme={shown}
-                    config={config}
+                    settings={settings.editor}
+                    onSettings={settings.setEditor}
+                    configFile={settings.file}
                     base={model.file ? git?.head[model.file] ?? null : null}
                     onEditor={(handle) => {
                       editorHandle.current = handle;
@@ -774,7 +773,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
               </div>
             </main>
             <aside className={`side focus-${focus}`} inert={!side}>
-                <Split model={model} actions={actions} view={view} onView={setView} />
+                <Split model={model} actions={actions} view={view} onView={setView} settings={settings.editor} appTheme={shown} />
                 <Simulate actions={actions} model={model} onRunningChange={setRunning} onRun={(r) => setShapeRun(r.shapes?.length ? r : null)} />
               </aside>
             {popover && <ComponentPopover component={popover} onClose={() => setPopover(null)} />}
