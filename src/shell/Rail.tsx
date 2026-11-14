@@ -1,11 +1,11 @@
-// The left rail: Files (the model's folder, its packages and classes) or the Library (the
-// component browser). The rail and tree are @paperboat/shared/files (FileRail, FileTree), the same
+// The left rail: Files (the model's folder, its packages and classes), the Library (the
+// component browser) or Packages (the Modelica libraries to install). The rail and tree are @paperboat/shared/files (FileRail, FileTree), the same
 // as MX; this file only maps the workspace entries and the Studio actions.
 import { useRef, type ReactNode } from "react";
 import { FileRail, FileTree, type FileEntry, type FileTreeHandle } from "@paperboat/shared/files";
 import { gitMark, visibleEntries, workspaceName, type GitState, type Workspace, type WorkspaceEntry } from "./workspace.ts";
 
-export type RailTab = "files" | "library";
+export type RailTab = "files" | "library" | "packages";
 
 export function Rail({
   tab,
@@ -24,6 +24,7 @@ export function Rail({
   collapsed,
   onToggle,
   children,
+  packages,
 }: {
   tab: RailTab;
   onTab: (tab: RailTab) => void;
@@ -43,6 +44,8 @@ export function Rail({
   collapsed?: boolean;
   onToggle?: () => void;
   children: ReactNode;
+  /** The packages tab: the Modelica libraries in the shared package panel. */
+  packages?: ReactNode;
 }) {
   const tree = useRef<FileTreeHandle>(null);
   const entries: FileEntry[] = visibleEntries(workspace?.entries ?? [], new Set()).map((entry) => ({
@@ -60,7 +63,7 @@ export function Rail({
     <FileRail
       label="Files and library"
       className={`rail-${tab}`}
-      tabs={["files", "library"]}
+      tabs={packages ? ["files", "library", "packages"] : ["files", "library"]}
       tab={tab}
       onTab={(next) => onTab(next as RailTab)}
       onAdd={(x, y) => tree.current?.openNewMenu(x, y)}
@@ -102,6 +105,11 @@ export function Rail({
       <div className="library-slot" hidden={tab !== "library"}>
         {children}
       </div>
+      {packages && (
+        <div className="library-slot packages-slot" hidden={tab !== "packages"}>
+          {tab === "packages" && packages}
+        </div>
+      )}
     </FileRail>
   );
 }

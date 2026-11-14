@@ -9,6 +9,7 @@ import { Canvas } from "./canvas/Canvas.tsx";
 import { runBackendExport } from "./dock/dock.ts";
 import { StudioDock } from "./dock/index.tsx";
 import { Library, useClassIndex } from "./library/Library.tsx";
+import { Packages } from "./library/Packages.tsx";
 import { StudioContext, type StudioModel } from "./model/types.ts";
 import { OmcClient, type OmcStatus } from "./omc/omc.ts";
 import { type Log, type Message } from "@paperboat/shared/components";
@@ -725,6 +726,7 @@ function Studio({ omc, status }: { omc: OmcClient; status: OmcStatus }) {
                 void navigator.clipboard?.writeText(entry.path);
                 say(`Copied ${entry.path}`);
               }}
+              packages={<Packages omc={omc} onInstalled={(name) => say(`Installed ${name}: load it from the Library`)} />}
             >
               <Library omc={omc} model={model.name} onPlace={(cls) => void actions.place(cls, freeSpot(model)).then((name) => api.select([name]))} />
             </Rail>
