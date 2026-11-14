@@ -95,7 +95,7 @@ export function TopBar({
             label={chip(status)}
             labels={STATES.map((state) => chip({ ...status, state }))}
             tone={TONE[status.state]}
-            title="OMC runtime status (click for diagnostics)"
+            title="OpenModelica: status and libraries"
             onClick={onStatusClick}
           />
         }
